@@ -188,6 +188,31 @@ def load_data():
             df["30yd"] = df["30yd"].fillna(pd.to_numeric(df["Split3"], errors="coerce"))
         return df
 
+    # Resolve sprint splits correctly across years
+    # 2023: 10yd Best = cumulative 10yd, 30yd Best = cumulative 30yd total
+    # 2024/2025: Split1 = cumulative 10yd, Total Time [s] = cumulative 30yd total
+    sprint = to_num(sprint, ["Total Time [s]"])
+
+    def resolve_sprint_splits(df):
+        df = df.copy()
+        # Cumulative 10yd
+        df["10yd"] = pd.to_numeric(df.get("10yd Best", pd.Series(dtype=float)), errors="coerce")
+        if "Split1" in df.columns:
+            df["10yd"] = df["10yd"].fillna(pd.to_numeric(df["Split1"], errors="coerce"))
+
+        # Cumulative 30yd total
+        df["30yd"] = pd.to_numeric(df.get("30yd Best", pd.Series(dtype=float)), errors="coerce")
+        if "30yd Best." in df.columns:
+            df["30yd"] = df["30yd"].fillna(pd.to_numeric(df["30yd Best."], errors="coerce"))
+        if "Total Time [s]" in df.columns:
+            df["30yd"] = df["30yd"].fillna(pd.to_numeric(df["Total Time [s]"], errors="coerce"))
+
+        # Drop implausible values: 10yd should be 0.5–1.5s, 30yd should be 2.5–6s
+        df.loc[~df["10yd"].between(0.5, 1.5), "10yd"] = np.nan
+        df.loc[~df["30yd"].between(2.5, 6.0), "30yd"] = np.nan
+
+        return df
+
     sprint = resolve_sprint_splits(sprint)
 
     # Normalize name column
@@ -229,9 +254,10 @@ def load_data():
     anthro["wingspan_cm"] = anthro["Arm Span"].fillna(anthro["Stature Arm Span 1"].apply(parse_unit) if "Stature Arm Span 1" in anthro.columns else np.nan)
 
     sprint_best = sprint.groupby("DPL ID").agg(
-        sprint_10=("10yd","min"), sprint_20=("20yd","min"), sprint_30=("30yd","min"),
+        sprint_10=("10yd","min"), sprint_30=("30yd","min"),
         sprint_name=("Full Name Reverse","first"), sprint_year=("Year","first")
     ).reset_index()
+    sprint_best["sprint_20"] = np.nan  # 20yd segment splits not comparable across years
 
     fp_best = fp.groupby("DPL ID").agg(
         concentric_impulse=("Concentric Impulse [Ns]","max"),
@@ -502,7 +528,7 @@ with tab_rank:
         "name","position","year",
         "athletic_score","potential_score",
         "concentric_impulse","mrsi","rel_peak_power",
-        "sprint_10","sprint_20","sprint_30",
+        "sprint_10","sprint_30",
         "height_in","weight_lb","wingspan_in",
         "ws_ht_ratio","bmi","proj_pct"
     ]].copy()
@@ -510,12 +536,12 @@ with tab_rank:
         "name":"Athlete","position":"Position","year":"Year",
         "athletic_score":"Athletic","potential_score":"Potential",
         "concentric_impulse":"CI (Ns)","mrsi":"mRSI","rel_peak_power":"Rel Pwr (W/kg)",
-        "sprint_10":"10yd","sprint_20":"20yd","sprint_30":"30yd",
+        "sprint_10":"10yd","sprint_30":"30yd",
         "height_in":"Ht (in)","weight_lb":"Wt (lb)","wingspan_in":"Wingspan (in)",
         "ws_ht_ratio":"WS:Ht","bmi":"BMI","proj_pct":"Proj %ile"
     }, inplace=True)
     for c in ["Athletic","Potential","CI (Ns)","mRSI","Rel Pwr (W/kg)",
-              "10yd","20yd","30yd","Ht (in)","Wt (lb)","Wingspan (in)","WS:Ht","BMI","Proj %ile"]:
+              "10yd","30yd","Ht (in)","Wt (lb)","Wingspan (in)","WS:Ht","BMI","Proj %ile"]:
         if c in disp.columns:
             disp[c] = pd.to_numeric(disp[c], errors="coerce").round(2)
 
@@ -637,11 +663,10 @@ with tab_profile:
 
             # Sprint
             st.markdown(f'<p class="nat-label" style="margin-top:1rem">Sprint</p>', unsafe_allow_html=True)
-            s1, s2, s3 = st.columns(3)
+            s1, s2 = st.columns(2)
             for col, label, val_str, pct_val in [
                 (s1, "10 Yard", fv(r["sprint_10"],".3f"), None),
-                (s2, "20 Yard", fv(r["sprint_20"],".3f"), None),
-                (s3, "30 Yard", fv(r["sprint_30"],".3f"), r["s30_pct"]),
+                (s2, "30 Yard", fv(r["sprint_30"],".3f"), r["s30_pct"]),
             ]:
                 g_label, g_color = grade(pct_val) if pct_val is not None else ("—", "#9AAAC0")
                 sub = f"seconds · {fv(pct_val,'.0f')}th %ile" if pct_val is not None else "seconds"
