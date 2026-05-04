@@ -8,109 +8,116 @@ import gspread
 import json
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="Draft Scout", layout="wide", page_icon="⚾")
+st.set_page_config(page_title="Draft Scout · Nationals", layout="wide", page_icon="⚾")
 
-st.markdown("""
+NAV  = "#11225A"
+RED  = "#BA0C2F"
+GOLD = "#E2C188"
+SURF = "#F7F8FA"
+BORD = "#E8ECF0"
+GRN  = "#4CAF82"
+
+st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@300;400;600&display=swap');
+html, body, [class*="css"] {{ font-family: 'Source Sans 3', sans-serif; background: white; color: {NAV}; }}
+.block-container {{ padding: 1.8rem 2.5rem; max-width: 1500px; }}
+h1,h2,h3 {{ font-family: 'Playfair Display', serif; color: {NAV}; }}
 
-html, body, [class*="css"] { font-family: 'DM Mono', monospace; }
+/* Top bar */
+.grad-bar {{ height: 4px; background: linear-gradient(90deg, {RED} 0%, {NAV} 60%, {GOLD} 100%); border-radius: 2px; margin-bottom: 1.2rem; }}
 
-.main { background: #080c10; }
-.block-container { padding: 2rem 2.5rem; max-width: 1600px; }
-
-/* Header */
-.page-title { font-family: 'Syne', sans-serif; font-size: 2.8rem; font-weight: 800;
-  background: linear-gradient(135deg, #e8f4f8 0%, #7eb8d4 50%, #3a7ca5 100%);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  letter-spacing: -0.02em; margin: 0; line-height: 1; }
-.page-sub { color: #4a6572; font-size: 0.72rem; letter-spacing: 0.15em;
-  text-transform: uppercase; margin-top: 0.5rem; }
-
-/* Stat cards */
-.stat-card { background: #0d1520; border: 1px solid #1a2535;
-  border-radius: 8px; padding: 1.2rem 1.4rem; position: relative; overflow: hidden; }
-.stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0;
-  height: 2px; background: linear-gradient(90deg, #3a7ca5, #7eb8d4); }
-.stat-label { color: #4a6572; font-size: 0.65rem; letter-spacing: 0.15em;
-  text-transform: uppercase; margin-bottom: 0.4rem; }
-.stat-value { font-family: 'Syne', sans-serif; font-size: 1.6rem; font-weight: 700;
-  color: #e8f4f8; line-height: 1; }
-.stat-sub { color: #4a6572; font-size: 0.65rem; margin-top: 0.3rem; }
-
-/* Score cards */
-.score-card { background: #0d1520; border: 1px solid #1a2535; border-radius: 8px;
-  padding: 1.5rem; text-align: center; }
-.score-label { color: #4a6572; font-size: 0.65rem; letter-spacing: 0.15em;
-  text-transform: uppercase; margin-bottom: 0.6rem; }
-.score-value { font-family: 'Syne', sans-serif; font-size: 3rem; font-weight: 800;
-  line-height: 1; }
-.score-grade { font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase;
-  margin-top: 0.4rem; font-weight: 500; }
-
-/* Player name */
-.player-name { font-family: 'Syne', sans-serif; font-size: 2.2rem; font-weight: 800;
-  color: #e8f4f8; letter-spacing: -0.02em; margin: 0; }
-.player-meta { color: #4a6572; font-size: 0.7rem; letter-spacing: 0.12em;
-  text-transform: uppercase; margin-top: 0.4rem; }
-.pitcher-badge { display: inline-block; background: #0d2235; border: 1px solid #3a7ca5;
-  color: #7eb8d4; border-radius: 4px; padding: 0.2rem 0.6rem;
-  font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; margin-left: 0.6rem; }
-
-/* Section headers */
-.section-label { color: #4a6572; font-size: 0.65rem; letter-spacing: 0.2em;
-  text-transform: uppercase; border-bottom: 1px solid #1a2535;
-  padding-bottom: 0.5rem; margin-bottom: 1rem; margin-top: 1.5rem; }
-
-/* Pct bar */
-.pct-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.6rem; }
-.pct-label { color: #4a6572; font-size: 0.65rem; letter-spacing: 0.08em;
-  text-transform: uppercase; width: 110px; flex-shrink: 0; }
-.pct-track { flex: 1; background: #1a2535; border-radius: 2px; height: 4px; }
-.pct-fill { height: 4px; border-radius: 2px; }
-.pct-num { color: #e8f4f8; font-size: 0.7rem; font-weight: 500; width: 32px;
-  text-align: right; flex-shrink: 0; }
-
-/* Derived metric pill */
-.derived-pill { background: #0d2235; border: 1px solid #1a3550; border-radius: 6px;
-  padding: 0.8rem 1rem; display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 0.5rem; }
-.derived-name { color: #7eb8d4; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; }
-.derived-val { font-family: 'Syne', sans-serif; color: #e8f4f8; font-size: 1rem; font-weight: 700; }
-.derived-interp { color: #4a6572; font-size: 0.65rem; margin-top: 0.2rem; }
-
-/* Weight sliders */
-.weight-section { background: #0a1018; border: 1px solid #1a2535; border-radius: 8px;
-  padding: 1rem 1.2rem; margin-bottom: 0.8rem; }
-.weight-title { color: #7eb8d4; font-size: 0.65rem; letter-spacing: 0.15em;
-  text-transform: uppercase; margin-bottom: 0.6rem; font-weight: 600; }
-
-/* Sidebar */
-section[data-testid="stSidebar"] { background: #080c10 !important; border-right: 1px solid #1a2535; }
-section[data-testid="stSidebar"] .block-container { padding: 1.5rem 1rem; }
+/* Metric cards */
+div[data-testid="metric-container"] {{
+    background: white; border: 1px solid {BORD}; border-top: 3px solid {RED};
+    border-radius: 10px; padding: 14px 18px; box-shadow: 0 2px 8px rgba(17,34,90,0.06);
+}}
+div[data-testid="metric-container"] label {{
+    font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #6b7fa3;
+}}
+div[data-testid="metric-container"] div[data-testid="metric-value"] {{
+    font-family: 'Playfair Display', serif; font-size: 28px; color: {RED};
+}}
 
 /* Tabs */
-.stTabs [data-baseweb="tab-list"] { background: #0d1520; border-radius: 6px;
-  padding: 3px; border: 1px solid #1a2535; gap: 2px; }
-.stTabs [data-baseweb="tab"] { color: #4a6572; border-radius: 4px;
-  font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500; }
-.stTabs [aria-selected="true"] { background: #1a2d42 !important; color: #7eb8d4 !important; }
+.stTabs [data-baseweb="tab-list"] {{
+    background: white; border-bottom: 2px solid {BORD}; gap: 0;
+}}
+.stTabs [data-baseweb="tab"] {{
+    font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #6b7fa3; padding: 12px 28px; border: none; border-bottom: 3px solid transparent;
+}}
+.stTabs [aria-selected="true"] {{
+    color: {RED} !important; border-bottom: 3px solid {RED} !important; background: white !important;
+}}
 
-/* Streamlit overrides */
-.stSelectbox label, .stMultiSelect label, .stSlider label { color: #4a6572 !important;
-  font-size: 0.65rem !important; letter-spacing: 0.12em !important; text-transform: uppercase !important; }
-div[data-testid="stMetric"] { background: #0d1520; border: 1px solid #1a2535;
-  border-radius: 8px; padding: 0.8rem 1rem; }
+/* Sidebar */
+section[data-testid="stSidebar"] {{
+    background: white !important; border-right: 1px solid {BORD};
+}}
+.stSlider label, .stSelectbox label, .stMultiSelect label {{
+    font-size: 10px !important; font-weight: 600 !important;
+    letter-spacing: 0.1em !important; text-transform: uppercase !important; color: #6b7fa3 !important;
+}}
+
+/* Cards */
+.nat-card {{
+    background: white; border: 1px solid {BORD}; border-radius: 10px;
+    padding: 18px 22px; box-shadow: 0 2px 8px rgba(17,34,90,0.05); margin-bottom: 14px;
+}}
+.nat-card-red  {{ border-top: 4px solid {RED}; }}
+.nat-card-navy {{ border-top: 4px solid {NAV}; }}
+.nat-card-gold {{ border-top: 4px solid {GOLD}; }}
+.nat-card-green {{ border-top: 4px solid {GRN}; }}
+
+/* Stat rows */
+.nat-label {{
+    font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #6b7fa3; margin-bottom: 6px;
+}}
+.stat-row {{ display: flex; align-items: baseline; margin-bottom: 7px; font-size: 13px; }}
+.stat-label {{ color: #6b7fa3; min-width: 150px; font-size: 12px; }}
+.stat-val   {{ font-weight: 600; color: {NAV}; }}
+
+/* Percentile bars */
+.pct-row {{ display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }}
+.pct-label {{ color: #6b7fa3; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; width: 130px; flex-shrink: 0; }}
+.pct-track {{ flex: 1; background: {BORD}; border-radius: 3px; height: 6px; }}
+.pct-fill  {{ height: 6px; border-radius: 3px; }}
+.pct-num   {{ color: {NAV}; font-size: 11px; font-weight: 700; width: 28px; text-align: right; }}
+
+/* Score badge */
+.score-badge {{
+    display: inline-block; font-family: 'Playfair Display', serif;
+    font-size: 13px; font-weight: 700; padding: 3px 12px;
+    border-radius: 20px; color: white; margin-left: 8px; vertical-align: middle;
+}}
+
+/* Derived pills */
+.derived-pill {{
+    background: {SURF}; border: 1px solid {BORD}; border-radius: 8px;
+    padding: 10px 14px; display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 8px;
+}}
+.derived-name {{ color: {NAV}; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }}
+.derived-interp {{ color: #6b7fa3; font-size: 11px; margin-top: 2px; }}
+.derived-val {{ font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 700; }}
+
+/* Weight section */
+.weight-header {{ font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: {RED}; margin: 1rem 0 0.4rem 0; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ── CONSTANTS ─────────────────────────────────────────────────────────────────
-SPREADSHEET_ID = st.secrets.get("GOOGLE_SHEET_ID", "1J27zw_UngoTNdq6VKPF6RhB8aqfmvlpX60GtrXjOsbs")
+# ── CONSTANTS ──────────────────────────────────────────────────────────────
+SPREADSHEET_ID   = st.secrets.get("GOOGLE_SHEET_ID", "1J27zw_UngoTNdq6VKPF6RhB8aqfmvlpX60GtrXjOsbs")
 PITCHER_POSITIONS = {"Starting Pitcher", "Relief Pitcher", "Right Hand Pitcher"}
 
-# ── AUTH ──────────────────────────────────────────────────────────────────────
+# ── AUTH & DATA ────────────────────────────────────────────────────────────
 @st.cache_resource(show_spinner=False)
-def get_gspread_client():
+def get_client():
     creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly",
               "https://www.googleapis.com/auth/drive.readonly"]
@@ -118,9 +125,8 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_worksheet(sheet_id, name):
-    client = get_gspread_client()
-    ws = client.open_by_key(sheet_id).worksheet(name)
+def load_ws(sheet_id, name):
+    ws = get_client().open_by_key(sheet_id).worksheet(name)
     records = ws.get_all_records()
     df = pd.DataFrame(records)
     df.columns = [str(c).strip() for c in df.columns]
@@ -129,12 +135,11 @@ def load_worksheet(sheet_id, name):
 @st.cache_data(ttl=300)
 def load_data():
     try:
-        sprint = load_worksheet(SPREADSHEET_ID, "Sprint")
-        anthro = load_worksheet(SPREADSHEET_ID, "Anthropometrics")
-        fp     = load_worksheet(SPREADSHEET_ID, "Force Plate")
+        sprint = load_ws(SPREADSHEET_ID, "Sprint")
+        anthro = load_ws(SPREADSHEET_ID, "Anthropometrics")
+        fp     = load_ws(SPREADSHEET_ID, "Force Plate")
     except Exception as e:
-        st.error(f"Failed to load sheets: {e}")
-        st.stop()
+        st.error(f"Could not load data: {e}"); st.stop()
 
     def to_num(df, cols):
         for c in cols:
@@ -145,12 +150,77 @@ def load_data():
         try: return float(str(s).replace("kg","").replace("cm","").strip())
         except: return np.nan
 
-    sprint = to_num(sprint, ["10yd","20yd","30yd","Year"])
+    sprint = to_num(sprint, ["10yd Best","20yd Best","30yd Best","30yd Best.","Split1","Split2","Split3","Year"])
     sprint["DPL ID"] = sprint["DPL ID"].astype(str).str.strip()
 
-    fp = to_num(fp, ["Concentric Impulse [Ns]","RSI-Modified [m/s]","Peak Power [W]","Peak Power / BM [W/kg]","Year"])
+    # Normalize sprint split columns: 2023 uses named yd cols, 2024/2025 use Split1/2/3
+    def resolve_sprint_splits(df):
+        df = df.copy()
+        # 10yd
+        if "10yd Best" in df.columns:
+            df["10yd"] = pd.to_numeric(df["10yd Best"], errors="coerce")
+        elif "Split1" in df.columns:
+            df["10yd"] = pd.to_numeric(df["Split1"], errors="coerce")
+        else:
+            df["10yd"] = np.nan
+        # 20yd
+        if "20yd Best" in df.columns:
+            df["20yd"] = pd.to_numeric(df["20yd Best"], errors="coerce")
+        elif "Split2" in df.columns:
+            df["20yd"] = pd.to_numeric(df["Split2"], errors="coerce")
+        else:
+            df["20yd"] = np.nan
+        # 30yd — prefer named col, fall back to Split3
+        if "30yd Best" in df.columns:
+            df["30yd"] = pd.to_numeric(df["30yd Best"], errors="coerce")
+        elif "30yd Best." in df.columns:
+            df["30yd"] = pd.to_numeric(df["30yd Best."], errors="coerce")
+        elif "Split3" in df.columns:
+            df["30yd"] = pd.to_numeric(df["Split3"], errors="coerce")
+        else:
+            df["30yd"] = np.nan
+        # Fill gaps: for 2023 rows missing named cols, use Split cols if present
+        if "Split1" in df.columns:
+            df["10yd"] = df["10yd"].fillna(pd.to_numeric(df["Split1"], errors="coerce"))
+        if "Split2" in df.columns:
+            df["20yd"] = df["20yd"].fillna(pd.to_numeric(df["Split2"], errors="coerce"))
+        if "Split3" in df.columns:
+            df["30yd"] = df["30yd"].fillna(pd.to_numeric(df["Split3"], errors="coerce"))
+        return df
+
+    sprint = resolve_sprint_splits(sprint)
+
+    # Normalize name column
+    if "Full Name Reverse" not in sprint.columns:
+        if "Name" in sprint.columns:
+            sprint["Full Name Reverse"] = sprint["Name"]
+        elif "Player" in sprint.columns:
+            sprint["Full Name Reverse"] = sprint["Player"]
+
+    fp = to_num(fp, ["Concentric Impulse [Ns]","Concentric Impulse [N s]",
+                     "RSI-Modified [m/s]","RSI-modified [m/s]",
+                     "Peak Power [W]","Peak Power / BM [W/kg]","Year"])
     fp["DPL ID"] = fp["DPL ID"].astype(str).str.strip()
-    if "Test Type" in fp.columns: fp = fp[fp["Test Type"] == "CMJ"]
+
+    # Normalize force plate column names across years
+    if "Concentric Impulse [N s]" in fp.columns and "Concentric Impulse [Ns]" not in fp.columns:
+        fp["Concentric Impulse [Ns]"] = fp["Concentric Impulse [N s]"]
+    elif "Concentric Impulse [N s]" in fp.columns:
+        fp["Concentric Impulse [Ns]"] = fp["Concentric Impulse [Ns]"].fillna(fp["Concentric Impulse [N s]"])
+
+    if "RSI-modified [m/s]" in fp.columns and "RSI-Modified [m/s]" not in fp.columns:
+        fp["RSI-Modified [m/s]"] = fp["RSI-modified [m/s]"]
+    elif "RSI-modified [m/s]" in fp.columns:
+        fp["RSI-Modified [m/s]"] = fp["RSI-Modified [m/s]"].fillna(fp["RSI-modified [m/s]"])
+
+    if "Athlete" in fp.columns and "Full Name Reverse" not in fp.columns:
+        fp["Full Name Reverse"] = fp["Athlete"]
+    elif "Athlete" in fp.columns:
+        fp["Full Name Reverse"] = fp["Full Name Reverse"].fillna(fp["Athlete"])
+
+    # CMJ filter — different labels across years
+    if "Test Type" in fp.columns:
+        fp = fp[fp["Test Type"].isin({"CMJ", "Countermovement Jump"})]
 
     anthro["DPL ID"] = anthro["DPL ID"].astype(str).str.strip()
     anthro = to_num(anthro, ["Height","Body Weight","Body Weight (kg)","Arm Span","Year"])
@@ -186,31 +256,27 @@ def load_data():
     m["weight_lb"]   = m["weight_kg"] * 2.205
     m["wingspan_in"] = m["wingspan_cm"] / 2.54
 
-    # ── Derived metrics
-    # Wingspan-to-height ratio (>1 is good, especially for pitchers)
-    m["ws_ht_ratio"] = m["wingspan_cm"] / m["height_cm"]
-    # BMI as proxy for mass relative to height (lower = more room to add mass)
-    # Using kg/m² — lower BMI for height suggests projection room
-    m["bmi"] = m["weight_kg"] / ((m["height_cm"] / 100) ** 2)
-    # Projection score: tall + lean = high upside to add mass
-    # z-score height high, z-score bmi low → projection
+    # Derived
+    m["ws_ht_ratio"]    = m["wingspan_cm"] / m["height_cm"]
+    m["bmi"]            = m["weight_kg"] / ((m["height_cm"] / 100) ** 2)
     m["projection_raw"] = m["height_cm"] - (m["bmi"] * 1.5)
+
+    # Only keep players who have both jump AND sprint data
+    m = m[m["concentric_impulse"].notna() & m["sprint_30"].notna()].copy()
 
     return m[m["name"].notna()].reset_index(drop=True)
 
-# ── SCORING ───────────────────────────────────────────────────────────────────
+# ── SCORING ────────────────────────────────────────────────────────────────
 def pct_rank(series, value, lower_is_better=False):
     valid = series.dropna()
     if len(valid) < 2 or pd.isna(value): return np.nan
     p = stats.percentileofscore(valid, value, kind="rank")
-    return (100-p) if lower_is_better else p
+    return (100 - p) if lower_is_better else p
 
 def compute_scores(df, aw, pw):
-    """aw = athletic weights dict, pw = potential weights dict (pitcher & position)"""
     rows = []
     for _, r in df.iterrows():
         is_p = r["position"] in PITCHER_POSITIONS
-
         ci_p   = pct_rank(df["concentric_impulse"], r["concentric_impulse"])
         mr_p   = pct_rank(df["mrsi"], r["mrsi"])
         s30_p  = pct_rank(df["sprint_30"], r["sprint_30"], True)
@@ -218,384 +284,401 @@ def compute_scores(df, aw, pw):
         w_p    = pct_rank(df["weight_kg"], r["weight_kg"])
         rp_p   = pct_rank(df["rel_peak_power"], r["rel_peak_power"])
         ws_p   = pct_rank(df["wingspan_cm"], r["wingspan_cm"])
-        wsr_p  = pct_rank(df["ws_ht_ratio"], r["ws_ht_ratio"])  # higher ratio = better
-        proj_p = pct_rank(df["projection_raw"], r["projection_raw"])  # higher = more projection
+        wsr_p  = pct_rank(df["ws_ht_ratio"], r["ws_ht_ratio"])
+        proj_p = pct_rank(df["projection_raw"], r["projection_raw"])
 
-        # Athletic score
-        ath_map = [("ci", ci_p), ("mrsi", mr_p), ("sprint", s30_p)]
         ap, aww = [], []
-        for k, v in ath_map:
+        for k, v in [("ci", ci_p), ("mrsi", mr_p), ("sprint", s30_p)]:
             if not pd.isna(v): ap.append(v * aw[k]); aww.append(aw[k])
-        ath = (sum(ap)/sum(aww)) if aww else np.nan
+        ath = (sum(ap) / sum(aww)) if aww else np.nan
 
-        # Potential score
         if is_p:
-            pot_map = [("height", h_p), ("weight", w_p), ("mrsi", mr_p),
-                       ("rel_power", rp_p), ("sprint", s30_p), ("ws_ht_ratio", wsr_p)]
+            pot_items = [("height", h_p), ("weight", w_p), ("mrsi", mr_p),
+                         ("rel_power", rp_p), ("sprint", s30_p), ("ws_ht_ratio", wsr_p)]
             wts = pw["pitcher"]
         else:
-            pot_map = [("height", h_p), ("weight", w_p), ("mrsi", mr_p),
-                       ("rel_power", rp_p), ("sprint", s30_p)]
+            pot_items = [("height", h_p), ("weight", w_p), ("mrsi", mr_p),
+                         ("rel_power", rp_p), ("sprint", s30_p)]
             wts = pw["position"]
 
         pp, pww = [], []
-        for k, v in pot_map:
+        for k, v in pot_items:
             if not pd.isna(v): pp.append(v * wts[k]); pww.append(wts[k])
-        pot = (sum(pp)/sum(pww)) if pww else np.nan
+        pot = (sum(pp) / sum(pww)) if pww else np.nan
 
-        rows.append({
-            "athletic_score": ath, "potential_score": pot,
-            "ci_pct": ci_p, "mrsi_pct": mr_p, "s30_pct": s30_p,
-            "h_pct": h_p, "w_pct": w_p, "rpp_pct": rp_p,
-            "ws_pct": ws_p, "wsr_pct": wsr_p, "proj_pct": proj_p,
-        })
-    scored = pd.concat([df.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
-    return scored
+        rows.append({"athletic_score": ath, "potential_score": pot,
+                     "ci_pct": ci_p, "mrsi_pct": mr_p, "s30_pct": s30_p,
+                     "h_pct": h_p, "w_pct": w_p, "rpp_pct": rp_p,
+                     "ws_pct": ws_p, "wsr_pct": wsr_p, "proj_pct": proj_p})
+    return pd.concat([df.reset_index(drop=True), pd.DataFrame(rows)], axis=1)
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
+# ── HELPERS ────────────────────────────────────────────────────────────────
 def score_color(val):
-    if pd.isna(val): return "#2a3a4a"
-    if val >= 80: return "#2dd4a0"
-    if val >= 60: return "#f0b429"
-    if val >= 40: return "#f07029"
-    return "#e84545"
+    if pd.isna(val): return "#9AAAC0"
+    if val >= 80: return GRN
+    if val >= 60: return NAV
+    if val >= 40: return GOLD
+    return RED
 
 def grade(val):
-    if pd.isna(val): return ("—", "#4a6572")
-    if val >= 80: return ("ELITE", "#2dd4a0")
-    if val >= 65: return ("PLUS", "#7eb8d4")
-    if val >= 50: return ("AVG+", "#f0b429")
-    if val >= 35: return ("AVG", "#f07029")
-    return ("BELOW", "#e84545")
+    if pd.isna(val): return ("—", "#9AAAC0")
+    if val >= 80: return ("Elite", GRN)
+    if val >= 65: return ("Plus", NAV)
+    if val >= 50: return ("Avg+", GOLD)
+    if val >= 35: return ("Avg", "#E8A020")
+    return ("Below", RED)
 
-def fmt_h(inches):
+def fh(inches):
     if pd.isna(inches): return "—"
-    return f"{int(inches//12)}'{inches%12:.0f}\""
+    return f"{int(inches // 12)}'{inches % 12:.0f}\""
 
 def fv(v, fmt=".1f", suffix=""):
     return f"{v:{fmt}}{suffix}" if not pd.isna(v) else "—"
 
-def pct_bar_html(label, pct, extra=""):
+def pct_bar(label, pct):
     if pd.isna(pct): return ""
     c = score_color(pct)
     return f"""<div class='pct-row'>
       <span class='pct-label'>{label}</span>
       <div class='pct-track'><div class='pct-fill' style='width:{pct:.0f}%;background:{c}'></div></div>
       <span class='pct-num'>{pct:.0f}</span>
-    </div>{"<div style='padding-left:118px;margin-top:-4px;margin-bottom:6px;color:#4a6572;font-size:0.6rem'>"+extra+"</div>" if extra else ""}"""
+    </div>"""
 
-def gauge_fig(score, label, color):
+def gauge_fig(score, label):
     sd = 0 if pd.isna(score) else score
+    color = score_color(sd)
     fig = go.Figure(go.Indicator(
         mode="gauge+number", value=sd,
-        number={"font":{"size":42,"color":"#e8f4f8","family":"Syne, sans-serif"},"suffix":""},
-        title={"text":label,"font":{"size":11,"color":"#4a6572","family":"DM Mono, monospace"}},
+        number={"font": {"size": 44, "color": NAV, "family": "Playfair Display, serif"}, "suffix": ""},
+        title={"text": label, "font": {"size": 11, "color": "#6b7fa3", "family": "Source Sans 3, sans-serif"}},
         gauge={
-            "axis":{"range":[0,100],"tickfont":{"color":"#4a6572","size":9},"tickwidth":1,"tickcolor":"#1a2535","nticks":5},
-            "bar":{"color":color,"thickness":0.2},
-            "bgcolor":"#0d1520","borderwidth":0,
-            "steps":[{"range":[0,25],"color":"#090e15"},{"range":[25,50],"color":"#0b1219"},
-                     {"range":[50,75],"color":"#0d1520"},{"range":[75,100],"color":"#0f1825"}],
-            "threshold":{"line":{"color":color,"width":2},"thickness":0.75,"value":sd}
+            "axis": {"range": [0, 100], "tickfont": {"color": "#9AAAC0", "size": 9}, "nticks": 5},
+            "bar": {"color": color, "thickness": 0.22},
+            "bgcolor": SURF, "borderwidth": 1, "bordercolor": BORD,
+            "steps": [{"range": [0, 35], "color": "#fdf2f2"},
+                      {"range": [35, 50], "color": "#fdf8ef"},
+                      {"range": [50, 65], "color": "#f0f4fb"},
+                      {"range": [65, 100], "color": "#f0faf5"}],
+            "threshold": {"line": {"color": color, "width": 2}, "thickness": 0.8, "value": sd}
         }
     ))
-    fig.update_layout(height=180, margin=dict(l=15,r=15,t=40,b=5),
-                      paper_bgcolor="rgba(0,0,0,0)", font={"family":"DM Mono, monospace"})
+    fig.update_layout(height=190, margin=dict(l=20, r=20, t=45, b=5),
+                      paper_bgcolor="white", plot_bgcolor="white",
+                      font={"family": "Source Sans 3, sans-serif"})
     return fig
 
 def radar_fig(labels, values):
-    vals = [max(v,0) if not pd.isna(v) else 0 for v in values]
-    colors = [score_color(v) for v in values]
+    vals = [max(v, 0) if not pd.isna(v) else 0 for v in values]
+    colors_m = [score_color(v) for v in values]
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
-        r=vals+[vals[0]], theta=labels+[labels[0]], fill="toself",
-        fillcolor="rgba(62,140,180,0.08)",
-        line=dict(color="#3a7ca5", width=1.5),
-        marker=dict(color=colors+[colors[0]], size=7, line=dict(color="#0d1520", width=1))
+        r=vals + [vals[0]], theta=labels + [labels[0]], fill="toself",
+        fillcolor=f"rgba(17,34,90,0.07)",
+        line=dict(color=NAV, width=2),
+        marker=dict(color=colors_m + [colors_m[0]], size=8,
+                    line=dict(color="white", width=1.5))
     ))
     fig.update_layout(
-        polar=dict(bgcolor="#0d1520",
-                   radialaxis=dict(visible=True, range=[0,100],
-                                   tickfont=dict(color="#2a3a4a",size=8),
-                                   gridcolor="#1a2535", linecolor="#1a2535"),
-                   angularaxis=dict(tickfont=dict(color="#7eb8d4",size=10,family="DM Mono"),
-                                    gridcolor="#1a2535", linecolor="#1a2535")),
-        showlegend=False, paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=40,r=40,t=20,b=20), height=280
+        polar=dict(bgcolor=SURF,
+                   radialaxis=dict(visible=True, range=[0, 100],
+                                   tickfont=dict(color="#9AAAC0", size=8),
+                                   gridcolor=BORD, linecolor=BORD),
+                   angularaxis=dict(tickfont=dict(color=NAV, size=11,
+                                                  family="Source Sans 3, sans-serif"),
+                                    gridcolor=BORD, linecolor=BORD)),
+        showlegend=False, paper_bgcolor="white",
+        margin=dict(l=40, r=40, t=20, b=20), height=290
     )
     return fig
 
-# ── LOAD DATA ─────────────────────────────────────────────────────────────────
-with st.spinner(""):
+def scatter_fig(df):
+    df2 = df.dropna(subset=["athletic_score", "potential_score"]).copy()
+    fig = px.scatter(
+        df2, x="athletic_score", y="potential_score",
+        color="position", hover_name="name",
+        hover_data={"concentric_impulse": ":.1f", "mrsi": ":.2f",
+                    "sprint_30": ":.3f", "height_in": ":.1f",
+                    "weight_lb": ":.0f", "ws_ht_ratio": ":.3f", "bmi": ":.1f"},
+        labels={"athletic_score": "Athletic Score", "potential_score": "Potential Score"},
+        template="plotly_white", height=560,
+        color_discrete_sequence=[RED, NAV, GOLD, GRN, "#6b7fa3", "#c94060"],
+    )
+    fig.update_traces(marker=dict(size=10, line=dict(width=1, color="white")))
+    fig.update_layout(
+        paper_bgcolor="white", plot_bgcolor=SURF,
+        font=dict(family="Source Sans 3, sans-serif", color=NAV),
+        xaxis=dict(gridcolor=BORD, zerolinecolor=BORD, title_font=dict(color="#6b7fa3")),
+        yaxis=dict(gridcolor=BORD, zerolinecolor=BORD, title_font=dict(color="#6b7fa3")),
+        legend=dict(font=dict(color=NAV, size=11)),
+    )
+    fig.add_hline(y=50, line_dash="dot", line_color=BORD, line_width=1)
+    fig.add_vline(x=50, line_dash="dot", line_color=BORD, line_width=1)
+    return fig
+
+# ── LOAD ───────────────────────────────────────────────────────────────────
+with st.spinner("Loading data…"):
     raw_df = load_data()
 
-# ── SIDEBAR ───────────────────────────────────────────────────────────────────
+# ── SIDEBAR ────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("<div style='font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:#7eb8d4;letter-spacing:-0.01em;margin-bottom:0.2rem'>⚾ DRAFT SCOUT</div>", unsafe_allow_html=True)
-    st.markdown("<div style='color:#4a6572;font-size:0.6rem;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:1.2rem'>Athletic Intelligence Platform</div>", unsafe_allow_html=True)
+    st.markdown(f'<p style="font-size:10px;font-weight:600;letter-spacing:0.2em;color:{RED};margin-bottom:2px">WASHINGTON NATIONALS</p>', unsafe_allow_html=True)
+    st.markdown(f'<h2 style="margin:0 0 1rem 0;font-size:1.1rem">Draft Scout</h2>', unsafe_allow_html=True)
 
-    st.markdown("<div style='color:#4a6572;font-size:0.6rem;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.4rem'>Filters</div>", unsafe_allow_html=True)
-    years = sorted(raw_df["year"].dropna().unique().tolist())
+    years     = sorted(raw_df["year"].dropna().unique().tolist())
     sel_years = st.multiselect("Draft Class", years, default=years)
     positions = sorted(raw_df["position"].dropna().unique().tolist())
-    sel_positions = st.multiselect("Position", positions, default=positions)
+    sel_pos   = st.multiselect("Position", positions, default=positions)
 
-    st.markdown("---")
-    st.markdown("<div style='color:#7eb8d4;font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.8rem;font-weight:600'>⚡ Athletic Score Weights</div>", unsafe_allow_html=True)
+    st.markdown(f'<div class="weight-header">⚡ Athletic Score Weights</div>', unsafe_allow_html=True)
     w_ci     = st.slider("Concentric Impulse", 0, 100, 40, key="w_ci")
     w_mrsi   = st.slider("mRSI", 0, 100, 35, key="w_mrsi")
     w_sprint = st.slider("Sprint (30yd)", 0, 100, 25, key="w_sprint")
-    ath_total = w_ci + w_mrsi + w_sprint
-    st.markdown(f"<div style='color:{'#2dd4a0' if ath_total==100 else '#e84545'};font-size:0.65rem;text-align:right'>Total: {ath_total} {'✓' if ath_total==100 else '(should = 100)'}</div>", unsafe_allow_html=True)
+    tot_a = w_ci + w_mrsi + w_sprint
+    st.markdown(f'<p style="font-size:10px;text-align:right;color:{"#4CAF82" if tot_a==100 else RED}">Total: {tot_a} {"✓" if tot_a==100 else "(needs to = 100)"}</p>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("<div style='color:#7eb8d4;font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.8rem;font-weight:600'>🎯 Potential — Position Players</div>", unsafe_allow_html=True)
-    pp_h   = st.slider("Height", 0, 100, 20, key="pp_h")
-    pp_w   = st.slider("Weight", 0, 100, 20, key="pp_w")
-    pp_mr  = st.slider("mRSI", 0, 100, 25, key="pp_mr")
-    pp_rp  = st.slider("Rel. Peak Power", 0, 100, 20, key="pp_rp")
-    pp_sp  = st.slider("Sprint", 0, 100, 15, key="pp_sp")
-    pp_total = pp_h+pp_w+pp_mr+pp_rp+pp_sp
-    st.markdown(f"<div style='color:{'#2dd4a0' if pp_total==100 else '#e84545'};font-size:0.65rem;text-align:right'>Total: {pp_total} {'✓' if pp_total==100 else '(should = 100)'}</div>", unsafe_allow_html=True)
+    st.markdown(f'<div class="weight-header">🎯 Potential — Position Players</div>', unsafe_allow_html=True)
+    pp_h  = st.slider("Height", 0, 100, 20, key="pp_h")
+    pp_w  = st.slider("Weight", 0, 100, 20, key="pp_w")
+    pp_mr = st.slider("mRSI", 0, 100, 25, key="pp_mr")
+    pp_rp = st.slider("Rel. Peak Power", 0, 100, 20, key="pp_rp")
+    pp_sp = st.slider("Sprint", 0, 100, 15, key="pp_sp")
+    tot_pp = pp_h+pp_w+pp_mr+pp_rp+pp_sp
+    st.markdown(f'<p style="font-size:10px;text-align:right;color:{"#4CAF82" if tot_pp==100 else RED}">Total: {tot_pp} {"✓" if tot_pp==100 else "(needs to = 100)"}</p>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("<div style='color:#7eb8d4;font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:0.8rem;font-weight:600'>⚾ Potential — Pitchers</div>", unsafe_allow_html=True)
-    pi_h   = st.slider("Height", 0, 100, 20, key="pi_h")
-    pi_w   = st.slider("Weight", 0, 100, 15, key="pi_w")
+    st.markdown(f'<div class="weight-header">⚾ Potential — Pitchers</div>', unsafe_allow_html=True)
+    pi_h   = st.slider("Height", 0, 100, 18, key="pi_h")
+    pi_w   = st.slider("Weight", 0, 100, 12, key="pi_w")
     pi_mr  = st.slider("mRSI", 0, 100, 20, key="pi_mr")
     pi_rp  = st.slider("Rel. Peak Power", 0, 100, 20, key="pi_rp")
     pi_sp  = st.slider("Sprint", 0, 100, 10, key="pi_sp")
-    pi_wsr = st.slider("Wingspan:Height Ratio", 0, 100, 15, key="pi_wsr")
-    pi_total = pi_h+pi_w+pi_mr+pi_rp+pi_sp+pi_wsr
-    st.markdown(f"<div style='color:{'#2dd4a0' if pi_total==100 else '#e84545'};font-size:0.65rem;text-align:right'>Total: {pi_total} {'✓' if pi_total==100 else '(should = 100)'}</div>", unsafe_allow_html=True)
+    pi_wsr = st.slider("Wingspan : Height", 0, 100, 20, key="pi_wsr")
+    tot_pi = pi_h+pi_w+pi_mr+pi_rp+pi_sp+pi_wsr
+    st.markdown(f'<p style="font-size:10px;text-align:right;color:{"#4CAF82" if tot_pi==100 else RED}">Total: {tot_pi} {"✓" if tot_pi==100 else "(needs to = 100)"}</p>', unsafe_allow_html=True)
 
     st.markdown("---")
-    sort_by = st.selectbox("Sort Leaderboard By",
+    sort_by = st.selectbox("Sort Rankings By",
         ["Athletic Score","Potential Score","30yd Sprint","mRSI","Concentric Impulse","Projection"])
     st.markdown("---")
-    if st.button("↺  Refresh Data", use_container_width=True):
+    if st.button("↻ Refresh Data", use_container_width=True):
         st.cache_data.clear(); st.rerun()
 
-# ── COMPUTE SCORES ────────────────────────────────────────────────────────────
+# ── SCORE ──────────────────────────────────────────────────────────────────
 aw = {"ci": w_ci/100, "mrsi": w_mrsi/100, "sprint": w_sprint/100}
 pw = {
-    "position": {"height": pp_h/100,"weight": pp_w/100,"mrsi": pp_mr/100,"rel_power": pp_rp/100,"sprint": pp_sp/100},
-    "pitcher":  {"height": pi_h/100,"weight": pi_w/100,"mrsi": pi_mr/100,"rel_power": pi_rp/100,"sprint": pi_sp/100,"ws_ht_ratio": pi_wsr/100},
+    "position": {"height": pp_h/100, "weight": pp_w/100, "mrsi": pp_mr/100,
+                 "rel_power": pp_rp/100, "sprint": pp_sp/100},
+    "pitcher":  {"height": pi_h/100, "weight": pi_w/100, "mrsi": pi_mr/100,
+                 "rel_power": pi_rp/100, "sprint": pi_sp/100, "ws_ht_ratio": pi_wsr/100},
 }
 df = compute_scores(raw_df, aw, pw)
 
-# ── FILTER ────────────────────────────────────────────────────────────────────
-filtered = df[df["year"].isin(sel_years) & df["position"].isin(sel_positions)].copy()
+# ── FILTER ─────────────────────────────────────────────────────────────────
+filtered = df[df["year"].isin(sel_years) & df["position"].isin(sel_pos)].copy()
 sc_map = {"Athletic Score":("athletic_score",False),"Potential Score":("potential_score",False),
           "30yd Sprint":("sprint_30",True),"mRSI":("mrsi",False),
           "Concentric Impulse":("concentric_impulse",False),"Projection":("proj_pct",False)}
 sc, sa = sc_map[sort_by]
 filtered = filtered.sort_values(sc, ascending=sa, na_position="last")
 
-# ── PAGE HEADER ───────────────────────────────────────────────────────────────
-h1, h2 = st.columns([2,1])
-with h1:
-    st.markdown("<div class='page-title'>Draft Scout</div>", unsafe_allow_html=True)
-    st.markdown("<div class='page-sub'>Athletic Qualities + Physical Potential · 2023–2025</div>", unsafe_allow_html=True)
-with h2:
-    k1,k2,k3 = st.columns(3)
-    k1.metric("Athletes", len(filtered))
-    k2.metric("Pitchers", int((filtered["position"].isin(PITCHER_POSITIONS)).sum()))
-    k3.metric("w/ Sprint", int(filtered["sprint_30"].notna().sum()))
+# ── HEADER ─────────────────────────────────────────────────────────────────
+st.markdown('<div class="grad-bar"></div>', unsafe_allow_html=True)
+hc1, hc2, hc3, hc4, hc5 = st.columns([3,1,1,1,1])
+with hc1:
+    st.markdown(f'<p style="font-size:10px;font-weight:600;letter-spacing:0.2em;color:{RED};margin-bottom:4px">WASHINGTON NATIONALS · PLAYER DEVELOPMENT</p>', unsafe_allow_html=True)
+    st.markdown(f'<h1 style="margin:0;font-size:2rem">Draft Athletic Scouting</h1>', unsafe_allow_html=True)
+    st.markdown(f'<p style="color:#6b7fa3;font-size:12px;margin:0">Athletic Qualities + Physical Potential · 2023–2025 Draft Classes</p>', unsafe_allow_html=True)
+hc2.metric("Athletes", len(filtered))
+hc3.metric("Pitchers", int(filtered["position"].isin(PITCHER_POSITIONS).sum()))
+hc4.metric("w/ Sprint", int(filtered["sprint_30"].notna().sum()))
+hc5.metric("w/ Jump", int(filtered["concentric_impulse"].notna().sum()))
 
-st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
 
-# ── TABS ──────────────────────────────────────────────────────────────────────
-tab_board, tab_profile, tab_scatter = st.tabs(["RANKINGS", "PLAYER PROFILE", "SCATTER"])
+tab_rank, tab_profile, tab_scatter = st.tabs(["Rankings", "Player Profile", "Scatter"])
 
-# ── TAB 1: RANKINGS ───────────────────────────────────────────────────────────
-with tab_board:
+# ── TAB 1: RANKINGS ────────────────────────────────────────────────────────
+with tab_rank:
     disp = filtered[[
         "name","position","year",
         "athletic_score","potential_score",
-        "concentric_impulse","mrsi",
+        "concentric_impulse","mrsi","rel_peak_power",
         "sprint_10","sprint_20","sprint_30",
         "height_in","weight_lb","wingspan_in",
-        "ws_ht_ratio","bmi","rel_peak_power","proj_pct"
+        "ws_ht_ratio","bmi","proj_pct"
     ]].copy()
-
     disp.rename(columns={
         "name":"Athlete","position":"Position","year":"Year",
         "athletic_score":"Athletic","potential_score":"Potential",
-        "concentric_impulse":"CI (Ns)","mrsi":"mRSI",
+        "concentric_impulse":"CI (Ns)","mrsi":"mRSI","rel_peak_power":"Rel Pwr (W/kg)",
         "sprint_10":"10yd","sprint_20":"20yd","sprint_30":"30yd",
-        "height_in":"Ht (in)","weight_lb":"Wt (lb)","wingspan_in":"Wingspan",
-        "ws_ht_ratio":"WS:Ht","bmi":"BMI","rel_peak_power":"Rel Pwr",
-        "proj_pct":"Projection %ile"
+        "height_in":"Ht (in)","weight_lb":"Wt (lb)","wingspan_in":"Wingspan (in)",
+        "ws_ht_ratio":"WS:Ht","bmi":"BMI","proj_pct":"Proj %ile"
     }, inplace=True)
-
-    for c in ["Athletic","Potential","CI (Ns)","mRSI","10yd","20yd","30yd",
-              "Ht (in)","Wt (lb)","Wingspan","WS:Ht","BMI","Rel Pwr","Projection %ile"]:
+    for c in ["Athletic","Potential","CI (Ns)","mRSI","Rel Pwr (W/kg)",
+              "10yd","20yd","30yd","Ht (in)","Wt (lb)","Wingspan (in)","WS:Ht","BMI","Proj %ile"]:
         if c in disp.columns:
             disp[c] = pd.to_numeric(disp[c], errors="coerce").round(2)
 
     st.dataframe(disp.reset_index(drop=True), use_container_width=True, height=560,
         column_config={
-            "Athletic":    st.column_config.ProgressColumn("Athletic",    min_value=0, max_value=100, format="%.1f"),
-            "Potential":   st.column_config.ProgressColumn("Potential",   min_value=0, max_value=100, format="%.1f"),
-            "Projection %ile": st.column_config.ProgressColumn("Projection %ile", min_value=0, max_value=100, format="%.0f"),
+            "Athletic": st.column_config.ProgressColumn("Athletic", min_value=0, max_value=100, format="%.1f"),
+            "Potential": st.column_config.ProgressColumn("Potential", min_value=0, max_value=100, format="%.1f"),
+            "Proj %ile": st.column_config.ProgressColumn("Proj %ile", min_value=0, max_value=100, format="%.0f"),
         })
-
     csv = disp.to_csv(index=False).encode()
-    st.download_button("↓ Export CSV", csv, "draft_scout.csv", "text/csv")
+    st.download_button("↓ Download CSV", csv, "draft_scout.csv", "text/csv")
 
-# ── TAB 2: PLAYER PROFILE ─────────────────────────────────────────────────────
+# ── TAB 2: PLAYER PROFILE ──────────────────────────────────────────────────
 with tab_profile:
     player_names = filtered["name"].dropna().sort_values().tolist()
     if not player_names:
-        st.warning("No athletes match filters.")
+        st.warning("No athletes match the current filters.")
     else:
-        search = st.text_input("Search", placeholder="Type a name...", label_visibility="collapsed")
-        name_opts = [n for n in player_names if search.lower() in n.lower()] if search else player_names
-        sel = st.selectbox("Athlete", name_opts, label_visibility="collapsed")
-        r = filtered[filtered["name"] == sel].iloc[0]
-        is_p = r["position"] in PITCHER_POSITIONS
+        search = st.text_input("Search athlete", placeholder="Type a name…", label_visibility="collapsed")
+        opts   = [n for n in player_names if search.lower() in n.lower()] if search else player_names
+        sel    = st.selectbox("Athlete", opts, label_visibility="collapsed")
+        r      = filtered[filtered["name"] == sel].iloc[0]
+        is_p   = r["position"] in PITCHER_POSITIONS
 
-        st.markdown("<div style='height:0.8rem'></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        # Name + meta
-        n1, n2 = st.columns([3,1])
+        # Name row
+        n1, n2 = st.columns([3, 1])
         with n1:
-            pitcher_badge = "<span class='pitcher-badge'>⚾ Pitcher</span>" if is_p else ""
-            st.markdown(f"<div class='player-name'>{r['name']}{pitcher_badge}</div>", unsafe_allow_html=True)
-            yr = int(r['year']) if not pd.isna(r['year']) else '—'
-            st.markdown(f"<div class='player-meta'>{r['position']} &nbsp;·&nbsp; {yr} Draft Class</div>", unsafe_allow_html=True)
-        with n2:
             ath_g, ath_c = grade(r["athletic_score"])
             pot_g, pot_c = grade(r["potential_score"])
+            yr = int(r["year"]) if not pd.isna(r["year"]) else "—"
+            pitcher_tag = f' <span class="score-badge" style="background:{RED};font-size:11px">⚾ Pitcher</span>' if is_p else ""
+            st.markdown(f'<h2 style="margin:0">{r["name"]}{pitcher_tag}</h2>', unsafe_allow_html=True)
+            st.markdown(f'<p style="color:#6b7fa3;font-size:12px;margin:4px 0 0 0">{r["position"]} · {yr} Draft Class</p>', unsafe_allow_html=True)
+        with n2:
             st.markdown(f"""
-            <div style='text-align:right'>
-              <div style='font-size:0.6rem;color:#4a6572;letter-spacing:0.12em;text-transform:uppercase'>Athletic</div>
-              <div style='font-family:Syne,sans-serif;font-size:1.4rem;font-weight:800;color:{ath_c}'>{fv(r["athletic_score"],".0f")} <span style='font-size:0.7rem'>{ath_g}</span></div>
-              <div style='font-size:0.6rem;color:#4a6572;letter-spacing:0.12em;text-transform:uppercase;margin-top:0.3rem'>Potential</div>
-              <div style='font-family:Syne,sans-serif;font-size:1.4rem;font-weight:800;color:{pot_c}'>{fv(r["potential_score"],".0f")} <span style='font-size:0.7rem'>{pot_g}</span></div>
+            <div style="text-align:right">
+              <span class="nat-label">Athletic</span><br>
+              <span style="font-family:'Playfair Display',serif;font-size:2rem;font-weight:900;color:{ath_c}">{fv(r["athletic_score"],".0f")}</span>
+              <span class="score-badge" style="background:{ath_c}">{ath_g}</span><br>
+              <span class="nat-label" style="margin-top:6px;display:block">Potential</span>
+              <span style="font-family:'Playfair Display',serif;font-size:2rem;font-weight:900;color:{pot_c}">{fv(r["potential_score"],".0f")}</span>
+              <span class="score-badge" style="background:{pot_c}">{pot_g}</span>
             </div>""", unsafe_allow_html=True)
 
-        st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # Gauges
-        g1,g2 = st.columns(2)
-        with g1: st.plotly_chart(gauge_fig(r["athletic_score"],"ATHLETIC SCORE",score_color(r["athletic_score"])), use_container_width=True, key="ga")
-        with g2: st.plotly_chart(gauge_fig(r["potential_score"],"POTENTIAL SCORE",score_color(r["potential_score"])), use_container_width=True, key="gp")
+        g1, g2 = st.columns(2)
+        with g1: st.plotly_chart(gauge_fig(r["athletic_score"], "ATHLETIC SCORE"), use_container_width=True, key="ga")
+        with g2: st.plotly_chart(gauge_fig(r["potential_score"], "POTENTIAL SCORE"), use_container_width=True, key="gp")
 
-        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        # Main content: left metrics, right radar + bars
         left, right = st.columns([1.1, 0.9])
 
         with left:
             # Physical
-            st.markdown("<div class='section-label'>Physical</div>", unsafe_allow_html=True)
-            p1,p2,p3 = st.columns(3)
-            with p1:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>Height</div><div class='stat-value'>{fmt_h(r['height_in'])}</div><div class='stat-sub'>{fv(r['h_pct'],'.0f')}th %ile</div></div>", unsafe_allow_html=True)
-            with p2:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>Weight</div><div class='stat-value'>{fv(r['weight_lb'],'.0f')} lb</div><div class='stat-sub'>{fv(r['w_pct'],'.0f')}th %ile</div></div>", unsafe_allow_html=True)
-            with p3:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>Wingspan</div><div class='stat-value'>{fmt_h(r['wingspan_in'])}</div><div class='stat-sub'>{fv(r['ws_pct'],'.0f')}th %ile</div></div>", unsafe_allow_html=True)
+            st.markdown(f'<p class="nat-label">Physical Measurements</p>', unsafe_allow_html=True)
+            p1, p2, p3 = st.columns(3)
+            for col, label, val, pct_val in [
+                (p1, "Height", fh(r["height_in"]), r["h_pct"]),
+                (p2, "Weight", fv(r["weight_lb"],".0f"," lb"), r["w_pct"]),
+                (p3, "Wingspan", fh(r["wingspan_in"]), r["ws_pct"]),
+            ]:
+                g_label, g_color = grade(pct_val)
+                col.markdown(f"""
+                <div class="nat-card nat-card-navy" style="text-align:center;padding:14px">
+                  <div class="nat-label">{label}</div>
+                  <div style="font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:{NAV}">{val}</div>
+                  <div style="font-size:11px;color:#6b7fa3;margin-top:4px">{fv(pct_val,".0f")}th %ile
+                    <span class="score-badge" style="background:{g_color};font-size:9px;padding:2px 7px">{g_label}</span>
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
-            # Derived metrics
-            st.markdown("<div class='section-label'>Derived Metrics</div>", unsafe_allow_html=True)
-
-            # Wingspan:Height ratio
+            # Derived
+            st.markdown(f'<p class="nat-label" style="margin-top:1rem">Derived Metrics</p>', unsafe_allow_html=True)
             wsr = r["ws_ht_ratio"]
-            wsr_interp = "Positive — wingspan exceeds height" if not pd.isna(wsr) and wsr > 1.0 else ("Neutral — wingspan ≈ height" if not pd.isna(wsr) and wsr >= 0.98 else "Below avg — limited arm length")
-            wsr_color = "#2dd4a0" if not pd.isna(wsr) and wsr > 1.02 else ("#f0b429" if not pd.isna(wsr) and wsr >= 0.98 else "#e84545")
-            st.markdown(f"""<div class='derived-pill'>
-              <div><div class='derived-name'>Wingspan : Height Ratio</div><div class='derived-interp'>{wsr_interp}</div></div>
-              <div style='font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:{wsr_color}'>{fv(wsr,".3f")}</div>
-            </div>""", unsafe_allow_html=True)
-
-            # BMI + projection
+            wsr_c = GRN if not pd.isna(wsr) and wsr > 1.02 else (GOLD if not pd.isna(wsr) and wsr >= 0.98 else RED)
+            wsr_note = "Wingspan exceeds height — positive for a pitcher" if not pd.isna(wsr) and wsr > 1.0 else ("Wingspan ≈ height" if not pd.isna(wsr) and wsr >= 0.98 else "Below average arm length")
             bmi = r["bmi"]
-            bmi_interp = "Lean frame — significant room to add mass" if not pd.isna(bmi) and bmi < 22 else ("Athletic build — moderate projection" if not pd.isna(bmi) and bmi < 25 else "Filled out — limited mass projection")
-            bmi_color = "#2dd4a0" if not pd.isna(bmi) and bmi < 22 else ("#f0b429" if not pd.isna(bmi) and bmi < 25 else "#e84545")
-            st.markdown(f"""<div class='derived-pill'>
-              <div><div class='derived-name'>BMI (Mass Projection Index)</div><div class='derived-interp'>{bmi_interp}</div></div>
-              <div style='font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:{bmi_color}'>{fv(bmi,".1f")}</div>
-            </div>""", unsafe_allow_html=True)
-
+            bmi_c = GRN if not pd.isna(bmi) and bmi < 22 else (GOLD if not pd.isna(bmi) and bmi < 25 else RED)
+            bmi_note = "Lean frame — significant room to add mass" if not pd.isna(bmi) and bmi < 22 else ("Athletic build — moderate projection" if not pd.isna(bmi) and bmi < 25 else "Filled out — limited mass projection")
             proj_g, proj_c = grade(r["proj_pct"])
-            st.markdown(f"""<div class='derived-pill'>
-              <div><div class='derived-name'>Physical Projection %ile</div><div class='derived-interp'>Height × leanness relative to class</div></div>
-              <div style='font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:{proj_c}'>{fv(r["proj_pct"],".0f")}th <span style='font-size:0.7rem'>{proj_g}</span></div>
-            </div>""", unsafe_allow_html=True)
+
+            st.markdown(f"""
+            <div class="derived-pill">
+              <div><div class="derived-name">Wingspan : Height Ratio</div><div class="derived-interp">{wsr_note}</div></div>
+              <div class="derived-val" style="color:{wsr_c}">{fv(wsr,".3f")}</div>
+            </div>
+            <div class="derived-pill">
+              <div><div class="derived-name">BMI — Mass Projection Index</div><div class="derived-interp">{bmi_note}</div></div>
+              <div class="derived-val" style="color:{bmi_c}">{fv(bmi,".1f")}</div>
+            </div>
+            <div class="derived-pill">
+              <div><div class="derived-name">Physical Projection %ile</div><div class="derived-interp">Height × leanness vs. draft class</div></div>
+              <div class="derived-val" style="color:{proj_c}">{fv(r["proj_pct"],".0f")}th <span class="score-badge" style="background:{proj_c};font-size:10px">{proj_g}</span></div>
+            </div>
+            """, unsafe_allow_html=True)
 
             # Force plate
-            st.markdown("<div class='section-label'>Force Plate — CMJ</div>", unsafe_allow_html=True)
-            f1,f2,f3 = st.columns(3)
-            with f1:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>Conc. Impulse</div><div class='stat-value'>{fv(r['concentric_impulse'],'.0f')}</div><div class='stat-sub'>Ns · {fv(r['ci_pct'],'.0f')}th %ile</div></div>", unsafe_allow_html=True)
-            with f2:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>mRSI</div><div class='stat-value'>{fv(r['mrsi'],'.2f')}</div><div class='stat-sub'>m/s · {fv(r['mrsi_pct'],'.0f')}th %ile</div></div>", unsafe_allow_html=True)
-            with f3:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>Rel. Peak Power</div><div class='stat-value'>{fv(r['rel_peak_power'],'.1f')}</div><div class='stat-sub'>W/kg · {fv(r['rpp_pct'],'.0f')}th %ile</div></div>", unsafe_allow_html=True)
+            st.markdown(f'<p class="nat-label" style="margin-top:1rem">Force Plate — CMJ</p>', unsafe_allow_html=True)
+            f1, f2, f3 = st.columns(3)
+            for col, label, val_str, pct_val, unit in [
+                (f1, "Conc. Impulse", fv(r["concentric_impulse"],".0f"), r["ci_pct"], "Ns"),
+                (f2, "mRSI", fv(r["mrsi"],".2f"), r["mrsi_pct"], "m/s"),
+                (f3, "Rel. Peak Power", fv(r["rel_peak_power"],".1f"), r["rpp_pct"], "W/kg"),
+            ]:
+                g_label, g_color = grade(pct_val)
+                col.markdown(f"""
+                <div class="nat-card nat-card-red" style="text-align:center;padding:14px">
+                  <div class="nat-label">{label}</div>
+                  <div style="font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:{NAV}">{val_str}</div>
+                  <div style="font-size:11px;color:#6b7fa3;margin-top:4px">{unit} · {fv(pct_val,".0f")}th %ile
+                    <span class="score-badge" style="background:{g_color};font-size:9px;padding:2px 7px">{g_label}</span>
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
             # Sprint
-            st.markdown("<div class='section-label'>Sprint</div>", unsafe_allow_html=True)
-            s1,s2,s3 = st.columns(3)
-            with s1:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>10 Yard</div><div class='stat-value'>{fv(r['sprint_10'],'.3f')}</div><div class='stat-sub'>seconds</div></div>", unsafe_allow_html=True)
-            with s2:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>20 Yard</div><div class='stat-value'>{fv(r['sprint_20'],'.3f')}</div><div class='stat-sub'>seconds</div></div>", unsafe_allow_html=True)
-            with s3:
-                st.markdown(f"<div class='stat-card'><div class='stat-label'>30 Yard</div><div class='stat-value'>{fv(r['sprint_30'],'.3f')}</div><div class='stat-sub'>{fv(r['s30_pct'],'.0f')}th %ile</div></div>", unsafe_allow_html=True)
+            st.markdown(f'<p class="nat-label" style="margin-top:1rem">Sprint</p>', unsafe_allow_html=True)
+            s1, s2, s3 = st.columns(3)
+            for col, label, val_str, pct_val in [
+                (s1, "10 Yard", fv(r["sprint_10"],".3f"), None),
+                (s2, "20 Yard", fv(r["sprint_20"],".3f"), None),
+                (s3, "30 Yard", fv(r["sprint_30"],".3f"), r["s30_pct"]),
+            ]:
+                g_label, g_color = grade(pct_val) if pct_val is not None else ("—", "#9AAAC0")
+                sub = f"seconds · {fv(pct_val,'.0f')}th %ile" if pct_val is not None else "seconds"
+                col.markdown(f"""
+                <div class="nat-card nat-card-gold" style="text-align:center;padding:14px">
+                  <div class="nat-label">{label}</div>
+                  <div style="font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:{NAV}">{val_str}</div>
+                  <div style="font-size:11px;color:#6b7fa3;margin-top:4px">{sub}
+                    {"<span class='score-badge' style='background:" + g_color + ";font-size:9px;padding:2px 7px'>" + g_label + "</span>" if pct_val is not None else ""}
+                  </div>
+                </div>""", unsafe_allow_html=True)
 
         with right:
-            st.markdown("<div class='section-label'>Percentile Profile</div>", unsafe_allow_html=True)
-
+            st.markdown(f'<p class="nat-label">Percentile Profile</p>', unsafe_allow_html=True)
             if is_p:
                 rl = ["CI","mRSI","Sprint","Height","Weight","Rel Pwr","WS:Ht"]
                 rv = [r["ci_pct"],r["mrsi_pct"],r["s30_pct"],r["h_pct"],r["w_pct"],r["rpp_pct"],r["wsr_pct"]]
             else:
                 rl = ["CI","mRSI","Sprint","Height","Weight","Rel Pwr"]
                 rv = [r["ci_pct"],r["mrsi_pct"],r["s30_pct"],r["h_pct"],r["w_pct"],r["rpp_pct"]]
-
             st.plotly_chart(radar_fig(rl, rv), use_container_width=True, key="rd")
 
-            st.markdown("<div class='section-label'>Percentile Bars</div>", unsafe_allow_html=True)
-            full_bars = [
+            st.markdown(f'<p class="nat-label" style="margin-top:0.5rem">Percentile Bars</p>', unsafe_allow_html=True)
+            all_bars = [
                 ("Conc. Impulse", r["ci_pct"]),
                 ("mRSI", r["mrsi_pct"]),
                 ("Sprint 30yd", r["s30_pct"]),
                 ("Height", r["h_pct"]),
                 ("Weight", r["w_pct"]),
-                ("Rel. Peak Pwr", r["rpp_pct"]),
+                ("Rel. Peak Power", r["rpp_pct"]),
                 ("Wingspan", r["ws_pct"]),
-                ("WS:Ht Ratio", r["wsr_pct"]),
+                ("WS : Height", r["wsr_pct"]),
                 ("Projection", r["proj_pct"]),
             ]
-            bars_html = "".join(pct_bar_html(lbl, pct) for lbl, pct in full_bars if not pd.isna(pct))
-            st.markdown(bars_html, unsafe_allow_html=True)
+            st.markdown("".join(pct_bar(lbl, pct) for lbl, pct in all_bars if not pd.isna(pct)), unsafe_allow_html=True)
 
-# ── TAB 3: SCATTER ────────────────────────────────────────────────────────────
+# ── TAB 3: SCATTER ─────────────────────────────────────────────────────────
 with tab_scatter:
-    chart_df = filtered.dropna(subset=["athletic_score","potential_score"]).copy()
-    if len(chart_df) < 2:
-        st.info("Not enough scored players to chart.")
-    else:
-        fig = px.scatter(
-            chart_df, x="athletic_score", y="potential_score",
-            color="position", hover_name="name",
-            hover_data={"concentric_impulse":True,"mrsi":True,"sprint_30":True,
-                        "height_in":True,"weight_lb":True,"ws_ht_ratio":True,"bmi":True},
-            labels={"athletic_score":"Athletic Score","potential_score":"Potential Score"},
-            title="Athletic Score vs Physical Potential",
-            template="plotly_dark",
-            color_discrete_sequence=px.colors.qualitative.Set2,
-        )
-        fig.update_layout(
-            paper_bgcolor="#080c10", plot_bgcolor="#0d1520",
-            font=dict(family="DM Mono, monospace", color="#7eb8d4"),
-            xaxis=dict(gridcolor="#1a2535", zerolinecolor="#1a2535"),
-            yaxis=dict(gridcolor="#1a2535", zerolinecolor="#1a2535"),
-            height=600,
-        )
-        fig.add_hline(y=50, line_dash="dot", line_color="#2a3a4a")
-        fig.add_vline(x=50, line_dash="dot", line_color="#2a3a4a")
-        st.plotly_chart(fig, use_container_width=True)
+    st.markdown(f'<p class="nat-label">Athletic Score vs. Physical Potential — each dot is a player, colored by position</p>', unsafe_allow_html=True)
+    st.plotly_chart(scatter_fig(filtered), use_container_width=True)
