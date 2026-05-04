@@ -26,37 +26,36 @@ st.markdown("""
 SPREADSHEET_ID = "1J27zw_UngoTNdq6VKPF6RhB8aqfmvlpX60GtrXjOsbs"
 PITCHER_POSITIONS = {"Starting Pitcher", "Relief Pitcher", "Right Hand Pitcher"}
 
+from google.oauth2.service_account import Credentials
+
+@st.cache_resource(show_spinner=False)
+def get_gspread_client():
+    creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/drive.readonly",
+    ]
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    return gspread.authorize(creds)
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_worksheet(sheet_id, worksheet_name):
+    client = get_gspread_client()
+    spreadsheet = client.open_by_key(sheet_id)
+    worksheet = spreadsheet.worksheet(worksheet_name)
+    records = worksheet.get_all_records()
+    df = pd.DataFrame(records)
+    df.columns = [str(c).strip() for c in df.columns]
+    return df.replace("", np.nan).dropna(how="all")
+
 @st.cache_data(ttl=300)
 def load_data():
-    creds_dict = json.loads(st.secrets["GOOGLE_CREDENTIALS"])
-    gc = gspread.service_account_from_dict(creds_dict)
-
     try:
-        sh = gc.open_by_key(SPREADSHEET_ID)
+        sprint = load_worksheet(SPREADSHEET_ID, "Sprint")
+        anthro = load_worksheet(SPREADSHEET_ID, "Anthropometrics")
+        fp     = load_worksheet(SPREADSHEET_ID, "Force Plate")
     except Exception as e:
-        st.error(f"Could not open spreadsheet: {e}")
-        st.stop()
-
-    def sheet_to_df(name):
-        try:
-            ws = sh.worksheet(name)
-            records = ws.get_all_records()
-            if not records:
-                st.error(f"Sheet '{name}' is empty.")
-                return pd.DataFrame()
-            df = pd.DataFrame(records)
-            df.columns = [str(c).strip() for c in df.columns]
-            return df.replace("", np.nan)
-        except Exception as e:
-            st.error(f"Could not load sheet '{name}': {e}")
-            return pd.DataFrame()
-
-    sprint = sheet_to_df("Sprint")
-    anthro = sheet_to_df("Anthropometrics")
-    fp     = sheet_to_df("Force Plate")
-
-    if sprint.empty and anthro.empty and fp.empty:
-        st.error("All sheets returned empty — check service account permissions.")
+        st.error(f"Failed to load sheets: {e}")
         st.stop()
 
     def to_num(df, cols):
