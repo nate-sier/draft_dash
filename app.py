@@ -37,22 +37,16 @@ def load_data():
         st.error(f"Could not open spreadsheet: {e}")
         st.stop()
 
-    # Show available sheet names for diagnostics
-    try:
-        available = [ws.title for ws in sh.worksheets()]
-        st.info(f"Connected to spreadsheet. Available sheets: {available}")
-    except Exception as e:
-        st.error(f"Could not list sheets: {e}")
-        st.stop()
-
     def sheet_to_df(name):
         try:
             ws = sh.worksheet(name)
-            data = ws.get_all_values()
-            if not data:
-                st.error(f"Sheet '{name}' is empty or unreadable.")
+            records = ws.get_all_records()
+            if not records:
+                st.error(f"Sheet '{name}' is empty.")
                 return pd.DataFrame()
-            return pd.DataFrame(data[1:], columns=data[0]).replace("", np.nan)
+            df = pd.DataFrame(records)
+            df.columns = [str(c).strip() for c in df.columns]
+            return df.replace("", np.nan)
         except Exception as e:
             st.error(f"Could not load sheet '{name}': {e}")
             return pd.DataFrame()
@@ -61,9 +55,8 @@ def load_data():
     anthro = sheet_to_df("Anthropometrics")
     fp     = sheet_to_df("Force Plate")
 
-    # Stop early with diagnostics if sheets are empty
     if sprint.empty and anthro.empty and fp.empty:
-        st.error("All sheets returned empty. The service account likely does not have access to this spreadsheet.")
+        st.error("All sheets returned empty — check service account permissions.")
         st.stop()
 
     def to_num(df, cols):
