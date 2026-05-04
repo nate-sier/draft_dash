@@ -23,7 +23,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-SPREADSHEET_ID = "1J27zw_UngoTNdq6VKPF6RhB8aqfmvlpX60GtrXjOsbs"
+SPREADSHEET_ID = st.secrets.get("GOOGLE_SHEET_ID", "1J27zw_UngoTNdq6VKPF6RhB8aqfmvlpX60GtrXjOsbs")
 PITCHER_POSITIONS = {"Starting Pitcher", "Relief Pitcher", "Right Hand Pitcher"}
 
 from google.oauth2.service_account import Credentials
