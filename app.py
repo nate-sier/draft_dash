@@ -977,6 +977,24 @@ with tab_card:
     pot_val = row.get("potential_score", np.nan)
     pos_val = row.get("aq_pos_score", np.nan)
 
+    # Compute all-time percentile rank for each score
+    def score_pct(val, col):
+        pool = df[col].dropna()
+        if pd.isna(val) or len(pool) == 0: return np.nan
+        return float((pool < val).mean() * 100)
+
+    aq_pct  = score_pct(aq_val,  "athlete_quality_score")
+    pot_pct = score_pct(pot_val, "potential_score")
+
+    def pct_suffix(p):
+        if pd.isna(p): return "—"
+        p = int(round(p))
+        if 11 <= p % 100 <= 13: return f"{p}th"
+        return {1:"st",2:"nd",3:"rd"}.get(p % 10, "th")
+    def pct_str(p):
+        if pd.isna(p): return "—"
+        return f"{int(round(p))}{pct_suffix(p)} percentile"
+
     def score_color(v):
         if pd.isna(v): return "#9AAAC0"
         if v >= 75: return GREEN
@@ -996,7 +1014,9 @@ with tab_card:
             <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{RED};line-height:1">
                 {f"{aq_val:.0f}" if pd.notna(aq_val) else "—"}</div>
-            <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
+            <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">
+                {pct_str(aq_pct)}</div>
+            <div style="font-size:11px;color:#6b7fa3;margin-top:2px">score out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
                 <div style="width:{min(100,max(0,aq_val or 0)):.0f}%;
                     background:{"#4CAF82" if pd.notna(aq_val) and aq_val>=75 else "#E2C188" if pd.notna(aq_val) and aq_val>=50 else RED};
@@ -1016,6 +1036,8 @@ with tab_card:
             <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{NAV};line-height:1">
                 {f"{pot_val:.0f}" if pd.notna(pot_val) else "—"}</div>
+            <div style="font-size:13px;font-weight:700;color:{NAV};margin-top:4px">
+                {pct_str(pot_pct)}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
                 <div style="width:{min(100,max(0,pot_val or 0)):.0f}%;
