@@ -1054,8 +1054,8 @@ with tab_card:
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#6b7fa3;margin:0">
                     OVERALL RANK</p>
                 <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
-                    color:{RED};margin:0">#{int(row.get('overall_rank', 0))}</p>
-                <p style="font-size:11px;color:#9AAAC0;margin:0">{"of " + str(int(df["overall_rank"].notna().sum())) + " athletes (all years)" if sel_yr is None else f"of {int(df[df['Year']==sel_yr]['overall_rank'].notna().sum())} athletes in {sel_yr}"}</p>
+                    color:{RED};margin:0">{"#" + str(int((df["athlete_quality_score"].dropna() > aq_val).sum() + 1)) if pd.notna(aq_val) and aq_val > 0 else "—"}</p>
+                <p style="font-size:11px;color:#9AAAC0;margin:0">{"of " + str(int(df["athlete_quality_score"].notna().sum())) + " athletes (all years)" if sel_yr is None else f"of {int(df[df['Year']==sel_yr]['athlete_quality_score'].notna().sum())} athletes in {sel_yr}"}</p>
             </div>
         </div>
     </div>
