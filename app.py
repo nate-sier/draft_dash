@@ -866,14 +866,31 @@ with tab_card:
     with sc2:
         ath_years = sorted(df[df["athleteName"] == sel_ath]["Year"].dropna().unique().astype(int).tolist(),
                            reverse=True)
-        sel_yr = st.selectbox("Year", ath_years, key="sc_yr")
+        yr_options = ["All years"] + [str(y) for y in ath_years]
+        sel_yr_str = st.selectbox("Year", yr_options, key="sc_yr")
+        sel_yr = None if sel_yr_str == "All years" else int(sel_yr_str)
 
     ath_all = df[df["athleteName"] == sel_ath].sort_values("Year")
-    row = ath_all[ath_all["Year"] == sel_yr]
-    if row.empty:
-        st.warning("No data for this athlete/year combination.")
-        st.stop()
-    row = row.iloc[0]
+
+    if sel_yr is None:
+        # All years — average numeric columns across years
+        row_data = ath_all.select_dtypes(include=[np.number]).mean()
+        # Use most recent year for non-numeric fields
+        latest = ath_all.iloc[-1]
+        for col in ath_all.columns:
+            if col not in row_data.index:
+                row_data[col] = latest[col]
+        row = row_data
+        sel_yr_label = f"{ath_years[-1]}–{ath_years[0]}" if len(ath_years) > 1 else str(ath_years[0])
+        sel_yr_display = sel_yr_label
+    else:
+        row = ath_all[ath_all["Year"] == sel_yr]
+        if row.empty:
+            st.warning("No data for this athlete/year combination.")
+            st.stop()
+        row = row.iloc[0]
+        sel_yr_label   = str(sel_yr)
+        sel_yr_display = str(sel_yr)
 
     arch_color = ARCHETYPE_COLORS.get(row.get("archetype","Unclassified"), "#9AAAC0")
 
@@ -890,14 +907,14 @@ with tab_card:
                     {sel_ath}</h2>
                 <span class="arch-badge" style="background:{arch_color}">{row.get('archetype','—')}</span>
                 <span style="font-size:12px;color:#6b7fa3;margin-left:10px">
-                    {sel_yr} · {row.get('Position','—')} · {row.get('School Type','—')}</span>
+                    {sel_yr_display} · {row.get('Position','—')} · {row.get('School Type','—')}</span>
             </div>
             <div style="text-align:right">
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#6b7fa3;margin:0">
                     OVERALL RANK</p>
                 <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
                     color:{RED};margin:0">#{int(row.get('overall_rank', 0))}</p>
-                <p style="font-size:11px;color:#9AAAC0;margin:0">of {int(df[df['Year']==sel_yr]['overall_rank'].notna().sum())} in {sel_yr}</p>
+                <p style="font-size:11px;color:#9AAAC0;margin:0">{"all years avg" if sel_yr is None else f"of {int(df[df['Year']==sel_yr]['overall_rank'].notna().sum())} in {sel_yr}"}</p>
             </div>
         </div>
     </div>
@@ -951,7 +968,7 @@ with tab_card:
                 <div style="font-size:10px;color:#9AAAC0;margin-top:2px">All-time pct</div>
                 <div style="font-size:13px;font-weight:600;color:{NAV};margin-top:4px">
                     {fmt(p_yr, 0) if pd.notna(p_yr) else '—'}</div>
-                <div style="font-size:10px;color:#9AAAC0">{sel_yr} pct</div>
+                <div style="font-size:10px;color:#9AAAC0">{sel_yr_display} pct</div>
                 <div style="font-size:13px;font-weight:600;color:#6b7fa3;margin-top:4px">
                     {fmt(p_pos, 0) if pd.notna(p_pos) else '—'}</div>
                 <div style="font-size:10px;color:#9AAAC0">{grp_label} pct</div>
