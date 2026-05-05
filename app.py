@@ -564,21 +564,32 @@ def make_gauge(value, title, color=RED):
 
 # ─── Radar chart ─────────────────────────────────────────────────────────────
 def make_radar(row, label="Athlete"):
-    def safe_pct(row, key):
-        v = row.get(key, 50)
+    def safe_pct(row, key, default=50.0):
+        v = row.get(key, default)
         try:
-            return float(v) if v is not None and str(v) != "<NA>" else 50.0
+            return float(v) if v is not None and str(v) != "<NA>" else default
         except (TypeError, ValueError):
-            return 50.0
+            return default
 
-    cats = ["CI", "Sprint", "RSI-mod", "Peak Pwr", "Height"]
-    vals = [
-        safe_pct(row, "ci_pct_alltime"),
-        safe_pct(row, "sprint_pct_alltime"),
-        safe_pct(row, "rsi_pct_alltime"),
-        safe_pct(row, "pp_pct_alltime"),
-        safe_pct(row, "height_pct"),
-    ]
+    has_sprint = pd.notna(row.get("30yd Split")) if hasattr(row, "get") else False
+
+    if has_sprint:
+        cats = ["CI", "Sprint", "RSI-mod", "Peak Pwr", "Height"]
+        vals = [
+            safe_pct(row, "ci_pct_alltime"),
+            safe_pct(row, "sprint_pct_alltime"),
+            safe_pct(row, "rsi_pct_alltime"),
+            safe_pct(row, "pp_pct_alltime"),
+            safe_pct(row, "height_pct"),
+        ]
+    else:
+        cats = ["CI", "RSI-mod", "Peak Pwr", "Height"]
+        vals = [
+            safe_pct(row, "ci_pct_alltime"),
+            safe_pct(row, "rsi_pct_alltime"),
+            safe_pct(row, "pp_pct_alltime"),
+            safe_pct(row, "height_pct"),
+        ]
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
         r=vals + [vals[0]], theta=cats + [cats[0]],
