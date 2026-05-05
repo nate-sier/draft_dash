@@ -1028,6 +1028,18 @@ with tab_card:
 
     arch_color = ARCHETYPE_COLORS.get(row.get("archetype","Unclassified"), "#9AAAC0")
 
+    # ── Compute score values early so they're available for header ─────────────
+    def safe_float(v):
+        try:
+            f = float(v)
+            return f if not np.isnan(f) else np.nan
+        except (TypeError, ValueError):
+            return np.nan
+
+    aq_val  = safe_float(row.get("athlete_quality_score"))
+    pot_val = safe_float(row.get("potential_score"))
+    pos_val = safe_float(row.get("aq_pos_score"))
+
     # ── Header banner ─────────────────────────────────────────────────────────
     st.markdown(f"""
     <div style="background:white;border-radius:10px;padding:20px 28px;margin-bottom:20px;
@@ -1062,16 +1074,6 @@ with tab_card:
     """, unsafe_allow_html=True)
 
     # ── Score heroes — Quality + Potential front and center ──────────────────
-    def safe_float(v):
-        try:
-            f = float(v)
-            return f if not np.isnan(f) else np.nan
-        except (TypeError, ValueError):
-            return np.nan
-
-    aq_val  = safe_float(row.get("athlete_quality_score"))
-    pot_val = safe_float(row.get("potential_score"))
-    pos_val = safe_float(row.get("aq_pos_score"))
 
     # Percentile helpers
     def pct_suffix(p):
