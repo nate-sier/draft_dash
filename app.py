@@ -214,7 +214,18 @@ def load_data(_v=3):  # bump _v to bust cache
             (df["athleteName"].str.lower() != "nan")].copy()
     df = df.sort_values(["athleteName","Year"]).reset_index(drop=True)
 
-    # ── Sanity bounds — null out values outside physiologically plausible range ──
+    return df
+
+# ─── Model pipeline ───────────────────────────────────────────────────────────
+@st.cache_data(show_spinner="Building scores…", hash_funcs={pd.DataFrame: lambda x: x.shape})
+def build_scores(_df,
+                 w_ci=0.35, w_sprint=0.30, w_rsi=0.15, w_pp=0.20,
+                 w_ci_ns=0.45, w_rsi_ns=0.20, w_pp_ns=0.35,
+                 wp_peakpow=0.25, wp_height=0.25, wp_bmi=0.20,
+                 wp_school=0.15, wp_wingspan=0.15):
+    df = _df.copy()
+
+    # ── Sanity bounds — null out physiologically impossible values ─────────────
     BOUNDS = {
         "Concentric Impulse":                  (100, 400),
         "RSI-modified":                        (0.1, 1.5),
@@ -237,17 +248,6 @@ def load_data(_v=3):  # bump _v to bust cache
         if col in df.columns:
             bad = (df[col] < lo) | (df[col] > hi)
             df.loc[bad, col] = np.nan
-
-    return df
-
-# ─── Model pipeline ───────────────────────────────────────────────────────────
-@st.cache_data(show_spinner="Building scores…")
-def build_scores(_df,
-                 w_ci=0.35, w_sprint=0.30, w_rsi=0.15, w_pp=0.20,
-                 w_ci_ns=0.45, w_rsi_ns=0.20, w_pp_ns=0.35,
-                 wp_peakpow=0.25, wp_height=0.25, wp_bmi=0.20,
-                 wp_school=0.15, wp_wingspan=0.15):
-    df = _df.copy()
 
     # ── CMJ strategy features ──────────────────────────────────────────────────
     df["CI100ms_to_TotalCI_Ratio"] = safe_div(
