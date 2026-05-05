@@ -1151,8 +1151,14 @@ with tab_card:
         """, unsafe_allow_html=True)
     with hero3:
         # Pos group quality gauge + radar stacked
-        _pg = row.get('pos_group','')
-        pos_grp_label = f"{_pg} Quality" if _pg and str(_pg) not in ('Unknown','nan','') else "Pos. Quality"
+        _pg  = str(row.get('pos_group',''))
+        _pos = str(row.get('Position',''))
+        if _pg and _pg not in ('Unknown','nan',''):
+            pos_grp_label = f"{_pg} Quality"
+        elif _pos and _pos not in ('nan','None',''):
+            pos_grp_label = f"{_pos} Quality"
+        else:
+            pos_grp_label = "Position Data Unavailable"
         st.plotly_chart(make_gauge(pos_val if (pd.notna(pos_val) and pos_val > 0) else None, pos_grp_label, "#6b7fa3"),
                         use_container_width=True, key="g_pos")
         st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
