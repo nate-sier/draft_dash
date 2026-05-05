@@ -1363,15 +1363,22 @@ with tab_pct:
                         marker_line=dict(color="white", width=0.4),
                         opacity=0.85,
                     ))
-                    for q, lbl, dash in [(q25,"p25","dash"),(q50,"p50","solid"),(q75,"p75","dash")]:
+                    for q, lbl, dash, y_pos in [
+                        (q25, "p25", "dash",   0.99),
+                        (q50, "p50", "solid",  0.82),
+                        (q75, "p75", "dash",   0.65),
+                    ]:
                         fig.add_vline(
                             x=q, line_dash=dash,
                             line_color=NAV, line_width=1.5,
                             annotation=dict(
-                                text=f"{lbl}<br><b>{q:.{digits}f}{suffix}</b>",
+                                text=f"<b>{lbl}</b> {q:.{digits}f}{suffix}",
                                 font=dict(color=NAV, size=8),
-                                bgcolor="white", borderpad=2,
-                                yref="paper", y=0.98, showarrow=False,
+                                bgcolor="rgba(255,255,255,0.85)",
+                                borderpad=2,
+                                yref="paper", y=y_pos,
+                                showarrow=False,
+                                xanchor="left",
                             ),
                         )
                     fig.update_layout(
