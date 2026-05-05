@@ -29,6 +29,29 @@ def pos_group(pos):
     if pos in OUTFIELDERS: return "Outfielder"
     return "Unknown"
 
+def programming_category(ci, p1_ci):
+    """Classify athlete into in-house programming tier."""
+    try:
+        ci    = float(ci)
+        p1_ci = float(p1_ci)
+    except (TypeError, ValueError):
+        return "Unclassified"
+    if ci >= 285:
+        return "High-High" if p1_ci >= 195 else "High-Low"
+    return "Low"
+
+PROG_COLORS = {
+    "High-High":    "#4CAF82",
+    "High-Low":     "#E2C188",
+    "Low":          "#BA0C2F",
+    "Unclassified": "#9AAAC0",
+}
+PROG_DESC = {
+    "High-High": "CI ≥ 285 & P1 CI ≥ 195 — advanced program",
+    "High-Low":  "CI ≥ 285 & P1 CI < 195 — high base, develop P1",
+    "Low":       "CI < 285 — foundational program",
+}
+
 # ─── Colors ───────────────────────────────────────────────────────────────────
 NAV   = "#11225A"
 RED   = "#BA0C2F"
@@ -487,6 +510,13 @@ def build_scores(_df,
 
     # Overall rank (athlete quality only)
     # Rank within each year
+    # Programming category
+    df["programming_category"] = df.apply(
+        lambda r: programming_category(
+            r.get("Concentric Impulse", np.nan),
+            r.get("P1 Concentric Impulse", np.nan)
+        ), axis=1)
+
     df["overall_rank"] = np.nan
     for yr, idx in df.groupby("Year").groups.items():
         df.loc[idx, "overall_rank"] = (
@@ -900,16 +930,20 @@ with tab_board:
                 unsafe_allow_html=True)
 
     tbl = dff[["athleteName","Year","Position","pos_group","School Type","archetype",
+               "programming_category",
                "athlete_quality_score","aq_pos_score","potential_score",
-               "Concentric Impulse","30yd Split","RSI-modified","Peak Power / BM"]].copy()
+               "Concentric Impulse","P1 Concentric Impulse","30yd Split",
+               "RSI-modified","Peak Power / BM"]].copy()
     tbl = tbl.rename(columns={
         "athleteName": "Athlete", "pos_group": "Group", "School Type": "School",
-        "archetype": "Archetype", "athlete_quality_score": "Quality",
+        "archetype": "Archetype", "programming_category": "Program",
+        "athlete_quality_score": "Quality",
         "aq_pos_score": "Pos. Quality", "potential_score": "Potential",
-        "Concentric Impulse": "CI", "30yd Split": "30yd (s)",
+        "Concentric Impulse": "CI", "P1 Concentric Impulse": "P1 CI",
+        "30yd Split": "30yd (s)",
         "RSI-modified": "RSI-mod", "Peak Power / BM": "PkPwr/BM",
     })
-    for c in ["Quality","Pos. Quality","Potential","CI","RSI-mod","PkPwr/BM"]:
+    for c in ["Quality","Pos. Quality","Potential","CI","P1 CI","RSI-mod","PkPwr/BM"]:
         tbl[c] = tbl[c].round(1)
     tbl["30yd (s)"] = tbl["30yd (s)"].round(3)
 
@@ -995,6 +1029,13 @@ with tab_card:
                 <span class="arch-badge" style="background:{arch_color}">{row.get('archetype','—')}</span>
                 <span style="font-size:12px;color:#6b7fa3;margin-left:10px">
                     {sel_yr_display} · {row.get('Position','—')} · {row.get('School Type','—')}</span>
+                <br>
+                <span style="display:inline-block;margin-top:8px;background:{PROG_COLORS.get(row.get('programming_category','Unclassified'),'#9AAAC0')};
+                    color:white;font-size:11px;font-weight:700;padding:3px 14px;
+                    border-radius:20px;letter-spacing:0.06em">
+                    ⚙ {row.get('programming_category','—')}</span>
+                <span style="font-size:11px;color:#6b7fa3;margin-left:8px">
+                    {PROG_DESC.get(row.get('programming_category',''),'')}</span>
             </div>
             <div style="text-align:right">
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#6b7fa3;margin:0">
@@ -1191,6 +1232,8 @@ with tab_card:
             <p class="label">Raw Metrics</p>
             <div class="stat-row"><span class="stat-label">Concentric Impulse</span>
                 <span class="stat-val">{fmt(row.get('Concentric Impulse'), 1)}</span></div>
+            <div class="stat-row"><span class="stat-label">P1 Conc. Impulse</span>
+                <span class="stat-val">{fmt(row.get('P1 Concentric Impulse'), 1)}</span></div>
             <div class="stat-row"><span class="stat-label">RSI-modified</span>
                 <span class="stat-val">{fmt(row.get('RSI-modified'), 3)}</span></div>
             <div class="stat-row"><span class="stat-label">30yd Sprint</span>
@@ -1801,6 +1844,32 @@ with tab_guide:
         "Time to cover the first 20 yards — transition between acceleration and top speed. "
         "Derived from the same timed run as the 30yd.",
         "Lower is better.")
+
+    st.markdown(f'<div style="border-left:4px solid {GREEN};padding-left:10px;margin:20px 0 6px 0">'
+                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:{GREEN}">In-House Programming Categories</span></div>',
+                unsafe_allow_html=True)
+
+    for cat, color, ci_crit, p1_crit, desc in [
+        ("High-High", "#4CAF82", "CI ≥ 285 N·s", "P1 CI ≥ 195 N·s",
+         "Athlete arrives with both a strong total impulse and strong early-phase force production. "
+         "Ready for the most advanced programming track from day one."),
+        ("High-Low",  "#E2C188", "CI ≥ 285 N·s", "P1 CI < 195 N·s",
+         "Strong total output but early-phase production needs development. "
+         "High base to work from — focus shifts to front-loading the impulse curve."),
+        ("Low",       "#BA0C2F", "CI < 285 N·s", "—",
+         "Foundational program. Build total force production capacity before addressing strategy. "
+         "Most common entry point for high school athletes."),
+    ]:
+        st.markdown(f"""
+        <div style="padding:14px 16px;border-bottom:1px solid {BORD}">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                <span style="background:{color};color:white;font-size:11px;font-weight:700;
+                    padding:3px 14px;border-radius:20px;letter-spacing:0.06em">⚙ {cat}</span>
+                <span style="font-size:11px;color:#9AAAC0">{ci_crit} · {p1_crit}</span>
+            </div>
+            <div style="font-size:13px;color:#2a3a5a;line-height:1.6">{desc}</div>
+        </div>""", unsafe_allow_html=True)
 
     st.markdown(f'<div style="border-left:4px solid {NAV};padding-left:10px;margin:20px 0 6px 0">'
                 f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
