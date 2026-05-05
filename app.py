@@ -102,6 +102,19 @@ def scaled_0_100(values):
 def fmt(x, d=1, s=""):
     return "—" if pd.isna(x) else f"{x:.{d}f}{s}"
 
+def fmt_height(cm):
+    """Convert cm to feet-inches string, e.g. 185.4 to 6ft 1in"""
+    if pd.isna(cm): return "—"
+    try:
+        total_in = float(cm) / 2.54
+        feet     = int(total_in // 12)
+        inches   = int(round(total_in % 12))
+        if inches == 12:
+            feet += 1; inches = 0
+        return f"{feet}\'{inches}\""
+    except Exception:
+        return "—"
+
 def delta_html(val, d=1, invert=False):
     if pd.isna(val): return '<span style="color:#9AAAC0">—</span>'
     good = (val < 0) if invert else (val > 0)
@@ -1171,7 +1184,7 @@ with tab_card:
             <hr style="border-color:{BORD};margin:10px 0">
             <p class="label">Anthropometrics</p>
             <div class="stat-row"><span class="stat-label">Height</span>
-                <span class="stat-val">{fmt(row.get('Height'), 1, ' cm')}</span></div>
+                <span class="stat-val">{fmt_height(row.get('Height'))}</span></div>
             <div class="stat-row"><span class="stat-label">Mass</span>
                 <span class="stat-val">{fmt(row.get('Mass'), 1, ' kg')}</span></div>
             <div class="stat-row"><span class="stat-label">Wingspan</span>
@@ -1364,7 +1377,7 @@ with tab_pct:
         ("30yd Split",                         "30yd (s)",        3, "s",    True),
         ("10yd Split",                         "10yd (s)",        3, "s",    True),
         ("Jump Height (Flight Time) in Inches","Jump Ht (in)",    2, " in",  False),
-        ("Height",                             "Height (cm)",     1, " cm",  False),
+        ("Height",                             "Height (ft''in)",  0, "",  False),
         ("Mass",                               "Mass (kg)",       1, " kg",  False),
         ("Wingspan",                           "Wingspan (cm)",   1, " cm",  False),
         ("wingspan_advantage",                 "Wingspan Adv.",   1, " cm",  False),
@@ -1406,7 +1419,7 @@ with tab_pct:
             ("Jump Height (Flight Time) in Inches", "Jump Ht (in)",   20, False, 2, " in"),
         ],
         "Anthropometrics": [
-            ("Height",             "Height (cm)",     20, False, 1, " cm"),
+            ("Height",             "Height (ft''in)", 20, False, 0, ""),
             ("Mass",               "Mass (kg)",        20, False, 1, " kg"),
             ("Wingspan",           "Wingspan (cm)",    20, False, 1, " cm"),
             ("wingspan_advantage", "Wingspan Adv.",    20, False, 1, " cm"),
@@ -1731,7 +1744,7 @@ with tab_ref:
             ("Jump Height (Flight Time) in Inches", "Jump Ht (in)",   2, " in"),
         ],
         "Anthropometrics": [
-            ("Height",             "Height (cm)",      1, " cm"),
+            ("Height",             "Height (ft''in)",   0, ""),
             ("Mass",               "Mass (kg)",         1, " kg"),
             ("Wingspan",           "Wingspan (cm)",     1, " cm"),
             ("wingspan_advantage", "Wingspan Adv. (cm)",1, " cm"),
@@ -1753,16 +1766,19 @@ with tab_ref:
             data = ref_base[col].dropna()
             if len(data) < 2:
                 continue
+            def fmtv(v):
+                if col == "Height": return fmt_height(v)
+                return f"{v:.{digits}f}{suffix}"
             rows.append({
                 "Metric":  label,
                 "N":       int(len(data)),
-                "Mean":    f"{data.mean():.{digits}f}{suffix}",
-                "SD":      f"{data.std(ddof=1):.{digits}f}{suffix}",
-                "p10":     f"{data.quantile(0.10):.{digits}f}{suffix}",
-                "p25":     f"{data.quantile(0.25):.{digits}f}{suffix}",
-                "Median":  f"{data.median():.{digits}f}{suffix}",
-                "p75":     f"{data.quantile(0.75):.{digits}f}{suffix}",
-                "p90":     f"{data.quantile(0.90):.{digits}f}{suffix}",
+                "Mean":    fmtv(data.mean()),
+                "SD":      fmtv(data.std(ddof=1)) if col != "Height" else "—",
+                "p10":     fmtv(data.quantile(0.10)),
+                "p25":     fmtv(data.quantile(0.25)),
+                "Median":  fmtv(data.median()),
+                "p75":     fmtv(data.quantile(0.75)),
+                "p90":     fmtv(data.quantile(0.90)),
             })
 
         if rows:
@@ -1782,7 +1798,7 @@ with tab_ref:
         ("Peak Power / BM",                     "Pk Pwr/BM",    1),
         ("30yd Split",                          "30yd (s)",     3),
         ("Jump Height (Flight Time) in Inches", "Jump Ht (in)", 2),
-        ("Height",                              "Height (cm)",  1),
+        ("Height",                              "Height (ft''in)",  0),
         ("Mass",                                "Mass (kg)",    1),
         ("Wingspan",                            "Wingspan (cm)",1),
         ("wingspan_advantage",                  "Wing Adv.",    1),
@@ -1807,8 +1823,9 @@ with tab_ref:
             if col in lvl_df.columns:
                 data = lvl_df[col].dropna()
                 if len(data) > 0:
-                    row[label] = f"{data.median():.{digits}f}"
-                    row[f"{label} (p25–p75)"] = f"{data.quantile(0.25):.{digits}f} – {data.quantile(0.75):.{digits}f}"
+                    def sfmt(v): return fmt_height(v) if col == "Height" else f"{v:.{digits}f}"
+                    row[label] = sfmt(data.median())
+                    row[f"{label} (p25–p75)"] = f"{sfmt(data.quantile(0.25))} – {sfmt(data.quantile(0.75))}"
                 else:
                     row[label] = "—"
                     row[f"{label} (p25–p75)"] = "—"
