@@ -890,15 +890,9 @@ with tab_card:
         if not pid_match.empty:
             default_ath = pid_match.iloc[0]
 
-    sc1, sc1b, sc2, sc3 = st.columns([1.4, 0.4, 2, 1])
+    sc1, sc2, sc2b, sc3 = st.columns([1.5, 2, 0.35, 1])
     with sc1:
         search_name = st.text_input("Search athlete", placeholder="Type a name…", key="sc_search")
-    with sc1b:
-        st.markdown('<div style="padding-top:28px">', unsafe_allow_html=True)
-        if st.button("✕", key="sc_clear", help="Clear search", use_container_width=True):
-            st.session_state["sc_search"] = ""
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
     with sc2:
         filtered_athletes = (
             [a for a in athletes if search_name.lower() in a.lower()]
@@ -909,10 +903,18 @@ with tab_card:
         default_idx = 0
         if default_ath in filtered_athletes:
             default_idx = filtered_athletes.index(default_ath)
-        elif filtered_athletes:
-            default_idx = 0
         sel_ath = st.selectbox("Select athlete", filtered_athletes,
                                index=default_idx, key="sc_ath")
+    with sc2b:
+        st.markdown('<div style="padding-top:28px">', unsafe_allow_html=True)
+        if st.button("✕", key="sc_clear", help="Clear selection — resets to full list",
+                     use_container_width=True):
+            st.query_params.clear()
+            for k in ["sc_search", "sc_ath"]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
     with sc3:
         ath_years = sorted(df[df["athleteName"] == sel_ath]["Year"].dropna().unique().astype(int).tolist(),
                            reverse=True)
