@@ -1143,49 +1143,83 @@ with tab_pct:
         data = ref_df[col].dropna()
         if len(data) < 3:
             return None
+
+        q10 = data.quantile(0.10 if not invert else 0.90)
+        q25 = data.quantile(0.25 if not invert else 0.75)
+        q50 = data.median()
+        q75 = data.quantile(0.75 if not invert else 0.25)
+        q90 = data.quantile(0.90 if not invert else 0.10)
+
         if ref_chart == "Histogram":
             fig = go.Figure()
-            # Percentile bands as background
-            q25, q50, q75, q90 = data.quantile([0.25, 0.50, 0.75, 0.90])
-            if invert:
-                q25, q75 = data.quantile([0.75, 0.25])
-                q90      = data.quantile(0.10)
-            fig.add_vrect(x0=data.min(), x1=q25,  fillcolor="#f0f3f8", opacity=0.6, line_width=0)
-            fig.add_vrect(x0=q25,        x1=q50,  fillcolor="#e4eaf3", opacity=0.6, line_width=0)
-            fig.add_vrect(x0=q50,        x1=q75,  fillcolor="#d8e0ed", opacity=0.6, line_width=0)
-            fig.add_vrect(x0=q75,        x1=data.max(), fillcolor="#c8d4e8", opacity=0.6, line_width=0)
             fig.add_trace(go.Histogram(
                 x=data, nbinsx=nbins,
-                marker_color=RED, opacity=0.85, name=label,
+                marker_color=NAV,
+                marker_line=dict(color="white", width=0.5),
+                opacity=0.9,
             ))
-            for q, lbl in [(q25,"p25"),(q50,"p50"),(q75,"p75"),(q90,"p90")]:
-                fig.add_vline(x=q, line_dash="dot", line_color=NAV, line_width=1.5,
-                              annotation_text=f"{lbl}={q:.{digits}f}{suffix}",
-                              annotation_font_color=NAV, annotation_font_size=9,
-                              annotation_position="top")
+            # Clean vertical lines for key percentiles
+            line_styles = [
+                (q25, "p25", GOLD,  "dash"),
+                (q50, "p50", RED,   "solid"),
+                (q75, "p75", GOLD,  "dash"),
+                (q90, "p90", GREEN, "dot"),
+            ]
+            for q, lbl, col_color, dash in line_styles:
+                fig.add_vline(
+                    x=q, line_dash=dash, line_color=col_color, line_width=2,
+                    annotation=dict(
+                        text=f"<b>{lbl}</b><br>{q:.{digits}f}{suffix}",
+                        font=dict(color=col_color, size=10),
+                        bgcolor="white",
+                        bordercolor=col_color,
+                        borderwidth=1,
+                        borderpad=3,
+                        yref="paper", y=0.98,
+                        showarrow=False,
+                    ),
+                )
             fig.update_layout(**_layout(
-                title=dict(text=label, font=dict(size=12, color=NAV), x=0),
-                height=220, margin=dict(l=30, r=10, t=50, b=30),
-                xaxis_title="", yaxis_title="Count",
-                xaxis=dict(tickfont=dict(size=9)),
-                yaxis=dict(tickfont=dict(size=9)),
+                title=dict(text=f"<b>{label}</b>", font=dict(size=13, color=NAV), x=0),
+                height=280,
+                margin=dict(l=40, r=20, t=55, b=40),
+                xaxis=dict(
+                    tickfont=dict(size=10, color=NAV),
+                    showgrid=True, gridcolor=BORD, gridwidth=1,
+                    zeroline=False,
+                ),
+                yaxis=dict(
+                    title="Count", tickfont=dict(size=10, color=NAV),
+                    showgrid=True, gridcolor=BORD, gridwidth=1,
+                ),
                 showlegend=False,
+                plot_bgcolor="white",
             ))
         else:
             fig = go.Figure()
             fig.add_trace(go.Box(
-                y=data, name=label,
-                marker_color=RED, line_color=NAV,
-                boxmean=True,
-                boxpoints="outliers", jitter=0.3,
-                pointpos=0, marker=dict(size=4, opacity=0.5),
+                x=data, name=label,
+                marker_color=RED,
+                line_color=NAV,
+                line_width=2,
+                fillcolor=f"rgba(186,12,47,0.15)",
+                boxmean="sd",
+                boxpoints="outliers",
+                jitter=0.4,
+                marker=dict(size=5, opacity=0.5, color=NAV),
             ))
             fig.update_layout(**_layout(
-                title=dict(text=label, font=dict(size=12, color=NAV), x=0),
-                height=220, margin=dict(l=30, r=10, t=50, b=30),
-                xaxis_title="", yaxis_title="",
-                yaxis=dict(tickfont=dict(size=9), autorange="reversed" if invert else True),
+                title=dict(text=f"<b>{label}</b>", font=dict(size=13, color=NAV), x=0),
+                height=280,
+                margin=dict(l=40, r=20, t=55, b=40),
+                xaxis=dict(
+                    tickfont=dict(size=10, color=NAV),
+                    showgrid=True, gridcolor=BORD,
+                    autorange="reversed" if invert else True,
+                ),
+                yaxis=dict(showticklabels=False),
                 showlegend=False,
+                plot_bgcolor="white",
             ))
         return fig
 
