@@ -490,14 +490,27 @@ def build_scores(_df,
 
     # Build potential — include wingspan only for pitchers
     def pot_score(row):
-        is_pitcher = False  # no position col; use school type as proxy if needed
-        base = (wp_peakpow * (row.get("pp_pct") or 50) +
-                wp_height  * (row.get("height_pct") or 50) +
-                wp_bmi     * (row.get("bmi_pct") or 50) +
-                wp_school  * (row.get("school_score") or 50))
-        # Redistribute wingspan weight to others if not pitcher
-        # (wingspan weight already baked into sliders; use as-is for all, note in UI)
-        pot = base + wp_wingspan * (row.get("wingspan_pct") or 50)
+        # Collect available components — skip missing ones and redistribute weight
+        def sv(key, default=50):
+            v = row.get(key)
+            try:
+                f = float(v)
+                return f if not np.isnan(f) else None
+            except (TypeError, ValueError):
+                return None
+
+        components = {
+            "pp_pct":       (sv("pp_pct"),       wp_peakpow),
+            "height_pct":   (sv("height_pct"),   wp_height),
+            "bmi_pct":      (sv("bmi_pct"),      wp_bmi),
+            "school_score": (sv("school_score"), wp_school),
+            "wingspan_pct": (sv("wingspan_pct"), wp_wingspan),
+        }
+        total_w = sum(w for _, (v, w) in components.items() if v is not None)
+        if total_w == 0:
+            return np.nan
+        # Weighted average of available components, rescaled to full weight
+        pot = sum(v * w for _, (v, w) in components.items() if v is not None) / total_w * 100
         return pot
 
     df["potential_raw"]   = df.apply(pot_score, axis=1)
