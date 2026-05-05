@@ -555,8 +555,7 @@ def make_gauge(value, title, color=RED):
                 {"range": [33, 66], "color": "#e4eaf3"},
                 {"range": [66, 100], "color": "#d8e0ed"},
             ],
-            "threshold": {"line": {"color": GOLD, "width": 3},
-                          "thickness": 0.8, "value": 75},
+
         },
     ))
     fig.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=10),
@@ -956,7 +955,7 @@ with tab_card:
                     OVERALL RANK</p>
                 <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
                     color:{RED};margin:0">#{int(row.get('overall_rank', 0))}</p>
-                <p style="font-size:11px;color:#9AAAC0;margin:0">{"all years avg" if sel_yr is None else f"of {int(df[df['Year']==sel_yr]['overall_rank'].notna().sum())} in {sel_yr}"}</p>
+                <p style="font-size:11px;color:#9AAAC0;margin:0">{"of " + str(int(df["overall_rank"].notna().sum())) + " athletes (all years)" if sel_yr is None else f"of {int(df[df['Year']==sel_yr]['overall_rank'].notna().sum())} athletes in {sel_yr}"}</p>
             </div>
         </div>
     </div>
@@ -988,7 +987,8 @@ with tab_card:
                 {f"{aq_val:.0f}" if pd.notna(aq_val) else "—"}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{min(100,max(0,aq_val or 0)):.0f}%;background:{RED};
+                <div style="width:{min(100,max(0,aq_val or 0)):.0f}%;
+                    background:{"#4CAF82" if pd.notna(aq_val) and aq_val>=75 else "#E2C188" if pd.notna(aq_val) and aq_val>=50 else RED};
                     border-radius:6px;height:8px;transition:width 0.5s"></div>
             </div>
         </div>
@@ -1007,7 +1007,8 @@ with tab_card:
                 {f"{pot_val:.0f}" if pd.notna(pot_val) else "—"}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{min(100,max(0,pot_val or 0)):.0f}%;background:{NAV};
+                <div style="width:{min(100,max(0,pot_val or 0)):.0f}%;
+                    background:{"#4CAF82" if pd.notna(pot_val) and pot_val>=75 else "#E2C188" if pd.notna(pot_val) and pot_val>=50 else NAV};
                     border-radius:6px;height:8px;transition:width 0.5s"></div>
             </div>
         </div>
@@ -1018,6 +1019,36 @@ with tab_card:
         st.plotly_chart(make_gauge(pos_val, pos_grp_label, "#6b7fa3"),
                         use_container_width=True, key="g_pos")
         st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
+
+    # ── Score context legend ──────────────────────────────────────────────────
+    st.markdown(f"""
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;margin-top:4px">
+        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                background:{GREEN}"></span>
+            <strong>75–100</strong>&nbsp;Elite · clear draft target
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                background:{GOLD}"></span>
+            <strong>50–74</strong>&nbsp;Above average · worth consideration
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                background:#D0D7E6"></span>
+            <strong>25–49</strong>&nbsp;Below average · needs more development
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                background:#9AAAC0"></span>
+            <strong>0–24</strong>&nbsp;Well below average
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── Percentile cards ──────────────────────────────────────────────────────
     st.markdown('<p class="label" style="margin-top:4px">Percentiles</p>', unsafe_allow_html=True)
