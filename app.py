@@ -1715,16 +1715,117 @@ with tab_guide:
             <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
         </div>""", unsafe_allow_html=True)
 
-    gs("What This Is Not", "#9AAAC0")
-    for para in [
-        "These scores are <strong>not predictions of major league success</strong>. They describe current physical output and development room — one input among many.",
-        "The potential score does not account for pitchability, bat-to-ball skill, makeup, or injury history.",
-        "Scores become more meaningful as data accumulates. Single-year athletes are informative but tentative.",
-        "Players with missing sprint data are scored on CI/RSI/Peak Power only — this is noted in the scorecard. Missing data is not penalized.",
-    ]:
-        st.markdown(
-            f'<p style="font-size:14px;line-height:1.75;color:#2a3a5a;margin-bottom:10px">{para}</p>',
-            unsafe_allow_html=True)
+    gs("Metric Definitions", "#6b7fa3")
+
+    def metric_def(name, unit, desc, good=None):
+        good_html = f'<div style="font-size:11px;color:#4CAF82;margin-top:3px">✓ Higher is better: {good}</div>' if good else ""
+        st.markdown(f"""
+        <div style="padding:12px 16px;border-bottom:1px solid {BORD}">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">
+                <span style="font-size:13px;font-weight:700;color:{NAV}">{name}</span>
+                <span style="font-size:11px;color:#9AAAC0;background:{SURF};padding:1px 8px;
+                    border-radius:10px;border:1px solid {BORD}">{unit}</span>
+            </div>
+            <div style="font-size:12px;color:#2a3a5a;line-height:1.6">{desc}</div>
+            {good_html}
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown(f'<div style="border-left:4px solid {RED};padding-left:10px;margin:16px 0 6px 0">'
+                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:{RED}">Force Plate — Output</span></div>',
+                unsafe_allow_html=True)
+
+    metric_def("Concentric Impulse (CI)", "N·s",
+        "The total force applied to the ground during the upward (concentric) phase of the jump, multiplied by time. "
+        "Represents total lower-body power output in a single jump. The primary athleticism metric.",
+        "Elite amateur ≥ 300 N·s. Above average 260–300.")
+    metric_def("P1 Concentric Impulse", "N·s",
+        "Concentric impulse from the first phase of the push-off (before the athlete leaves the ground). "
+        "Captures early-phase force production. A supplementary power metric.")
+    metric_def("Concentric Impulse-100ms (CI-100ms)", "N·s",
+        "Force applied in the first 100 milliseconds of the concentric phase. "
+        "A proxy for early explosiveness — how quickly an athlete can generate force at the start of the drive.")
+    metric_def("Jump Height (Flight Time)", "inches",
+        "Vertical jump height estimated from the time the athlete is in the air (flight time method). "
+        "Expressed in inches. Correlates with overall power output but is influenced by body weight.")
+    metric_def("RSI-modified (mRSI)", "m/s",
+        "Reactive Strength Index — jump height divided by time on the ground. "
+        "Measures how efficiently an athlete converts ground contact into height. "
+        "Higher = more explosive relative to their contact time. Elite range: ≥ 0.80 m/s.",
+        "Elite ≥ 0.80. Above average 0.60–0.79.")
+    metric_def("Peak Power / Body Mass", "W/kg",
+        "Peak power output during the jump normalized to the athlete's body weight. "
+        "Removes the size advantage — a heavier athlete who jumps equally high produces more raw power, "
+        "but Peak Power/BM levels the field. Best measure of relative explosiveness.")
+
+    st.markdown(f'<div style="border-left:4px solid {GOLD};padding-left:10px;margin:20px 0 6px 0">'
+                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:{GOLD}">Force Plate — Strategy</span></div>',
+                unsafe_allow_html=True)
+
+    metric_def("Eccentric Duration", "seconds",
+        "Time spent in the downward (loading) phase of the jump. "
+        "Longer = more deliberate, slower dip. Shorter = quicker, bouncier approach. "
+        "Neither is inherently better — context is relative to peer norms.")
+    metric_def("Concentric Duration", "seconds",
+        "Time spent in the upward (push-off) phase. "
+        "Shorter = more explosive, faster drive off the ground. "
+        "Elite athletes tend to have short concentric durations relative to their impulse.")
+    metric_def("Braking Phase Duration", "seconds",
+        "Time between the athlete's peak downward velocity and the start of the upward drive. "
+        "A short braking phase = faster direction reversal = better stretch-shortening cycle efficiency.")
+    metric_def("Countermovement Depth", "cm (stored internally)",
+        "How far the athlete's center of mass drops during the dip. "
+        "Deeper = more elastic energy stored in tendons and muscles. "
+        "Shown as a negative value internally (downward displacement).")
+    metric_def("CI100ms : Total CI Ratio", "ratio (0–1)",
+        "The proportion of total concentric impulse produced in the first 100ms. "
+        "High ratio = front-loaded strategy (force comes early). "
+        "Low ratio = back-loaded (force ramps up later). "
+        "Used alongside CI-100ms to classify jump archetypes.")
+
+    st.markdown(f'<div style="border-left:4px solid {GREEN};padding-left:10px;margin:20px 0 6px 0">'
+                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:{GREEN}">Sprint</span></div>',
+                unsafe_allow_html=True)
+
+    metric_def("30yd Sprint", "seconds",
+        "Time to cover 30 yards from a standing start. The primary speed metric. "
+        "Lower = faster. Elite amateur range: sub-3.80s. Above average: 3.80–4.00s.",
+        "Lower is better. Elite < 3.80s.")
+    metric_def("10yd Split", "seconds",
+        "Time to cover the first 10 yards — measures pure acceleration and first-step quickness. "
+        "Derived from the same timed run as the 30yd.",
+        "Lower is better. Elite < 1.55s.")
+    metric_def("20yd Split", "seconds",
+        "Time to cover the first 20 yards — transition between acceleration and top speed. "
+        "Derived from the same timed run as the 30yd.",
+        "Lower is better.")
+
+    st.markdown(f'<div style="border-left:4px solid {NAV};padding-left:10px;margin:20px 0 6px 0">'
+                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:{NAV}">Anthropometrics</span></div>',
+                unsafe_allow_html=True)
+
+    metric_def("Height", "ft / in",
+        "Standing height without shoes. Measured at the time of testing. "
+        "Taller athletes score higher in the potential model — height is one of the strongest "
+        "predictors of projection across all positions.")
+    metric_def("Body Mass", "lbs",
+        "Body weight at the time of testing. Used in the leanness (BW/Ht) ratio "
+        "and normalized power metrics. Not scored directly.")
+    metric_def("Wingspan", "ft / in",
+        "Arm span measured fingertip to fingertip with arms extended horizontally. "
+        "Used to compute wingspan advantage. Particularly relevant for pitchers.")
+    metric_def("Wingspan Advantage", "inches",
+        "Wingspan minus height. A positive value means the athlete's reach exceeds their height — "
+        "longer levers than expected for their size. Elite pitching prospect marker. "
+        "Scored as a percentile in the potential model.",
+        'Positive = longer reach than height. Very positive (> 2") is notable for pitchers.')
+    metric_def("BW/Ht Ratio (Leanness)", "lbs / inch",
+        "Body weight divided by height in inches. A lower ratio means a leaner athlete — "
+        "less mass per unit of height. Leaner athletes have more room to add functional mass "
+        "without losing athleticism. Lower is better in the potential score.")
 
 
 # =============================================================================
