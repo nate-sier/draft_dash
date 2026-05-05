@@ -115,6 +115,28 @@ def fmt_height(cm):
     except Exception:
         return "—"
 
+def fmt_mass(kg):
+    """kg → lbs"""
+    if pd.isna(kg): return "—"
+    try: return f"{float(kg) * 2.20462:.1f} lbs"
+    except: return "—"
+
+def fmt_wingspan(cm):
+    """cm → feet-inches (same as height)"""
+    return fmt_height(cm)
+
+def fmt_wingspan_adv(cm):
+    """cm difference → inches"""
+    if pd.isna(cm): return "—"
+    try: return f'{float(cm) / 2.54:.1f}"'
+    except: return "—"
+
+def fmt_bwht(kg, cm):
+    """kg/cm ratio → lbs/inch"""
+    if pd.isna(kg) or pd.isna(cm): return "—"
+    try: return f"{(float(kg) * 2.20462) / (float(cm) / 2.54):.3f}"
+    except: return "—"
+
 def delta_html(val, d=1, invert=False):
     if pd.isna(val): return '<span style="color:#9AAAC0">—</span>'
     good = (val < 0) if invert else (val > 0)
@@ -1186,13 +1208,13 @@ with tab_card:
             <div class="stat-row"><span class="stat-label">Height</span>
                 <span class="stat-val">{fmt_height(row.get('Height'))}</span></div>
             <div class="stat-row"><span class="stat-label">Mass</span>
-                <span class="stat-val">{fmt(row.get('Mass'), 1, ' kg')}</span></div>
+                <span class="stat-val">{fmt_mass(row.get('Mass'))}</span></div>
             <div class="stat-row"><span class="stat-label">Wingspan</span>
-                <span class="stat-val">{fmt(row.get('Wingspan'), 1, ' cm')}</span></div>
+                <span class="stat-val">{fmt_wingspan(row.get('Wingspan'))}</span></div>
             <div class="stat-row"><span class="stat-label">Wingspan Adv.</span>
-                <span class="stat-val">{fmt(row.get('wingspan_advantage'), 1, ' cm')}</span></div>
+                <span class="stat-val">{fmt_wingspan_adv(row.get('wingspan_advantage'))}</span></div>
             <div class="stat-row"><span class="stat-label">BW/Ht Ratio</span>
-                <span class="stat-val">{fmt(row.get('bmi_raw'), 3)}</span></div>
+                <span class="stat-val">{fmt_bwht(row.get('Mass'), row.get('Height'))}</span></div>
         </div>
         <div class="card card-gold">
             <p class="label" style="color:{RED}">CMJ Strategy — Why Flagged</p>
@@ -1420,9 +1442,9 @@ with tab_pct:
         ],
         "Anthropometrics": [
             ("Height",             "Height (ft''in)", 20, False, 0, ""),
-            ("Mass",               "Mass (kg)",        20, False, 1, " kg"),
-            ("Wingspan",           "Wingspan (cm)",    20, False, 1, " cm"),
-            ("wingspan_advantage", "Wingspan Adv.",    20, False, 1, " cm"),
+            ("Mass",               "Mass (lbs)",       20, False, 1, " lbs"),
+            ("Wingspan",           "Wingspan (ft''in)",20, False, 0, ""),
+            ("wingspan_advantage", "Wingspan Adv. (in)",20, False, 1, "\"  "),
             ("bmi_raw",            "BW/Ht Ratio",      20, False, 3, ""),
         ],
 
@@ -1745,9 +1767,9 @@ with tab_ref:
         ],
         "Anthropometrics": [
             ("Height",             "Height (ft''in)",   0, ""),
-            ("Mass",               "Mass (kg)",         1, " kg"),
-            ("Wingspan",           "Wingspan (cm)",     1, " cm"),
-            ("wingspan_advantage", "Wingspan Adv. (cm)",1, " cm"),
+            ("Mass",               "Mass (lbs)",        1, " lbs"),
+            ("Wingspan",           "Wingspan (ft''in)", 0, ""),
+            ("wingspan_advantage", "Wingspan Adv. (in)",1, "\""),
         ],
 
     }
@@ -1767,7 +1789,10 @@ with tab_ref:
             if len(data) < 2:
                 continue
             def fmtv(v):
-                if col == "Height": return fmt_height(v)
+                if col == "Height":           return fmt_height(v)
+                if col == "Wingspan":         return fmt_height(v)
+                if col == "wingspan_advantage": return fmt_wingspan_adv(v)
+                if col == "Mass":             return fmt_mass(v)
                 return f"{v:.{digits}f}{suffix}"
             rows.append({
                 "Metric":  label,
@@ -1800,8 +1825,8 @@ with tab_ref:
         ("Jump Height (Flight Time) in Inches", "Jump Ht (in)", 2),
         ("Height",                              "Height (ft''in)",  0),
         ("Mass",                                "Mass (kg)",    1),
-        ("Wingspan",                            "Wingspan (cm)",1),
-        ("wingspan_advantage",                  "Wing Adv.",    1),
+        ("Wingspan",                            "Wingspan (ft''in)",0),
+        ("wingspan_advantage",                  "Wing Adv. (in)",1),
     ]
 
     base_yr = df.copy()
@@ -1823,7 +1848,12 @@ with tab_ref:
             if col in lvl_df.columns:
                 data = lvl_df[col].dropna()
                 if len(data) > 0:
-                    def sfmt(v): return fmt_height(v) if col == "Height" else f"{v:.{digits}f}"
+                    def sfmt(v):
+                        if col == "Height": return fmt_height(v)
+                        if col == "Wingspan": return fmt_height(v)
+                        if col == "wingspan_advantage": return fmt_wingspan_adv(v)
+                        if col == "Mass": return fmt_mass(v)
+                        return f"{v:.{digits}f}"
                     row[label] = sfmt(data.median())
                     row[f"{label} (p25–p75)"] = f"{sfmt(data.quantile(0.25))} – {sfmt(data.quantile(0.75))}"
                 else:
