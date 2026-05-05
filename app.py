@@ -1368,18 +1368,12 @@ with tab_pct:
             ("wingspan_advantage", "Wingspan Adv.",    20, False, 1, " cm"),
             ("bmi_raw",            "BW/Ht Ratio",      20, False, 3, ""),
         ],
-        "Composite Scores": [
-            ("athlete_quality_score",   "Quality Score",   20, False, 1, ""),
-            ("aq_pos_score",            "Pos. Quality",    20, False, 1, ""),
-            ("potential_score",         "Potential",       20, False, 1, ""),
-            ("strategy_distance_score", "Strategy Dist.",  20, False, 1, ""),
-        ],
+
     }
 
     SECTION_COLORS = {
         "Athleticism":      RED,
         "Anthropometrics":  NAV,
-        "Composite Scores": GREEN,
     }
 
     # Population groups: (label, accent color, filter mask or None)
