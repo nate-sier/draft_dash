@@ -1028,7 +1028,7 @@ with tab_card:
                     {sel_ath}</h2>
                 <span class="arch-badge" style="background:{arch_color}">{row.get('archetype','—')}</span>
                 <span style="font-size:12px;color:#6b7fa3;margin-left:10px">
-                    {sel_yr_display} · {row.get('Position','—')} · {row.get('School Type','—')}</span>
+                    {sel_yr_display} · {str(row.get('Position','—')) if str(row.get('Position','')) not in ('nan','None','') else '—'} · {str(row.get('School Type','—')) if str(row.get('School Type','')) not in ('nan','None','') else '—'}</span>
                 <br>
                 <span style="display:inline-block;margin-top:8px;background:{PROG_COLORS.get(row.get('programming_category','Unclassified'),'#9AAAC0')};
                     color:white;font-size:11px;font-weight:700;padding:3px 14px;
@@ -1072,8 +1072,10 @@ with tab_card:
     def alltime_pct_str(val, col):
         """Direct percentile: % of all athletes in pool scoring below this value."""
         try:
+            v = float(val)
+            if np.isnan(v) or v <= 0: return "—"
             pool = df[col].dropna().apply(float)
-            v    = float(val)
+            pool = pool[pool > 0]  # exclude zeroes from reference pool
             if len(pool) == 0: return "—"
             pct  = int(round((pool < v).mean() * 100))
             return f"{pct}{pct_suffix(pct)} percentile"
@@ -1123,12 +1125,12 @@ with tab_card:
                 ★ DEVELOPMENT POTENTIAL</div>
             <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{NAV};line-height:1">
-                {f"{pot_val:.0f}" if pd.notna(pot_val) else "—"}</div>
+                {f"{pot_val:.0f}" if (pd.notna(pot_val) and pot_val > 0) else "—"}</div>
             <div style="font-size:13px;font-weight:700;color:{NAV};margin-top:4px">
-                {pot_pct_str}</div>
+                {pot_pct_str if (pd.notna(pot_val) and pot_val > 0) else "Insufficient data"}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{min(100,max(0,float(pot_val) if pd.notna(pot_val) else 0)):.0f}%;
+                <div style="width:{min(100,max(0,float(pot_val) if (pd.notna(pot_val) and pot_val > 0) else 0)):.0f}%;
                     background:{"#4CAF82" if pd.notna(pot_val) and pot_val>=75 else "#E2C188" if pd.notna(pot_val) and pot_val>=50 else NAV};
                     border-radius:6px;height:8px;transition:width 0.5s"></div>
             </div>
@@ -1136,8 +1138,9 @@ with tab_card:
         """, unsafe_allow_html=True)
     with hero3:
         # Pos group quality gauge + radar stacked
-        pos_grp_label = f"{row.get('pos_group','Pos.')} Quality"
-        st.plotly_chart(make_gauge(pos_val, pos_grp_label, "#6b7fa3"),
+        _pg = row.get('pos_group','')
+        pos_grp_label = f"{_pg} Quality" if _pg and str(_pg) not in ('Unknown','nan','') else "Pos. Quality"
+        st.plotly_chart(make_gauge(pos_val if (pd.notna(pos_val) and pos_val > 0) else None, pos_grp_label, "#6b7fa3"),
                         use_container_width=True, key="g_pos")
         st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
 
