@@ -16,6 +16,19 @@ PITCHER_POSITIONS = {"P", "SP", "RP", "Starting Pitcher", "Relief Pitcher",
                      "Right Hand Pitcher", "Left Hand Pitcher", "SC", "PC",
                      "Starting pitcher", "starting pitcher"}
 
+# ─── Position groups ──────────────────────────────────────────────────────────
+PITCHERS   = {"SP", "RHP", "LHP", "RP", "TWP"}
+CATCHERS   = {"C"}
+INFIELDERS = {"SS", "3B", "2B", "1B"}
+OUTFIELDERS= {"CF", "LF", "RF"}
+
+def pos_group(pos):
+    if pos in PITCHERS:    return "Pitcher"
+    if pos in CATCHERS:    return "Catcher"
+    if pos in INFIELDERS:  return "Infielder"
+    if pos in OUTFIELDERS: return "Outfielder"
+    return "Unknown"
+
 # ─── Colors ───────────────────────────────────────────────────────────────────
 NAV   = "#11225A"
 RED   = "#BA0C2F"
@@ -140,6 +153,7 @@ def load_data():
     fp_raw     = pd.DataFrame(sh.worksheet("Force Plate").get_all_records())
     isak_raw   = pd.DataFrame(sh.worksheet("ISAK").get_all_records())
     sprint_raw = pd.DataFrame(sh.worksheet("Sprint").get_all_records())
+    pos_raw    = pd.DataFrame(sh.worksheet("Positions").get_all_records())
 
     for df in [fp_raw, isak_raw, sprint_raw]:
         df["playerID"] = df["playerID"].astype(str).str.strip()
@@ -166,6 +180,14 @@ def load_data():
                       on=["playerID","Year"], how="outer")
     df = df.merge(sprint_raw.drop(columns=["athleteName"], errors="ignore"),
                   on=["playerID","Year"], how="outer")
+
+    # Merge positions
+    if "playerID" in pos_raw.columns and "Position" in pos_raw.columns:
+        pos_raw["playerID"] = pos_raw["playerID"].astype(str).str.strip()
+        df = df.merge(pos_raw[["playerID","Position"]].drop_duplicates("playerID"),
+                      on="playerID", how="left")
+    else:
+        df["Position"] = ""
 
     # Fill athlete name gaps
     name_map = (fp_raw[["playerID","athleteName"]].dropna()
@@ -196,7 +218,8 @@ def load_data():
 # ─── Model pipeline ───────────────────────────────────────────────────────────
 @st.cache_data(show_spinner="Building scores…")
 def build_scores(_df,
-                 w_ci=0.40, w_sprint=0.40, w_rsi=0.20,
+                 w_ci=0.35, w_sprint=0.30, w_rsi=0.15, w_pp=0.20,
+                 w_ci_ns=0.45, w_rsi_ns=0.20, w_pp_ns=0.35,
                  wp_peakpow=0.25, wp_height=0.25, wp_bmi=0.20,
                  wp_school=0.15, wp_wingspan=0.15):
     df = _df.copy()
@@ -245,37 +268,123 @@ def build_scores(_df,
         {f"rz_{f}": r.get(f"rz_{f}", 0) for f in strategy_features}, strategy_features), axis=1)
 
     # ── Athlete Quality Score ──────────────────────────────────────────────────
+    # Position group
+    df["pos_group"] = df["Position"].astype(str).map(pos_group)
+
+    # ── Helper: compute percentiles within a given mask ────────────────────────
+    def add_pct_group(df, col, out_col, invert=False, mask=None):
+        df[out_col] = np.nan
+        sub = df[mask] if mask is not None else df
+        has = sub[col].notna()
+        if has.any():
+            r = pct_rank(sub.loc[has, col])
+            df.loc[sub.index[has], out_col] = 100 - r if invert else r
+
+    # ── All-time percentiles ───────────────────────────────────────────────────
     # CI percentile (higher = better)
     df["ci_pct_alltime"]     = pct_rank(df["Concentric Impulse"])
     # RSI percentile (higher = better)
     df["rsi_pct_alltime"]    = pct_rank(df["RSI-modified"])
-    # Sprint percentile (lower time = better → invert)
-    df["sprint_pct_alltime"] = 100 - pct_rank(df["30yd Split"])
+    # Peak Power / BM percentile (higher = better) — always available
+    df["pp_pct_alltime"]     = pct_rank(df["Peak Power / BM"])
+    # Sprint percentile — ranked only among athletes who actually ran
+    sprint_mask = df["30yd Split"].notna()
+    df["sprint_pct_alltime"] = np.nan
+    if sprint_mask.any():
+        df.loc[sprint_mask, "sprint_pct_alltime"] = (
+            100 - pct_rank(df.loc[sprint_mask, "30yd Split"])
+        )
 
-    df["athlete_quality_raw"] = (
-        w_ci     * df["ci_pct_alltime"].fillna(50) +
-        w_sprint * df["sprint_pct_alltime"].fillna(50) +
-        w_rsi    * df["rsi_pct_alltime"].fillna(50)
-    )
+    # ── Position-group percentiles (Pitcher / Catcher / Infielder / Outfielder) ──
+    for grp in ["Pitcher", "Catcher", "Infielder", "Outfielder"]:
+        mask = df["pos_group"] == grp
+        for col, suffix, inv in [
+            ("Concentric Impulse", "ci",     False),
+            ("RSI-modified",       "rsi",    False),
+            ("Peak Power / BM",    "pp",     False),
+            ("30yd Split",         "sprint", True),
+        ]:
+            out = f"{suffix}_pct_{grp.lower()}"
+            df[out] = np.nan
+            sub = df[mask]
+            if col == "30yd Split":
+                has = sub[col].notna()
+                if has.any():
+                    r = pct_rank(sub.loc[has, col])
+                    df.loc[sub.index[has], out] = 100 - r
+            else:
+                has = sub[col].notna()
+                if has.any():
+                    df.loc[sub.index[has], out] = pct_rank(sub.loc[has, col])
+
+    # Position-group quality score
+    def pos_group_aq(row):
+        grp = row.get("pos_group", "Unknown")
+        if grp == "Unknown": return np.nan
+        g = grp.lower()
+        ci_p  = row.get(f"ci_pct_{g}", np.nan)
+        rsi_p = row.get(f"rsi_pct_{g}", np.nan)
+        pp_p  = row.get(f"pp_pct_{g}", np.nan)
+        spr_p = row.get(f"sprint_pct_{g}", np.nan)
+        if pd.notna(spr_p):
+            return (w_ci * (ci_p or 50) + w_sprint * spr_p +
+                    w_rsi * (rsi_p or 50) + w_pp * (pp_p or 50))
+        else:
+            return (w_ci_ns * (ci_p or 50) + w_rsi_ns * (rsi_p or 50) +
+                    w_pp_ns * (pp_p or 50))
+
+    df["aq_pos_raw"]   = df.apply(pos_group_aq, axis=1)
+    df["aq_pos_score"] = np.nan
+    for grp in ["Pitcher", "Catcher", "Infielder", "Outfielder"]:
+        idx = df["pos_group"] == grp
+        if idx.any():
+            df.loc[idx, "aq_pos_score"] = scaled_0_100(df.loc[idx, "aq_pos_raw"].values)
+
+    # Two scoring modes:
+    # With sprint:    w_ci*CI + w_sprint*Sprint + w_rsi*RSI + w_pp*PeakPower
+    # Without sprint: w_ci_ns*CI + w_rsi_ns*RSI + w_pp_ns*PeakPower
+    def aq_raw(row):
+        if pd.notna(row["sprint_pct_alltime"]):
+            return (w_ci     * row["ci_pct_alltime"] +
+                    w_sprint * row["sprint_pct_alltime"] +
+                    w_rsi    * row["rsi_pct_alltime"] +
+                    w_pp     * row["pp_pct_alltime"])
+        else:
+            return (w_ci_ns  * row["ci_pct_alltime"] +
+                    w_rsi_ns * row["rsi_pct_alltime"] +
+                    w_pp_ns  * row["pp_pct_alltime"])
+
+    df["athlete_quality_raw"] = df.apply(aq_raw, axis=1)
     df["athlete_quality_score"] = scaled_0_100(df["athlete_quality_raw"].values)
 
     # Per-year versions
     for col, pct_col, invert in [
         ("Concentric Impulse",  "ci_pct_yr",     False),
         ("RSI-modified",        "rsi_pct_yr",     False),
+        ("Peak Power / BM",     "pp_pct_yr",      False),
         ("30yd Split",          "sprint_pct_yr",  True),
     ]:
         df[pct_col] = np.nan
         for yr, idx in df.groupby("Year").groups.items():
             s = df.loc[idx, col]
-            r = pct_rank(s)
-            df.loc[idx, pct_col] = 100 - r if invert else r
+            has = s.notna()
+            if has.any():
+                r = pct_rank(s[has])
+                df.loc[idx[has], pct_col] = 100 - r if invert else r
+        # Non-runners stay NaN for sprint — handled in scoring below
 
-    df["aq_yr_raw"] = (
-        w_ci     * df["ci_pct_yr"].fillna(50) +
-        w_sprint * df["sprint_pct_yr"].fillna(50) +
-        w_rsi    * df["rsi_pct_yr"].fillna(50)
-    )
+    def aq_yr_raw(row):
+        if pd.notna(row["sprint_pct_yr"]):
+            return (w_ci     * row["ci_pct_yr"] +
+                    w_sprint * row["sprint_pct_yr"] +
+                    w_rsi    * row["rsi_pct_yr"] +
+                    w_pp     * row["pp_pct_yr"])
+        else:
+            return (w_ci_ns  * row["ci_pct_yr"] +
+                    w_rsi_ns * row["rsi_pct_yr"] +
+                    w_pp_ns  * row["pp_pct_yr"])
+
+    df["aq_yr_raw"] = df.apply(aq_yr_raw, axis=1)
     # Scale per year
     df["aq_score_yr"] = np.nan
     for yr, idx in df.groupby("Year").groups.items():
@@ -283,7 +392,7 @@ def build_scores(_df,
 
     # ── Potential Score ────────────────────────────────────────────────────────
     # Peak Power / BM percentile (higher = better)
-    df["pp_pct"]      = pct_rank(df["Peak Power / BM"])
+    df["pp_pct"]      = df["pp_pct_alltime"]  # reuse alltime percentile
     # Height percentile (taller = better)
     df["height_pct"]  = pct_rank(df["Height"])
     # BMI-style (kg/cm) — leaner = better → invert
@@ -429,7 +538,7 @@ def make_radar(row, label="Athlete"):
         row.get("ci_pct_alltime", 50) or 50,
         row.get("sprint_pct_alltime", 50) or 50,
         row.get("rsi_pct_alltime", 50) or 50,
-        row.get("pp_pct", 50) or 50,
+        row.get("pp_pct_alltime", 50) or 50,
         row.get("height_pct", 50) or 50,
     ]
     fig = go.Figure()
@@ -558,14 +667,27 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown(f'<p style="font-size:10px;font-weight:600;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:#6b7fa3">Athlete Quality Weights</p>',
+                f'text-transform:uppercase;color:#6b7fa3">Quality Weights (With Sprint)</p>',
                 unsafe_allow_html=True)
-    w_ci     = st.slider("Concentric Impulse",  0, 100, 40, 5, key="w_ci") / 100
-    w_sprint = st.slider("30yd Sprint",          0, 100, 40, 5, key="w_sprint") / 100
-    w_rsi    = st.slider("RSI-modified",         0, 100, 20, 5, key="w_rsi") / 100
-    total_aq = w_ci + w_sprint + w_rsi
+    w_ci     = st.slider("Concentric Impulse",  0, 100, 35, 5, key="w_ci") / 100
+    w_sprint = st.slider("30yd Sprint",          0, 100, 30, 5, key="w_sprint") / 100
+    w_rsi    = st.slider("RSI-modified",         0, 100, 15, 5, key="w_rsi") / 100
+    w_pp     = st.slider("Peak Power / BM",      0, 100, 20, 5, key="w_pp") / 100
+    total_aq = w_ci + w_sprint + w_rsi + w_pp
     if not (0.99 < total_aq < 1.01):
         st.warning(f"Weights sum to {total_aq*100:.0f}% — should be 100%")
+
+    st.markdown("---")
+    st.markdown(f'<p style="font-size:10px;font-weight:600;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:#6b7fa3">Quality Weights (No Sprint)</p>',
+                unsafe_allow_html=True)
+    st.caption("Applied when a player has no sprint data")
+    w_ci_ns  = st.slider("Concentric Impulse (no sprint)", 0, 100, 45, 5, key="w_ci_ns") / 100
+    w_rsi_ns = st.slider("RSI-modified (no sprint)",       0, 100, 20, 5, key="w_rsi_ns") / 100
+    w_pp_ns  = st.slider("Peak Power / BM (no sprint)",    0, 100, 35, 5, key="w_pp_ns") / 100
+    total_ns = w_ci_ns + w_rsi_ns + w_pp_ns
+    if not (0.99 < total_ns < 1.01):
+        st.warning(f"No-sprint weights sum to {total_ns*100:.0f}% — should be 100%")
 
     st.markdown("---")
     st.markdown(f'<p style="font-size:10px;font-weight:600;letter-spacing:0.12em;'
@@ -592,7 +714,9 @@ if load_err:
     st.code(load_err); st.stop()
 
 df, strat_feats, all_rz_cols = build_scores(
-    raw, w_ci, w_sprint, w_rsi, wp_pp, wp_ht, wp_bmi, wp_school, wp_wings)
+    raw, w_ci, w_sprint, w_rsi, w_pp,
+    w_ci_ns, w_rsi_ns, w_pp_ns,
+    wp_pp, wp_ht, wp_bmi, wp_school, wp_wings)
 
 # ─── Header ───────────────────────────────────────────────────────────────────
 hc1, hc2 = st.columns([3, 1])
@@ -620,29 +744,37 @@ tab_board, tab_card = st.tabs(["Leaderboard", "Athlete Scorecard"])
 # TAB 1 — LEADERBOARD
 # =============================================================================
 with tab_board:
-    fc1, fc2, fc3, fc4, fc5 = st.columns([2, 1.2, 1.5, 1.5, 1.2])
+    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([2, 1, 1.2, 1.2, 1.2, 1.2])
     with fc1: search  = st.text_input("Search athlete", placeholder="Name…", key="lb_search")
     with fc2:
         yr_opts = ["All"] + sorted(df["Year"].dropna().unique().astype(int).tolist(), reverse=True)
         yr_sel  = st.selectbox("Year", yr_opts, key="lb_year")
     with fc3:
+        pos_grp_opts = ["All", "Pitcher", "Catcher", "Infielder", "Outfielder"]
+        pos_grp_sel  = st.selectbox("Position Group", pos_grp_opts, key="lb_posgrp")
+    with fc4:
         arch_opts = ["All"] + sorted(df["archetype"].dropna().unique())
         arch_sel  = st.selectbox("Archetype", arch_opts, key="lb_arch")
-    with fc4:
+    with fc5:
         st_opts = ["All"] + sorted(df["School Type"].dropna().unique())
         st_sel  = st.selectbox("School Type", st_opts, key="lb_st")
-    with fc5:
-        sort_by = st.selectbox("Sort by", ["Athlete Quality", "Potential", "CI", "30yd Sprint"],
+    with fc6:
+        sort_by = st.selectbox("Sort by", ["Athlete Quality", "Pos. Group Quality",
+                                            "Potential", "CI", "30yd Sprint"],
                                key="lb_sort")
 
     dff = df.copy()
-    if search:       dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
-    if yr_sel != "All":  dff = dff[dff["Year"] == int(yr_sel)]
-    if arch_sel != "All": dff = dff[dff["archetype"] == arch_sel]
-    if st_sel != "All":   dff = dff[dff["School Type"] == st_sel]
+    if search:              dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
+    if yr_sel != "All":     dff = dff[dff["Year"] == int(yr_sel)]
+    if pos_grp_sel != "All": dff = dff[dff["pos_group"] == pos_grp_sel]
+    if arch_sel != "All":   dff = dff[dff["archetype"] == arch_sel]
+    if st_sel != "All":     dff = dff[dff["School Type"] == st_sel]
 
-    sort_col = {"Athlete Quality": "athlete_quality_score", "Potential": "potential_score",
-                "CI": "Concentric Impulse", "30yd Sprint": "30yd Split"}[sort_by]
+    sort_col = {"Athlete Quality": "athlete_quality_score",
+                "Pos. Group Quality": "aq_pos_score",
+                "Potential": "potential_score",
+                "CI": "Concentric Impulse",
+                "30yd Sprint": "30yd Split"}[sort_by]
     asc = sort_by == "30yd Sprint"
     dff = dff.sort_values(sort_col, ascending=asc, na_position="last").reset_index(drop=True)
 
@@ -683,17 +815,17 @@ with tab_board:
     st.markdown('<p class="label" style="margin-top:8px">Ranked Athletes</p>',
                 unsafe_allow_html=True)
 
-    tbl = dff[["athleteName","Year","School Type","archetype",
-               "athlete_quality_score","potential_score",
+    tbl = dff[["athleteName","Year","Position","pos_group","School Type","archetype",
+               "athlete_quality_score","aq_pos_score","potential_score",
                "Concentric Impulse","30yd Split","RSI-modified","Peak Power / BM"]].copy()
     tbl = tbl.rename(columns={
-        "athleteName": "Athlete", "School Type": "School",
+        "athleteName": "Athlete", "pos_group": "Group", "School Type": "School",
         "archetype": "Archetype", "athlete_quality_score": "Quality",
-        "potential_score": "Potential", "Concentric Impulse": "CI",
-        "30yd Split": "30yd (s)", "RSI-modified": "RSI-mod",
-        "Peak Power / BM": "PkPwr/BM",
+        "aq_pos_score": "Pos. Quality", "potential_score": "Potential",
+        "Concentric Impulse": "CI", "30yd Split": "30yd (s)",
+        "RSI-modified": "RSI-mod", "Peak Power / BM": "PkPwr/BM",
     })
-    for c in ["Quality","Potential","CI","RSI-mod","PkPwr/BM"]:
+    for c in ["Quality","Pos. Quality","Potential","CI","RSI-mod","PkPwr/BM"]:
         tbl[c] = tbl[c].round(1)
     tbl["30yd (s)"] = tbl["30yd (s)"].round(3)
 
@@ -740,24 +872,24 @@ with tab_card:
 
     # ── Header banner ─────────────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="background:{NAV};border-radius:10px;padding:20px 28px;margin-bottom:20px;
-        border-left:6px solid {RED};position:relative;overflow:hidden">
-        <div style="position:absolute;top:0;left:0;right:0;height:4px;background:{GOLD}"></div>
+    <div style="background:white;border-radius:10px;padding:20px 28px;margin-bottom:20px;
+        border:1px solid {BORD};border-top:4px solid {RED};
+        box-shadow:0 2px 8px rgba(17,34,90,0.06);">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
             <div>
-                <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:#9AAAC0;margin:0 0 4px 0">
+                <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:{RED};margin:0 0 4px 0">
                     WASHINGTON NATIONALS · ATHLETE SCORECARD</p>
-                <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:white;margin:0 0 8px 0">
+                <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
                     {sel_ath}</h2>
                 <span class="arch-badge" style="background:{arch_color}">{row.get('archetype','—')}</span>
-                <span style="font-size:12px;color:#9AAAC0;margin-left:10px">
-                    {sel_yr} · {row.get('School Type','—')}</span>
+                <span style="font-size:12px;color:#6b7fa3;margin-left:10px">
+                    {sel_yr} · {row.get('Position','—')} · {row.get('School Type','—')}</span>
             </div>
             <div style="text-align:right">
-                <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:{GOLD};margin:0">
+                <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#6b7fa3;margin:0">
                     OVERALL RANK</p>
                 <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
-                    color:white;margin:0">#{int(row.get('overall_rank', 0))}</p>
+                    color:{RED};margin:0">#{int(row.get('overall_rank', 0))}</p>
                 <p style="font-size:11px;color:#9AAAC0;margin:0">of {len(df[df['Year']==sel_yr])} in {sel_yr}</p>
             </div>
         </div>
@@ -765,29 +897,45 @@ with tab_card:
     """, unsafe_allow_html=True)
 
     # ── Score gauges ──────────────────────────────────────────────────────────
-    g1, g2, g3 = st.columns(3)
+    g1, g2, g3, g4 = st.columns(4)
     with g1:
         st.plotly_chart(make_gauge(row.get("athlete_quality_score"), "Athlete Quality", RED),
                         use_container_width=True, key="g_aq")
     with g2:
+        st.plotly_chart(make_gauge(row.get("aq_pos_score"),
+                                   f"{row.get('pos_group','Pos.')} Quality", "#6b7fa3"),
+                        use_container_width=True, key="g_pos")
+    with g3:
         st.plotly_chart(make_gauge(row.get("potential_score"), "Development Potential", NAV),
                         use_container_width=True, key="g_pot")
-    with g3:
+    with g4:
         st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
 
     # ── Percentile cards ──────────────────────────────────────────────────────
     st.markdown('<p class="label" style="margin-top:4px">Percentiles</p>', unsafe_allow_html=True)
     pc = st.columns(5)
+    grp       = row.get("pos_group", "Unknown")
+    grp_label = grp if grp != "Unknown" else "Pos. Group"
+    grp_key   = grp.lower() if grp != "Unknown" else None
+
     pct_items = [
-        ("CI",        "ci_pct_alltime",     "ci_pct_yr",      False),
-        ("30yd Sprint","sprint_pct_alltime", "sprint_pct_yr",  True),
-        ("RSI-mod",   "rsi_pct_alltime",    "rsi_pct_yr",     False),
-        ("Pk Pwr/BM", "pp_pct",             None,             False),
-        ("Height",    "height_pct",         None,             False),
+        ("CI",         "ci_pct_alltime",     "ci_pct_yr",      False),
+        ("30yd Sprint","sprint_pct_alltime",  "sprint_pct_yr",  True),
+        ("RSI-mod",    "rsi_pct_alltime",     "rsi_pct_yr",     False),
+        ("Pk Pwr/BM",  "pp_pct_alltime",      "pp_pct_yr",      False),
+        ("Height",     "height_pct",          None,             False),
     ]
+    pos_pct_map = {
+        "CI":         f"ci_pct_{grp_key}"     if grp_key else None,
+        "30yd Sprint":f"sprint_pct_{grp_key}" if grp_key else None,
+        "RSI-mod":    f"rsi_pct_{grp_key}"    if grp_key else None,
+        "Pk Pwr/BM":  f"pp_pct_{grp_key}"     if grp_key else None,
+        "Height":     None,
+    }
     for col, pct_all_col, pct_yr_col, inv in pct_items:
-        p_all = row.get(pct_all_col, np.nan)
-        p_yr  = row.get(pct_yr_col, np.nan) if pct_yr_col else np.nan
+        p_all    = row.get(pct_all_col, np.nan)
+        p_yr     = row.get(pct_yr_col, np.nan) if pct_yr_col else np.nan
+        p_pos    = row.get(pos_pct_map[col], np.nan) if pos_pct_map[col] else np.nan
         with pc[pct_items.index((col, pct_all_col, pct_yr_col, inv))]:
             st.markdown(f"""
             <div class="card card-red" style="text-align:center;padding:14px 10px">
@@ -797,6 +945,9 @@ with tab_card:
                 <div style="font-size:13px;font-weight:600;color:{NAV};margin-top:4px">
                     {fmt(p_yr, 0) if pd.notna(p_yr) else '—'}</div>
                 <div style="font-size:10px;color:#9AAAC0">{sel_yr} pct</div>
+                <div style="font-size:13px;font-weight:600;color:#6b7fa3;margin-top:4px">
+                    {fmt(p_pos, 0) if pd.notna(p_pos) else '—'}</div>
+                <div style="font-size:10px;color:#9AAAC0">{grp_label} pct</div>
             </div>
             """, unsafe_allow_html=True)
 
