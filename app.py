@@ -777,7 +777,7 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card, tab_pct = st.tabs(["Leaderboard", "Athlete Scorecard", "Percentile Reference"])
+tab_board, tab_card, tab_pct, tab_guide, tab_ref = st.tabs(["Leaderboard", "Athlete Scorecard", "Distributions", "Guide", "Reference"])
 
 # =============================================================================
 # TAB 1 — LEADERBOARD
@@ -964,19 +964,61 @@ with tab_card:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Score gauges ──────────────────────────────────────────────────────────
-    g1, g2, g3, g4 = st.columns(4)
-    with g1:
-        st.plotly_chart(make_gauge(row.get("athlete_quality_score"), "Athlete Quality", RED),
-                        use_container_width=True, key="g_aq")
-    with g2:
-        st.plotly_chart(make_gauge(row.get("aq_pos_score"),
-                                   f"{row.get('pos_group','Pos.')} Quality", "#6b7fa3"),
+    # ── Score heroes — Quality + Potential front and center ──────────────────
+    aq_val  = row.get("athlete_quality_score", np.nan)
+    pot_val = row.get("potential_score", np.nan)
+    pos_val = row.get("aq_pos_score", np.nan)
+
+    def score_color(v):
+        if pd.isna(v): return "#9AAAC0"
+        if v >= 75: return GREEN
+        if v >= 50: return GOLD
+        return RED
+
+    hero1, hero2, hero3 = st.columns([1, 1, 1.2])
+    with hero1:
+        st.markdown(f"""
+        <div style="background:white;border:1px solid {BORD};border-radius:12px;
+            padding:24px 20px;text-align:center;
+            box-shadow:0 4px 16px rgba(186,12,47,0.12);
+            border-top:6px solid {RED};margin-bottom:4px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
+                text-transform:uppercase;color:{RED};margin-bottom:8px">
+                ★ ATHLETE QUALITY</div>
+            <div style="font-family:'Playfair Display',serif;font-size:64px;
+                font-weight:900;color:{RED};line-height:1">
+                {f"{aq_val:.0f}" if pd.notna(aq_val) else "—"}</div>
+            <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
+            <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
+                <div style="width:{min(100,max(0,aq_val or 0)):.0f}%;background:{RED};
+                    border-radius:6px;height:8px;transition:width 0.5s"></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with hero2:
+        st.markdown(f"""
+        <div style="background:white;border:1px solid {BORD};border-radius:12px;
+            padding:24px 20px;text-align:center;
+            box-shadow:0 4px 16px rgba(17,34,90,0.12);
+            border-top:6px solid {NAV};margin-bottom:4px">
+            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
+                text-transform:uppercase;color:{NAV};margin-bottom:8px">
+                ★ DEVELOPMENT POTENTIAL</div>
+            <div style="font-family:'Playfair Display',serif;font-size:64px;
+                font-weight:900;color:{NAV};line-height:1">
+                {f"{pot_val:.0f}" if pd.notna(pot_val) else "—"}</div>
+            <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
+            <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
+                <div style="width:{min(100,max(0,pot_val or 0)):.0f}%;background:{NAV};
+                    border-radius:6px;height:8px;transition:width 0.5s"></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with hero3:
+        # Pos group quality gauge + radar stacked
+        pos_grp_label = f"{row.get('pos_group','Pos.')} Quality"
+        st.plotly_chart(make_gauge(pos_val, pos_grp_label, "#6b7fa3"),
                         use_container_width=True, key="g_pos")
-    with g3:
-        st.plotly_chart(make_gauge(row.get("potential_score"), "Development Potential", NAV),
-                        use_container_width=True, key="g_pot")
-    with g4:
         st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
 
     # ── Percentile cards ──────────────────────────────────────────────────────
@@ -1427,3 +1469,268 @@ with tab_pct:
                     key=f"ref_{section_name}_{metric_col}_{grp_label}")
 
         st.markdown('<hr style="border-color:#E8ECF0;margin:8px 0">', unsafe_allow_html=True)
+
+# =============================================================================
+# TAB 4 — GUIDE
+# =============================================================================
+with tab_guide:
+    def gs(title, accent=RED):
+        st.markdown(
+            f'<h3 style="border-left:4px solid {accent};padding-left:12px;'
+            f'color:{NAV};margin:24px 0 10px 0">{title}</h3>',
+            unsafe_allow_html=True)
+
+    def score_block(name, formula, desc, accent=NAV):
+        st.markdown(f"""
+        <div style="padding:14px 16px;border-bottom:1px solid {BORD}">
+            <span style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;
+                color:{accent};margin-right:10px">{name}</span>
+            <span style="font-size:12px;color:#6b7fa3;background:{SURF};padding:2px 8px;
+                border-radius:4px;border:1px solid {BORD}">{formula}</span>
+            <p style="font-size:13px;line-height:1.7;color:#2a3a5a;margin:8px 0 0 0">{desc}</p>
+        </div>""", unsafe_allow_html=True)
+
+    def arch_block(name, color, desc):
+        st.markdown(f"""
+        <div style="padding:14px 16px;border-bottom:1px solid {BORD}">
+            <span style="background:{color};color:white;font-size:11px;font-weight:700;
+                padding:3px 12px;border-radius:20px;letter-spacing:0.04em">{name}</span>
+            <p style="font-size:13px;line-height:1.7;color:#2a3a5a;margin:8px 0 0 0">{desc}</p>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
+        f'border-radius:10px;padding:20px 24px;margin-bottom:20px;'
+        f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
+        f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
+        f'text-transform:uppercase;color:#6b7fa3;margin:0 0 6px 0">HOW TO READ THIS DASHBOARD</p>'
+        f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">Guide</h2>'
+        f'<p style="font-size:14px;color:#6b7fa3;margin:0">'
+        f'What the scores mean, how they\'re built, and what the archetypes tell you.</p></div>',
+        unsafe_allow_html=True)
+
+    gs("The Two Scores That Matter", RED)
+    st.markdown(
+        f'<p style="font-size:14px;line-height:1.75;color:#2a3a5a">'
+        f'Every athlete is evaluated on two headline numbers — <strong>Athlete Quality</strong> '
+        f'and <strong>Development Potential</strong>. Both are scaled 0–100 and shown prominently '
+        f'at the top of every scorecard. These are the numbers to focus on.</p>',
+        unsafe_allow_html=True)
+
+    score_block("Athlete Quality", "CI × 0.35 + Sprint × 0.30 + RSI × 0.15 + Peak Power × 0.20",
+        "How good an athlete they are right now, based on force plate and sprint performance. "
+        "Weights are adjustable in the sidebar. Players without sprint data use a separate CI/RSI/Peak Power formula.", accent=RED)
+    score_block("Development Potential", "Peak Power + Height + Leanness + School Type + Wingspan",
+        "How much room they have to grow. Rewards tall, lean high schoolers with long wingspans and high relative power output. "
+        "Weights are adjustable in the sidebar.", accent=NAV)
+    score_block("Position Group Quality", "Same formula as Athlete Quality, ranked within position group only",
+        "How the athlete compares to players at their position specifically — Pitchers vs Pitchers, Infielders vs Infielders, etc.")
+
+    gs("Athlete Quality — Component Metrics", RED)
+    for label, desc in [
+        ("Concentric Impulse (CI)", "Total force applied during the upward phase of the jump (N·s). The primary measure of lower body power output. Higher = better."),
+        ("30yd Sprint", "Time to cover 30 yards from a standing start (seconds). Lower = faster = better. 10yd and 20yd splits also recorded."),
+        ("RSI-modified", "Reactive Strength Index — jump height divided by ground contact time (m/s). Measures explosive efficiency. Higher = better."),
+        ("Peak Power / BM", "Peak power output during the jump normalized to body mass (W/kg). Higher = more powerful relative to size."),
+    ]:
+        st.markdown(f"""
+        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
+            <div style="font-size:13px;font-weight:600;color:{NAV};margin-bottom:3px">{label}</div>
+            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
+        </div>""", unsafe_allow_html=True)
+
+    gs("Development Potential — Component Factors", NAV)
+    for label, desc in [
+        ("Peak Power / BM", "Higher relative power = more athletic ceiling. Already used in quality score but a strong predictor of future output."),
+        ("Height", "Taller athletes have more projectability across all positions. No position adjustment — taller is always scored higher."),
+        ("Leanness (BW/Ht)", "Body weight divided by height. Lower ratio = leaner athlete = more room to add functional mass without losing athleticism."),
+        ("School Type", "High school athletes score highest — more developmental runway ahead. College athletes are more proven but less projectable."),
+        ("Wingspan Advantage", "Wingspan minus height. Positive = longer reach than height would predict. Particularly valuable for pitchers. Scaled as a percentile."),
+    ]:
+        st.markdown(f"""
+        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
+            <div style="font-size:13px;font-weight:600;color:{NAV};margin-bottom:3px">{label}</div>
+            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
+        </div>""", unsafe_allow_html=True)
+
+    gs("CMJ Archetypes", GOLD)
+    st.markdown(
+        f'<p style="font-size:13px;line-height:1.7;color:#2a3a5a;margin-bottom:10px">'
+        f'Archetypes describe <em>how</em> an athlete jumps, not how well. '
+        f'They are derived from six CMJ strategy features using robust z-scores and Mahalanobis distance.</p>',
+        unsafe_allow_html=True)
+    arch_block("Normal", "#4CAF82",
+        "All strategy features within 0.7 SD of pool median. Typical, unremarkable mechanics.")
+    arch_block("Long Loader", NAV,
+        "Unusually deep countermovement combined with a long eccentric phase. More time and displacement in the loading phase.")
+    arch_block("Front-Loaded Driver", RED,
+        "High CI-100ms and front-loaded CI ratio — disproportionate drive force in the first 100ms of the push-off.")
+    arch_block("Shallow Late-Driver", "#6b7fa3",
+        "Shallow countermovement depth combined with a back-loaded impulse ratio — force production ramps up later in the drive.")
+    arch_block("Unclassified", "#9AAAC0",
+        "Unusual strategy profile that doesn't fit a named pattern. Check the CMJ strategy bar chart for what's driving the flag.")
+
+    gs("CMJ Strategy Features", GOLD)
+    for feat, desc in [
+        ("Eccentric Duration",       "Time spent loading (moving downward). Longer = more deliberate, slower dip."),
+        ("Concentric Duration",      "Time spent driving upward. Shorter = more explosive push-off."),
+        ("Braking Phase Duration",   "Time between peak downward velocity and start of upward drive. Short = faster reversal."),
+        ("Countermovement Depth",    "How far the center of mass drops. Deeper = more elastic energy stored."),
+        ("Concentric Impulse–100ms", "Raw impulse in the first 100ms of upward drive. Proxy for early explosiveness."),
+        ("CI100 : Total CI Ratio",   "Share of total concentric impulse produced in first 100ms. High = front-loaded strategy."),
+    ]:
+        st.markdown(f"""
+        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
+            <div style="font-size:13px;font-weight:600;color:{NAV};margin-bottom:3px">{feat}</div>
+            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
+        </div>""", unsafe_allow_html=True)
+
+    gs("Position Groups", "#6b7fa3")
+    for grp, positions, desc in [
+        ("Pitchers",    "SP, RHP, LHP, RP, TWP", "Percentiles calculated within pitcher pool only. Wingspan included in potential weighting."),
+        ("Catchers",    "C",                      "Smallest group — percentiles less stable with fewer athletes."),
+        ("Infielders",  "SS, 3B, 2B, 1B",         "Largest position player group."),
+        ("Outfielders", "CF, LF, RF",              "Speed and power profile tends to skew higher than infielders."),
+    ]:
+        st.markdown(f"""
+        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px">
+                <span style="font-size:13px;font-weight:600;color:{NAV}">{grp}</span>
+                <span style="font-size:11px;color:#9AAAC0;background:{SURF};padding:1px 8px;
+                    border-radius:10px;border:1px solid {BORD}">{positions}</span>
+            </div>
+            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
+        </div>""", unsafe_allow_html=True)
+
+    gs("What This Is Not", "#9AAAC0")
+    for para in [
+        "These scores are <strong>not predictions of major league success</strong>. They describe current physical output and development room — one input among many.",
+        "The potential score does not account for pitchability, bat-to-ball skill, makeup, or injury history.",
+        "Scores become more meaningful as data accumulates. Single-year athletes are informative but tentative.",
+        "Players with missing sprint data are scored on CI/RSI/Peak Power only — this is noted in the scorecard. Missing data is not penalized.",
+    ]:
+        st.markdown(
+            f'<p style="font-size:14px;line-height:1.75;color:#2a3a5a;margin-bottom:10px">{para}</p>',
+            unsafe_allow_html=True)
+
+
+# =============================================================================
+# TAB 5 — REFERENCE
+# =============================================================================
+with tab_ref:
+    st.markdown(
+        f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
+        f'border-radius:10px;padding:20px 24px;margin-bottom:20px;'
+        f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
+        f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
+        f'text-transform:uppercase;color:#6b7fa3;margin:0 0 6px 0">POPULATION NORMS</p>'
+        f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">Reference Tables</h2>'
+        f'<p style="font-size:14px;color:#6b7fa3;margin:0">'
+        f'Mean ± 1 SD for each metric, broken out by position group and year.</p></div>',
+        unsafe_allow_html=True)
+
+    rr1, rr2 = st.columns([1, 1])
+    with rr1:
+        ref_yr_opts = ["All years"] + sorted(df["Year"].dropna().unique().astype(int).tolist(), reverse=True)
+        ref_yr_sel  = st.selectbox("Year", ref_yr_opts, key="ref_tbl_yr")
+    with rr2:
+        ref_pos_opts = ["All positions", "Pitcher", "Catcher", "Infielder", "Outfielder"]
+        ref_pos_sel  = st.selectbox("Position Group", ref_pos_opts, key="ref_tbl_pos")
+
+    ref_base = df.copy()
+    if ref_yr_sel != "All years":
+        ref_base = ref_base[ref_base["Year"] == int(ref_yr_sel)]
+    if ref_pos_sel != "All positions":
+        ref_base = ref_base[ref_base["pos_group"] == ref_pos_sel]
+
+    METRIC_GROUPS = {
+        "Athleticism": [
+            ("Concentric Impulse",                  "CI (N·s)",       1, ""),
+            ("RSI-modified",                        "RSI-modified",   3, ""),
+            ("Peak Power / BM",                     "Peak Pwr/BM",    1, ""),
+            ("30yd Split",                          "30yd (s)",       3, "s"),
+            ("10yd Split",                          "10yd (s)",       3, "s"),
+            ("Jump Height (Flight Time) in Inches", "Jump Ht (in)",   2, " in"),
+        ],
+        "Anthropometrics": [
+            ("Height",             "Height (cm)",      1, " cm"),
+            ("Mass",               "Mass (kg)",         1, " kg"),
+            ("Wingspan",           "Wingspan (cm)",     1, " cm"),
+            ("wingspan_advantage", "Wingspan Adv. (cm)",1, " cm"),
+        ],
+        "Composite Scores": [
+            ("athlete_quality_score",    "Athlete Quality",   1, ""),
+            ("potential_score",          "Dev. Potential",    1, ""),
+            ("aq_pos_score",             "Pos. Quality",      1, ""),
+            ("strategy_distance_score",  "Strategy Distance", 1, ""),
+        ],
+    }
+
+    for section, metrics in METRIC_GROUPS.items():
+        st.markdown(
+            f'<div style="border-left:4px solid {RED};padding-left:10px;margin:20px 0 10px 0">'
+            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
+            f'text-transform:uppercase;color:{RED}">{section}</span></div>',
+            unsafe_allow_html=True)
+
+        rows = []
+        for col, label, digits, suffix in metrics:
+            if col not in ref_base.columns:
+                continue
+            data = ref_base[col].dropna()
+            if len(data) < 2:
+                continue
+            rows.append({
+                "Metric":  label,
+                "N":       int(len(data)),
+                "Mean":    f"{data.mean():.{digits}f}{suffix}",
+                "SD":      f"{data.std(ddof=1):.{digits}f}{suffix}",
+                "p10":     f"{data.quantile(0.10):.{digits}f}{suffix}",
+                "p25":     f"{data.quantile(0.25):.{digits}f}{suffix}",
+                "Median":  f"{data.median():.{digits}f}{suffix}",
+                "p75":     f"{data.quantile(0.75):.{digits}f}{suffix}",
+                "p90":     f"{data.quantile(0.90):.{digits}f}{suffix}",
+            })
+
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True,
+                         hide_index=True, key=f"ref_tbl_{section}")
+
+    # ── Position group comparison ──────────────────────────────────────────────
+    st.markdown(
+        f'<div style="border-left:4px solid {NAV};padding-left:10px;margin:28px 0 10px 0">'
+        f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
+        f'text-transform:uppercase;color:{NAV}">Position Group Comparison</span></div>',
+        unsafe_allow_html=True)
+
+    cmp_metrics = [
+        ("Concentric Impulse",                  "CI (N·s)",     1),
+        ("RSI-modified",                        "RSI-mod",      3),
+        ("Peak Power / BM",                     "Pk Pwr/BM",    1),
+        ("30yd Split",                          "30yd (s)",     3),
+        ("Jump Height (Flight Time) in Inches", "Jump Ht (in)", 2),
+        ("Height",                              "Height (cm)",  1),
+        ("Mass",                                "Mass (kg)",    1),
+        ("athlete_quality_score",               "Quality",      1),
+        ("potential_score",                     "Potential",    1),
+    ]
+
+    base_yr = df.copy()
+    if ref_yr_sel != "All years":
+        base_yr = base_yr[base_yr["Year"] == int(ref_yr_sel)]
+
+    cmp_rows = []
+    for grp_name in ["Pitcher", "Catcher", "Infielder", "Outfielder"]:
+        grp_df = base_yr[base_yr["pos_group"] == grp_name]
+        row = {"Position Group": grp_name, "N": len(grp_df)}
+        for col, label, digits in cmp_metrics:
+            if col in grp_df.columns:
+                data = grp_df[col].dropna()
+                row[label] = f"{data.median():.{digits}f}" if len(data) > 0 else "—"
+            else:
+                row[label] = "—"
+        cmp_rows.append(row)
+
+    st.dataframe(pd.DataFrame(cmp_rows), use_container_width=True,
+                 hide_index=True, key="ref_pos_cmp")
+    st.caption("Values shown are medians within each position group for the selected year filter.")
