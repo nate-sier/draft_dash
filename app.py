@@ -1698,12 +1698,7 @@ with tab_ref:
             ("Wingspan",           "Wingspan (cm)",     1, " cm"),
             ("wingspan_advantage", "Wingspan Adv. (cm)",1, " cm"),
         ],
-        "Composite Scores": [
-            ("athlete_quality_score",    "Athlete Quality",   1, ""),
-            ("potential_score",          "Dev. Potential",    1, ""),
-            ("aq_pos_score",             "Pos. Quality",      1, ""),
-            ("strategy_distance_score",  "Strategy Distance", 1, ""),
-        ],
+
     }
 
     for section, metrics in METRIC_GROUPS.items():
@@ -1736,14 +1731,14 @@ with tab_ref:
             st.dataframe(pd.DataFrame(rows), use_container_width=True,
                          hide_index=True, key=f"ref_tbl_{section}")
 
-    # ── Position group comparison ──────────────────────────────────────────────
+    # ── School level comparison ───────────────────────────────────────────────
     st.markdown(
         f'<div style="border-left:4px solid {NAV};padding-left:10px;margin:28px 0 10px 0">'
         f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-        f'text-transform:uppercase;color:{NAV}">Position Group Comparison</span></div>',
+        f'text-transform:uppercase;color:{NAV}">By School Level</span></div>',
         unsafe_allow_html=True)
 
-    cmp_metrics = [
+    school_metrics = [
         ("Concentric Impulse",                  "CI (N·s)",     1),
         ("RSI-modified",                        "RSI-mod",      3),
         ("Peak Power / BM",                     "Pk Pwr/BM",    1),
@@ -1751,26 +1746,53 @@ with tab_ref:
         ("Jump Height (Flight Time) in Inches", "Jump Ht (in)", 2),
         ("Height",                              "Height (cm)",  1),
         ("Mass",                                "Mass (kg)",    1),
-        ("athlete_quality_score",               "Quality",      1),
-        ("potential_score",                     "Potential",    1),
+        ("Wingspan",                            "Wingspan (cm)",1),
+        ("wingspan_advantage",                  "Wing Adv.",    1),
     ]
 
     base_yr = df.copy()
     if ref_yr_sel != "All years":
         base_yr = base_yr[base_yr["Year"] == int(ref_yr_sel)]
 
-    cmp_rows = []
-    for grp_name in ["Pitcher", "Catcher", "Infielder", "Outfielder"]:
-        grp_df = base_yr[base_yr["pos_group"] == grp_name]
-        row = {"Position Group": grp_name, "N": len(grp_df)}
-        for col, label, digits in cmp_metrics:
-            if col in grp_df.columns:
-                data = grp_df[col].dropna()
-                row[label] = f"{data.median():.{digits}f}" if len(data) > 0 else "—"
+    # Filter by position group if selected
+    if ref_pos_sel != "All positions":
+        base_yr = base_yr[base_yr["pos_group"] == ref_pos_sel]
+
+    school_levels = ["High School", "Junior College", "4-Year College"]
+    school_rows = []
+    for level in school_levels:
+        lvl_df = base_yr[base_yr["School Type"] == level]
+        if len(lvl_df) == 0:
+            continue
+        row = {"School Level": level, "N": len(lvl_df)}
+        for col, label, digits in school_metrics:
+            if col in lvl_df.columns:
+                data = lvl_df[col].dropna()
+                if len(data) > 0:
+                    row[label] = f"{data.median():.{digits}f}"
+                    row[f"{label} (p25–p75)"] = f"{data.quantile(0.25):.{digits}f} – {data.quantile(0.75):.{digits}f}"
+                else:
+                    row[label] = "—"
+                    row[f"{label} (p25–p75)"] = "—"
             else:
                 row[label] = "—"
-        cmp_rows.append(row)
+                row[f"{label} (p25–p75)"] = "—"
+        school_rows.append(row)
 
-    st.dataframe(pd.DataFrame(cmp_rows), use_container_width=True,
-                 hide_index=True, key="ref_pos_cmp")
-    st.caption("Values shown are medians within each position group for the selected year filter.")
+    if school_rows:
+        # Show median table
+        median_cols = ["School Level", "N"] + [lbl for _, lbl, _ in school_metrics]
+        iqr_cols    = ["School Level", "N"] + [f"{lbl} (p25–p75)" for _, lbl, _ in school_metrics]
+        median_df   = pd.DataFrame(school_rows)[median_cols]
+        iqr_df      = pd.DataFrame(school_rows)[iqr_cols]
+
+        st.markdown('<p style="font-size:11px;font-weight:600;color:#6b7fa3;margin:8px 0 4px 0">Medians</p>',
+                    unsafe_allow_html=True)
+        st.dataframe(median_df, use_container_width=True, hide_index=True, key="ref_school_med")
+
+        st.markdown('<p style="font-size:11px;font-weight:600;color:#6b7fa3;margin:12px 0 4px 0">Interquartile Range (p25 – p75)</p>',
+                    unsafe_allow_html=True)
+        st.dataframe(iqr_df.rename(columns={f"{lbl} (p25–p75)": lbl for _, lbl, _ in school_metrics}),
+                     use_container_width=True, hide_index=True, key="ref_school_iqr")
+
+    st.caption("Values are medians / IQR within each school level for the selected filters.")
