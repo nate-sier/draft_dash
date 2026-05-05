@@ -565,13 +565,20 @@ def make_gauge(value, title, color=RED):
 
 # ─── Radar chart ─────────────────────────────────────────────────────────────
 def make_radar(row, label="Athlete"):
+    def safe_pct(row, key):
+        v = row.get(key, 50)
+        try:
+            return float(v) if v is not None and str(v) != "<NA>" else 50.0
+        except (TypeError, ValueError):
+            return 50.0
+
     cats = ["CI", "Sprint", "RSI-mod", "Peak Pwr", "Height"]
     vals = [
-        row.get("ci_pct_alltime", 50) or 50,
-        row.get("sprint_pct_alltime", 50) or 50,
-        row.get("rsi_pct_alltime", 50) or 50,
-        row.get("pp_pct_alltime", 50) or 50,
-        row.get("height_pct", 50) or 50,
+        safe_pct(row, "ci_pct_alltime"),
+        safe_pct(row, "sprint_pct_alltime"),
+        safe_pct(row, "rsi_pct_alltime"),
+        safe_pct(row, "pp_pct_alltime"),
+        safe_pct(row, "height_pct"),
     ]
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
