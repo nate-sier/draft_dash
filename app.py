@@ -135,7 +135,7 @@ def explain_strategy(rz_dict, feats):
 
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data from Google Sheets…")
-def load_data():
+def load_data(_v=3):  # bump _v to bust cache
     import gspread
     from google.oauth2.service_account import Credentials
     scopes = [
@@ -736,7 +736,7 @@ with st.sidebar:
 
 # ─── Load & score ─────────────────────────────────────────────────────────────
 try:
-    raw = load_data()
+    raw = load_data(_v=3)
     load_err = None
 except Exception as e:
     raw = None; load_err = f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"
