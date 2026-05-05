@@ -213,6 +213,31 @@ def load_data():
             (df["athleteName"].str.strip() != "") &
             (df["athleteName"].str.lower() != "nan")].copy()
     df = df.sort_values(["athleteName","Year"]).reset_index(drop=True)
+
+    # ── Sanity bounds — null out values outside physiologically plausible range ──
+    BOUNDS = {
+        "Concentric Impulse":                  (100, 400),
+        "RSI-modified":                        (0.1, 1.5),
+        "Peak Power / BM":                     (20,  120),
+        "30yd Split":                          (3.3, 5.0),
+        "10yd Split":                          (1.3, 2.2),
+        "20yd Split":                          (2.4, 3.8),
+        "Jump Height (Flight Time) in Inches": (8,   40),
+        "Concentric Impulse-100ms":            (30,  250),
+        "P1 Concentric Impulse":               (30,  250),
+        "Eccentric Duration":                  (0.1, 1.5),
+        "Concentric Duration":                 (0.05,0.8),
+        "Braking Phase Duration":              (0.05,0.8),
+        "Countermovement Depth":               (-120, -5),
+        "Height":                              (155, 215),
+        "Mass":                                (55,  175),
+        "Wingspan":                            (155, 230),
+    }
+    for col, (lo, hi) in BOUNDS.items():
+        if col in df.columns:
+            bad = (df[col] < lo) | (df[col] > hi)
+            df.loc[bad, col] = np.nan
+
     return df
 
 # ─── Model pipeline ───────────────────────────────────────────────────────────
