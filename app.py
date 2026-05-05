@@ -890,7 +890,7 @@ with tab_card:
         if not pid_match.empty:
             default_ath = pid_match.iloc[0]
 
-    sc1, sc2, sc2b, sc3 = st.columns([1.5, 2, 0.35, 1])
+    sc1, sc2, sc3 = st.columns([1.5, 2, 1])
     with sc1:
         search_name = st.text_input("Search athlete", placeholder="Type a name…", key="sc_search")
     with sc2:
@@ -905,16 +905,6 @@ with tab_card:
             default_idx = filtered_athletes.index(default_ath)
         sel_ath = st.selectbox("Select athlete", filtered_athletes,
                                index=default_idx, key="sc_ath")
-    with sc2b:
-        st.markdown('<div style="padding-top:28px">', unsafe_allow_html=True)
-        if st.button("✕", key="sc_clear", help="Clear selection — resets to full list",
-                     use_container_width=True):
-            st.query_params.clear()
-            for k in ["sc_search", "sc_ath"]:
-                if k in st.session_state:
-                    del st.session_state[k]
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
     with sc3:
         ath_years = sorted(df[df["athleteName"] == sel_ath]["Year"].dropna().unique().astype(int).tolist(),
                            reverse=True)
