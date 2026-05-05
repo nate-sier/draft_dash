@@ -426,7 +426,7 @@ def build_scores(_df,
         df.loc[idx, "potential_score_yr"] = scaled_0_100(df.loc[idx, "potential_raw"].values)
 
     # Overall rank (athlete quality only)
-    df["overall_rank"] = df["athlete_quality_score"].rank(ascending=False, method="min").astype(int)
+    df["overall_rank"] = df["athlete_quality_score"].rank(ascending=False, method="min").astype("Int64")
 
     return df, strategy_features, all_rz_cols
 
