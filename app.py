@@ -1049,49 +1049,39 @@ with tab_card:
     """, unsafe_allow_html=True)
 
     # ── Score heroes — Quality + Potential front and center ──────────────────
-    aq_val  = row.get("athlete_quality_score", np.nan)
-    pot_val = row.get("potential_score", np.nan)
-    pos_val = row.get("aq_pos_score", np.nan)
+    def safe_float(v):
+        try:
+            f = float(v)
+            return f if not np.isnan(f) else np.nan
+        except (TypeError, ValueError):
+            return np.nan
 
-    # Rank-derived percentile (most accurate — direct count of athletes beaten)
+    aq_val  = safe_float(row.get("athlete_quality_score"))
+    pot_val = safe_float(row.get("potential_score"))
+    pos_val = safe_float(row.get("aq_pos_score"))
+
+    # Percentile helpers
     def pct_suffix(p):
         if pd.isna(p): return "—"
         p = int(round(p))
         if 11 <= p % 100 <= 13: return f"{p}th"
         return {1:"st",2:"nd",3:"rd"}.get(p % 10, "th")
-    def rank_pct_str(rank_val, total):
-        if pd.isna(rank_val) or total == 0: return "—"
-        pct = int(round((1 - (rank_val - 1) / total) * 100))
-        return f"{pct}{pct_suffix(pct)} percentile"
 
-    overall_rank_val = row.get("overall_rank", np.nan)
-    yr_pool_size = (int(df[df["Year"]==sel_yr]["overall_rank"].notna().sum())
-                    if sel_yr else int(df["overall_rank"].notna().sum()))
-    aq_pct_str  = rank_pct_str(overall_rank_val, yr_pool_size)
+    # Percentile from score — what fraction of the pool scores below this athlete
+    # Use all-time pool regardless of year selector for consistency
+    def alltime_pct_str(val, col):
+        """Direct percentile: % of all athletes in pool scoring below this value."""
+        try:
+            pool = df[col].dropna().apply(float)
+            v    = float(val)
+            if len(pool) == 0: return "—"
+            pct  = int(round((pool < v).mean() * 100))
+            return f"{pct}{pct_suffix(pct)} percentile"
+        except Exception:
+            return "—"
 
-    # Potential rank percentile
-    pot_rank = df["potential_score"].dropna().rank(ascending=False, method="min")
-    pot_rank_val = np.nan
-    try:
-        if sel_yr:
-            yr_df = df[df["Year"] == sel_yr]
-            pot_ranks_yr = yr_df["potential_score"].dropna().rank(ascending=False, method="min")
-            match = yr_df[yr_df["athleteName"] == sel_ath]["potential_score"]
-            if not match.empty and pd.notna(match.iloc[0]):
-                pot_rank_val = pot_ranks_yr[match.index[0]]
-                pot_pool_size = yr_df["potential_score"].notna().sum()
-            else:
-                pot_rank_val, pot_pool_size = np.nan, 0
-        else:
-            match = df[df["athleteName"] == sel_ath]["potential_score"]
-            if not match.empty:
-                pot_rank_val = df["potential_score"].dropna().rank(ascending=False, method="min")[match.index[0]]
-                pot_pool_size = df["potential_score"].notna().sum()
-            else:
-                pot_rank_val, pot_pool_size = np.nan, 0
-    except Exception:
-        pot_rank_val, pot_pool_size = np.nan, 0
-    pot_pct_str = rank_pct_str(pot_rank_val, pot_pool_size)
+    aq_pct_str  = alltime_pct_str(aq_val,  "athlete_quality_score")
+    pot_pct_str = alltime_pct_str(pot_val, "potential_score")
 
     def score_color(v):
         if pd.isna(v): return "#9AAAC0"
@@ -1116,7 +1106,7 @@ with tab_card:
                 {aq_pct_str}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:2px">score out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{min(100,max(0,aq_val or 0)):.0f}%;
+                <div style="width:{min(100,max(0,float(aq_val) if pd.notna(aq_val) else 0)):.0f}%;
                     background:{"#4CAF82" if pd.notna(aq_val) and aq_val>=75 else "#E2C188" if pd.notna(aq_val) and aq_val>=50 else RED};
                     border-radius:6px;height:8px;transition:width 0.5s"></div>
             </div>
@@ -1138,7 +1128,7 @@ with tab_card:
                 {pot_pct_str}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{min(100,max(0,pot_val or 0)):.0f}%;
+                <div style="width:{min(100,max(0,float(pot_val) if pd.notna(pot_val) else 0)):.0f}%;
                     background:{"#4CAF82" if pd.notna(pot_val) and pot_val>=75 else "#E2C188" if pd.notna(pot_val) and pot_val>=50 else NAV};
                     border-radius:6px;height:8px;transition:width 0.5s"></div>
             </div>
