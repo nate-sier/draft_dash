@@ -9,16 +9,9 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
-from sklearn.covariance import MinCovDet
-from sklearn.cluster import KMeans
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 SHEET_ID   = "1RKyeb4CfU4wACUKqpbiR_--PJJ9KKO-LH-Ov9e6zNQs"
-RANDOM_STATE = 42
-MIN_GROUP_SIZE = 6
-
 PITCHER_POSITIONS = {"P", "SP", "RP", "Starting Pitcher", "Relief Pitcher",
                      "Right Hand Pitcher", "Left Hand Pitcher", "SC", "PC",
                      "Starting pitcher", "starting pitcher"}
@@ -223,16 +216,25 @@ def build_scores(_df,
         df[f"rz_{c}"] = robust_z(df[c])
     all_rz_cols = [f"rz_{f}" for f in strategy_features]
 
-    # Strategy distance (Mahalanobis, all-time pool)
-    X_s = df[strategy_features].fillna(0).values
-    scaler_s = StandardScaler().fit(X_s)
-    X_sc = scaler_s.transform(X_s)
-    ncomp = min(len(strategy_features), max(3, min(6, len(df) - 1)))
-    pca   = PCA(n_components=ncomp, whiten=True, random_state=RANDOM_STATE).fit(X_sc)
-    X_pca = pca.transform(X_sc)
+    # Strategy distance (Mahalanobis, all-time pool) — pure numpy
+    X_s = df[strategy_features].fillna(0).values.astype(float)
+    # Standardize
+    mu_s  = X_s.mean(axis=0)
+    sd_s  = X_s.std(axis=0)
+    sd_s[sd_s == 0] = 1.0
+    X_sc  = (X_s - mu_s) / sd_s
+    # PCA via SVD
+    _, s_vals, Vt = np.linalg.svd(X_sc, full_matrices=False)
+    ncomp  = min(len(strategy_features), max(3, min(6, len(df) - 1)))
+    X_pca  = X_sc @ Vt[:ncomp].T
+    # Mahalanobis via covariance of projected data
     try:
-        mcd = MinCovDet(random_state=RANDOM_STATE, support_fraction=0.8).fit(X_pca)
-        df["strategy_distance_raw"] = np.sqrt(mcd.mahalanobis(X_pca))
+        cov    = np.cov(X_pca, rowvar=False)
+        cov_inv = np.linalg.pinv(cov)
+        mu_pca = X_pca.mean(axis=0)
+        diff   = X_pca - mu_pca
+        dist2  = np.einsum("ij,jk,ik->i", diff, cov_inv, diff)
+        df["strategy_distance_raw"] = np.sqrt(np.abs(dist2))
     except Exception:
         df["strategy_distance_raw"] = np.linalg.norm(X_pca, axis=1)
     df["strategy_distance_score"] = pct_rank(df["strategy_distance_raw"])
