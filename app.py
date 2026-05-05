@@ -426,7 +426,14 @@ def build_scores(_df,
         df.loc[idx, "potential_score_yr"] = scaled_0_100(df.loc[idx, "potential_raw"].values)
 
     # Overall rank (athlete quality only)
-    df["overall_rank"] = df["athlete_quality_score"].rank(ascending=False, method="min").astype("Int64")
+    # Rank within each year
+    df["overall_rank"] = np.nan
+    for yr, idx in df.groupby("Year").groups.items():
+        df.loc[idx, "overall_rank"] = (
+            df.loc[idx, "athlete_quality_score"]
+            .rank(ascending=False, method="min")
+        )
+    df["overall_rank"] = df["overall_rank"].astype("Int64")
 
     return df, strategy_features, all_rz_cols
 
@@ -890,7 +897,7 @@ with tab_card:
                     OVERALL RANK</p>
                 <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
                     color:{RED};margin:0">#{int(row.get('overall_rank', 0))}</p>
-                <p style="font-size:11px;color:#9AAAC0;margin:0">of {len(df[df['Year']==sel_yr])} in {sel_yr}</p>
+                <p style="font-size:11px;color:#9AAAC0;margin:0">of {int(df[df['Year']==sel_yr]['overall_rank'].notna().sum())} in {sel_yr}</p>
             </div>
         </div>
     </div>
