@@ -745,7 +745,7 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card = st.tabs(["Leaderboard", "Athlete Scorecard"])
+tab_board, tab_card, tab_pct = st.tabs(["Leaderboard", "Athlete Scorecard", "Percentile Reference"])
 
 # =============================================================================
 # TAB 1 — LEADERBOARD
@@ -1081,3 +1081,312 @@ with tab_card:
                     Trend charts appear once a second year of data is recorded.</p>
             </div>
             """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# TAB 3 — PERCENTILE REFERENCE
+# =============================================================================
+with tab_pct:
+
+    pr1, pr2, pr3 = st.columns([2, 1.2, 1.2])
+    with pr1:
+        search_pct = st.text_input("Search athlete", placeholder="Type a name…", key="pct_search")
+    with pr2:
+        filtered_pct = ([a for a in athletes if search_pct.lower() in a.lower()]
+                        if search_pct else athletes)
+        if not filtered_pct: filtered_pct = athletes
+        sel_pct_ath = st.selectbox("Select athlete", filtered_pct, key="pct_ath")
+    with pr3:
+        pct_years = sorted(df[df["athleteName"] == sel_pct_ath]["Year"]
+                           .dropna().unique().astype(int).tolist(), reverse=True)
+        pct_yr_opts = ["All years"] + [str(y) for y in pct_years]
+        sel_pct_yr_str = st.selectbox("Year", pct_yr_opts, key="pct_yr")
+        sel_pct_yr = None if sel_pct_yr_str == "All years" else int(sel_pct_yr_str)
+
+    ath_pct_all = df[df["athleteName"] == sel_pct_ath].sort_values("Year")
+    if sel_pct_yr is None:
+        pct_row_data = ath_pct_all.select_dtypes(include=[np.number]).mean()
+        latest_pct   = ath_pct_all.iloc[-1]
+        for col in ath_pct_all.columns:
+            if col not in pct_row_data.index:
+                pct_row_data[col] = latest_pct[col]
+        pct_row = pct_row_data
+        pct_yr_label = (f"{pct_years[-1]}–{pct_years[0]}" if len(pct_years) > 1
+                        else str(pct_years[0]))
+    else:
+        pct_sub = ath_pct_all[ath_pct_all["Year"] == sel_pct_yr]
+        if pct_sub.empty:
+            st.warning("No data for this athlete/year combination.")
+            st.stop()
+        pct_row = pct_sub.iloc[0]
+        pct_yr_label = str(sel_pct_yr)
+
+    pct_grp     = pct_row.get("pos_group", "Unknown")
+    pct_grp_key = pct_grp.lower() if pct_grp != "Unknown" else None
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    st.markdown(f"""
+    <div style="background:white;border-radius:10px;padding:16px 22px;margin-bottom:20px;
+        border:1px solid {BORD};border-top:4px solid {NAV};
+        box-shadow:0 2px 8px rgba(17,34,90,0.06);">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div>
+                <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:{NAV};margin:0 0 4px 0">
+                    PERCENTILE REFERENCE</p>
+                <h2 style="font-family:'Playfair Display',serif;font-size:24px;color:{NAV};margin:0">
+                    {sel_pct_ath}</h2>
+            </div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+                <div style="text-align:center">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">YEAR</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:{NAV}">{pct_yr_label}</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">POSITION</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:{NAV}">{pct_row.get("Position","—")}</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">GROUP</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:{NAV}">{pct_grp}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Build percentile table data ────────────────────────────────────────────
+    def pct_bar_html(val, color=RED):
+        if pd.isna(val): return '<span style="color:#9AAAC0">—</span>'
+        pct = max(0, min(100, float(val)))
+        bar_color = GREEN if pct >= 75 else (GOLD if pct >= 50 else RED)
+        return f"""
+        <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;background:#F0F3F8;border-radius:4px;height:10px;min-width:80px">
+                <div style="width:{pct:.0f}%;background:{bar_color};border-radius:4px;height:10px;
+                    transition:width 0.3s"></div>
+            </div>
+            <span style="font-weight:700;color:{NAV};font-size:13px;min-width:28px;text-align:right">
+                {pct:.0f}</span>
+        </div>"""
+
+    def make_pct_section(title, rows, accent=NAV):
+        """rows = list of (label, raw_val, raw_fmt, alltime_pct, yr_pct, pos_pct)"""
+        header = f"""
+        <div style="border-left:4px solid {accent};padding-left:12px;margin:20px 0 10px 0">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.14em;
+                text-transform:uppercase;color:{accent}">{title}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+                <tr style="border-bottom:2px solid {BORD}">
+                    <th style="text-align:left;padding:6px 8px;color:#6b7fa3;font-size:10px;
+                        font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:22%">Metric</th>
+                    <th style="text-align:right;padding:6px 8px;color:#6b7fa3;font-size:10px;
+                        font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:12%">Value</th>
+                    <th style="text-align:left;padding:6px 8px;color:#6b7fa3;font-size:10px;
+                        font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:22%">All-time</th>
+                    <th style="text-align:left;padding:6px 8px;color:#6b7fa3;font-size:10px;
+                        font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:22%">Year</th>
+                    <th style="text-align:left;padding:6px 8px;color:#6b7fa3;font-size:10px;
+                        font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:22%">{pct_grp}</th>
+                </tr>
+            </thead>
+            <tbody>"""
+        body = ""
+        for i, (label, raw_val, raw_fmt, alltime_pct, yr_pct, pos_pct) in enumerate(rows):
+            bg = "background:#F7F8FA;" if i % 2 == 0 else ""
+            body += f"""
+                <tr style="border-bottom:1px solid {BORD};{bg}">
+                    <td style="padding:8px 8px;font-weight:600;color:{NAV}">{label}</td>
+                    <td style="padding:8px 8px;text-align:right;color:#6b7fa3;font-family:monospace">
+                        {fmt(raw_val, *raw_fmt) if pd.notna(raw_val) else '—'}</td>
+                    <td style="padding:8px 8px">{pct_bar_html(alltime_pct)}</td>
+                    <td style="padding:8px 8px">{pct_bar_html(yr_pct)}</td>
+                    <td style="padding:8px 8px">{pct_bar_html(pos_pct)}</td>
+                </tr>"""
+        footer = "</tbody></table>"
+        return header + body + footer
+
+    # ── Per-year pct lookup ────────────────────────────────────────────────────
+    def get_yr_pct(col, invert=False):
+        """Recompute year percentile for this specific year."""
+        if sel_pct_yr is None: return np.nan
+        yr_vals = df[df["Year"] == sel_pct_yr][col].dropna()
+        raw     = pct_row.get(col, np.nan)
+        if pd.isna(raw) or len(yr_vals) < 2: return np.nan
+        r = (yr_vals < raw).mean() * 100
+        return 100 - r if invert else r
+
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        # ── Athleticism ───────────────────────────────────────────────────────
+        ath_rows = [
+            ("Concentric Impulse",
+             pct_row.get("Concentric Impulse"), (1,),
+             pct_row.get("ci_pct_alltime"),
+             get_yr_pct("Concentric Impulse"),
+             pct_row.get(f"ci_pct_{pct_grp_key}") if pct_grp_key else np.nan),
+            ("RSI-modified",
+             pct_row.get("RSI-modified"), (3,),
+             pct_row.get("rsi_pct_alltime"),
+             get_yr_pct("RSI-modified"),
+             pct_row.get(f"rsi_pct_{pct_grp_key}") if pct_grp_key else np.nan),
+            ("Peak Power / BM",
+             pct_row.get("Peak Power / BM"), (1,),
+             pct_row.get("pp_pct_alltime"),
+             get_yr_pct("Peak Power / BM"),
+             pct_row.get(f"pp_pct_{pct_grp_key}") if pct_grp_key else np.nan),
+            ("30yd Sprint",
+             pct_row.get("30yd Split"), (3, "s"),
+             pct_row.get("sprint_pct_alltime"),
+             get_yr_pct("30yd Split", invert=True),
+             pct_row.get(f"sprint_pct_{pct_grp_key}") if pct_grp_key else np.nan),
+            ("10yd Split",
+             pct_row.get("10yd Split"), (3, "s"),
+             100 - pct_rank(df["10yd Split"].dropna()).reindex(df.index).get(
+                 df[df["athleteName"]==sel_pct_ath].index[0] if not df[df["athleteName"]==sel_pct_ath].empty else -1, np.nan),
+             get_yr_pct("10yd Split", invert=True),
+             np.nan),
+            ("20yd Split",
+             pct_row.get("20yd Split"), (3, "s"),
+             np.nan, get_yr_pct("20yd Split", invert=True), np.nan),
+            ("Jump Height (in)",
+             pct_row.get("Jump Height (Flight Time) in Inches"), (2, " in"),
+             pct_rank(df["Jump Height (Flight Time) in Inches"]).reindex(df.index).get(
+                 df[df["athleteName"]==sel_pct_ath].index[0] if not df[df["athleteName"]==sel_pct_ath].empty else -1, np.nan),
+             get_yr_pct("Jump Height (Flight Time) in Inches"),
+             np.nan),
+        ]
+        st.markdown(make_pct_section("Athleticism Metrics", ath_rows, RED), unsafe_allow_html=True)
+
+        # ── CMJ Strategy ──────────────────────────────────────────────────────
+        strat_rows = [
+            ("Eccentric Duration",
+             pct_row.get("Eccentric Duration"), (3, "s"),
+             np.nan, np.nan, np.nan),
+            ("Concentric Duration",
+             pct_row.get("Concentric Duration"), (3, "s"),
+             np.nan, np.nan, np.nan),
+            ("Braking Phase Dur.",
+             pct_row.get("Braking Phase Duration"), (3, "s"),
+             np.nan, np.nan, np.nan),
+            ("Countermovement Depth",
+             pct_row.get("Countermovement Depth"), (1, " cm"),
+             np.nan, np.nan, np.nan),
+            ("CI-100ms",
+             pct_row.get("Concentric Impulse-100ms"), (1,),
+             np.nan, np.nan, np.nan),
+            ("P1 Conc. Impulse",
+             pct_row.get("P1 Concentric Impulse"), (1,),
+             np.nan, np.nan, np.nan),
+        ]
+        # Add strategy z-score as value, no percentiles
+        st.markdown(f"""
+        <div style="border-left:4px solid {GOLD};padding-left:12px;margin:20px 0 10px 0">
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.14em;
+                text-transform:uppercase;color:{GOLD}">CMJ Strategy — Raw Values & Z-scores</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+                <tr style="border-bottom:2px solid {BORD}">
+                    <th style="text-align:left;padding:6px 8px;color:#6b7fa3;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:40%">Metric</th>
+                    <th style="text-align:right;padding:6px 8px;color:#6b7fa3;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:25%">Value</th>
+                    <th style="text-align:right;padding:6px 8px;color:#6b7fa3;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:20%">Z-score</th>
+                    <th style="text-align:left;padding:6px 8px;color:#6b7fa3;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;width:15%">Flag</th>
+                </tr>
+            </thead>
+            <tbody>""", unsafe_allow_html=True)
+
+        strat_feat_map = [
+            ("Eccentric Duration",      "Eccentric Duration",       3, "s"),
+            ("Concentric Duration",     "Concentric Duration",      3, "s"),
+            ("Braking Phase Dur.",      "Braking Phase Duration",   3, "s"),
+            ("CM Depth",                "Countermovement Depth",    1, " cm"),
+            ("CI-100ms",                "Concentric Impulse-100ms", 1, ""),
+            ("P1 Conc. Impulse",        "P1 Concentric Impulse",    1, ""),
+        ]
+        strat_html = ""
+        for i, (label, col, digits, suffix) in enumerate(strat_feat_map):
+            raw_v = pct_row.get(col, np.nan)
+            z_v   = pct_row.get(f"rz_{col}", np.nan)
+            bg    = "background:#F7F8FA;" if i % 2 == 0 else ""
+            z_str = f"{z_v:+.2f}" if pd.notna(z_v) else "—"
+            z_col = RED if (pd.notna(z_v) and abs(z_v) >= 0.8) else "#6b7fa3"
+            flag  = "⚑" if (pd.notna(z_v) and abs(z_v) >= 1.5) else ("·" if (pd.notna(z_v) and abs(z_v) >= 0.8) else "")
+            strat_html += f"""
+                <tr style="border-bottom:1px solid {BORD};{bg}">
+                    <td style="padding:8px 8px;font-weight:600;color:{NAV}">{label}</td>
+                    <td style="padding:8px 8px;text-align:right;color:#6b7fa3;font-family:monospace">{fmt(raw_v, digits, suffix) if pd.notna(raw_v) else '—'}</td>
+                    <td style="padding:8px 8px;text-align:right;font-weight:700;color:{z_col}">{z_str}</td>
+                    <td style="padding:8px 8px;color:{RED}">{flag}</td>
+                </tr>"""
+        st.markdown(strat_html + "</tbody></table>", unsafe_allow_html=True)
+
+    with col_right:
+        # ── Scores ────────────────────────────────────────────────────────────
+        score_rows = [
+            ("Athlete Quality (all-time)",
+             pct_row.get("athlete_quality_score"), (1,),
+             pct_row.get("athlete_quality_score"), np.nan, np.nan),
+            ("Athlete Quality (year)",
+             pct_row.get("aq_score_yr"), (1,),
+             np.nan, pct_row.get("aq_score_yr"), np.nan),
+            ("Pos. Group Quality",
+             pct_row.get("aq_pos_score"), (1,),
+             np.nan, np.nan, pct_row.get("aq_pos_score")),
+            ("Development Potential",
+             pct_row.get("potential_score"), (1,),
+             pct_row.get("potential_score"), np.nan, np.nan),
+            ("Strategy Distance",
+             pct_row.get("strategy_distance_score"), (1,),
+             pct_row.get("strategy_distance_score"), np.nan, np.nan),
+        ]
+        st.markdown(make_pct_section("Composite Scores", score_rows, RED), unsafe_allow_html=True)
+
+        # ── Anthropometrics ───────────────────────────────────────────────────
+        anth_rows = [
+            ("Height",
+             pct_row.get("Height"), (1, " cm"),
+             pct_row.get("height_pct"),
+             get_yr_pct("Height"),
+             np.nan),
+            ("Mass (kg)",
+             pct_row.get("Mass"), (1, " kg"),
+             100 - pct_rank(df["Mass"]).reindex(df.index).get(
+                 df[df["athleteName"]==sel_pct_ath].index[0] if not df[df["athleteName"]==sel_pct_ath].empty else -1, np.nan),
+             get_yr_pct("Mass", invert=True),
+             np.nan),
+            ("Wingspan",
+             pct_row.get("Wingspan"), (1, " cm"),
+             np.nan, np.nan, np.nan),
+            ("Wingspan Advantage",
+             pct_row.get("wingspan_advantage"), (1, " cm"),
+             pct_row.get("wingspan_pct"),
+             np.nan, np.nan),
+            ("Leanness (BW/Ht)",
+             pct_row.get("bmi_raw"), (3,),
+             pct_row.get("bmi_pct"),
+             np.nan, np.nan),
+        ]
+        st.markdown(make_pct_section("Anthropometrics", anth_rows, NAV), unsafe_allow_html=True)
+
+        # ── Potential components ───────────────────────────────────────────────
+        pot_rows = [
+            ("Peak Power / BM",
+             pct_row.get("pp_pct_alltime"), (1,),
+             pct_row.get("pp_pct_alltime"), np.nan, np.nan),
+            ("Height",
+             pct_row.get("height_pct"), (1,),
+             pct_row.get("height_pct"), np.nan, np.nan),
+            ("Leanness",
+             pct_row.get("bmi_pct"), (1,),
+             pct_row.get("bmi_pct"), np.nan, np.nan),
+            ("School Type Score",
+             pct_row.get("school_score"), (0,),
+             pct_row.get("school_score"), np.nan, np.nan),
+            ("Wingspan Advantage",
+             pct_row.get("wingspan_pct"), (1,),
+             pct_row.get("wingspan_pct"), np.nan, np.nan),
+        ]
+        st.markdown(make_pct_section("Potential Components", pot_rows, GREEN), unsafe_allow_html=True)
