@@ -1262,81 +1262,154 @@ with tab_pct:
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown('<p class="label">Distributions</p>', unsafe_allow_html=True)
 
-    # ── Section: Athleticism ──────────────────────────────────────────────────
-    st.markdown(f'<div style="border-left:4px solid {RED};padding-left:10px;margin:16px 0 8px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{RED}">Athleticism</span></div>',
-                unsafe_allow_html=True)
-    ath_metrics = [
-        ("Concentric Impulse",                 "Concentric Impulse (N·s)", 25, False, 1, ""),
-        ("RSI-modified",                       "RSI-modified",             25, False, 3, ""),
-        ("Peak Power / BM",                    "Peak Power / BM",          25, False, 1, ""),
-        ("30yd Split",                         "30yd Sprint (s)",          25, True,  3, "s"),
-        ("10yd Split",                         "10yd Split (s)",           20, True,  3, "s"),
-        ("Jump Height (Flight Time) in Inches","Jump Height (in)",         20, False, 2, " in"),
-    ]
-    cols_per_row = 3
-    for i in range(0, len(ath_metrics), cols_per_row):
-        chunk = ath_metrics[i:i+cols_per_row]
-        cols  = st.columns(cols_per_row)
-        for col_widget, (metric_col, label, nbins, inv, digits, suffix) in zip(cols, chunk):
-            fig = dist_fig(metric_col, label, nbins, inv, digits, suffix)
-            if fig:
-                col_widget.plotly_chart(fig, use_container_width=True,
-                                        key=f"ref_{metric_col}")
-            else:
-                col_widget.markdown(
-                    f'<div style="height:220px;display:flex;align-items:center;'
-                    f'justify-content:center;color:#9AAAC0;font-size:12px">'
-                    f'Insufficient data for {label}</div>', unsafe_allow_html=True)
+    # ── Metric groups ─────────────────────────────────────────────────────────
+    ALL_METRICS = {
+        "Athleticism": [
+            ("Concentric Impulse",                  "CI (N·s)",       25, False, 1, ""),
+            ("RSI-modified",                        "RSI-modified",   25, False, 3, ""),
+            ("Peak Power / BM",                     "Peak Pwr/BM",    25, False, 1, ""),
+            ("30yd Split",                          "30yd (s)",       25, True,  3, "s"),
+            ("10yd Split",                          "10yd (s)",       20, True,  3, "s"),
+            ("Jump Height (Flight Time) in Inches", "Jump Ht (in)",   20, False, 2, " in"),
+        ],
+        "Anthropometrics": [
+            ("Height",             "Height (cm)",     20, False, 1, " cm"),
+            ("Mass",               "Mass (kg)",        20, False, 1, " kg"),
+            ("Wingspan",           "Wingspan (cm)",    20, False, 1, " cm"),
+            ("wingspan_advantage", "Wingspan Adv.",    20, False, 1, " cm"),
+            ("bmi_raw",            "BW/Ht Ratio",      20, False, 3, ""),
+        ],
+        "Composite Scores": [
+            ("athlete_quality_score",   "Quality Score",   20, False, 1, ""),
+            ("aq_pos_score",            "Pos. Quality",    20, False, 1, ""),
+            ("potential_score",         "Potential",       20, False, 1, ""),
+            ("strategy_distance_score", "Strategy Dist.",  20, False, 1, ""),
+        ],
+    }
 
-    # ── Section: Anthropometrics ──────────────────────────────────────────────
-    st.markdown(f'<div style="border-left:4px solid {NAV};padding-left:10px;margin:20px 0 8px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{NAV}">Anthropometrics</span></div>',
-                unsafe_allow_html=True)
-    anth_metrics = [
-        ("Height",             "Height (cm)",          20, False, 1, " cm"),
-        ("Mass",               "Mass (kg)",             20, False, 1, " kg"),
-        ("Wingspan",           "Wingspan (cm)",         20, False, 1, " cm"),
-        ("wingspan_advantage", "Wingspan Advantage (cm)", 20, False, 1, " cm"),
-        ("bmi_raw",            "BW/Ht Ratio (leanness)", 20, False, 3, ""),
-    ]
-    for i in range(0, len(anth_metrics), cols_per_row):
-        chunk = anth_metrics[i:i+cols_per_row]
-        cols  = st.columns(cols_per_row)
-        for col_widget, (metric_col, label, nbins, inv, digits, suffix) in zip(cols, chunk):
-            fig = dist_fig(metric_col, label, nbins, inv, digits, suffix)
-            if fig:
-                col_widget.plotly_chart(fig, use_container_width=True,
-                                        key=f"ref_{metric_col}")
-            else:
-                col_widget.markdown(
-                    f'<div style="height:220px;display:flex;align-items:center;'
-                    f'justify-content:center;color:#9AAAC0;font-size:12px">'
-                    f'Insufficient data for {label}</div>', unsafe_allow_html=True)
+    SECTION_COLORS = {
+        "Athleticism":      RED,
+        "Anthropometrics":  NAV,
+        "Composite Scores": GREEN,
+    }
 
-    # ── Section: Scores ───────────────────────────────────────────────────────
-    st.markdown(f'<div style="border-left:4px solid {GREEN};padding-left:10px;margin:20px 0 8px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{GREEN}">Composite Scores</span></div>',
-                unsafe_allow_html=True)
-    score_metrics = [
-        ("athlete_quality_score", "Athlete Quality Score", 20, False, 1, ""),
-        ("aq_pos_score",          "Pos. Group Quality",    20, False, 1, ""),
-        ("potential_score",       "Development Potential", 20, False, 1, ""),
-        ("strategy_distance_score","Strategy Distance",    20, False, 1, ""),
+    # Population groups: (label, accent color, filter mask or None)
+    POP_GROUPS = [
+        ("All Players",      "#6b7fa3", None),
+        ("Position Players", GREEN,     df["pos_group"].isin(["Catcher","Infielder","Outfielder"])),
+        ("Pitchers",         RED,       df["pos_group"] == "Pitcher"),
+        ("Catchers",         NAV,       df["pos_group"] == "Catcher"),
+        ("Infielders",       GOLD,      df["pos_group"] == "Infielder"),
+        ("Outfielders",      GREEN,     df["pos_group"] == "Outfielder"),
     ]
-    for i in range(0, len(score_metrics), cols_per_row):
-        chunk = score_metrics[i:i+cols_per_row]
-        cols  = st.columns(cols_per_row)
-        for col_widget, (metric_col, label, nbins, inv, digits, suffix) in zip(cols, chunk):
-            fig = dist_fig(metric_col, label, nbins, inv, digits, suffix)
-            if fig:
-                col_widget.plotly_chart(fig, use_container_width=True,
-                                        key=f"ref_{metric_col}")
-            else:
+
+    # Apply the year filter from the top of the tab to each group
+    def get_group_df(mask):
+        base = df.copy() if ref_yr == "All years" else df[df["Year"] == int(ref_yr)].copy()
+        return base[mask] if mask is not None else base
+
+    # ── Render each metric section ─────────────────────────────────────────────
+    for section_name, metrics in ALL_METRICS.items():
+        sec_color = SECTION_COLORS[section_name]
+        st.markdown(
+            f'<div style="border-left:4px solid {sec_color};padding-left:10px;'
+            f'margin:28px 0 12px 0">'
+            f'<span style="font-size:11px;font-weight:700;letter-spacing:0.14em;'
+            f'text-transform:uppercase;color:{sec_color}">{section_name}</span></div>',
+            unsafe_allow_html=True)
+
+        for metric_col, label, nbins, inv, digits, suffix in metrics:
+            # Row header for this metric
+            st.markdown(
+                f'<p style="font-size:10px;font-weight:600;letter-spacing:0.1em;'
+                f'text-transform:uppercase;color:#6b7fa3;margin:12px 0 6px 0">'
+                f'{label}</p>',
+                unsafe_allow_html=True)
+
+            # One column per population group
+            group_cols = st.columns(len(POP_GROUPS))
+            for col_widget, (grp_label, grp_color, grp_mask) in zip(group_cols, POP_GROUPS):
+                grp_df  = get_group_df(grp_mask)
+                data    = grp_df[metric_col].dropna() if metric_col in grp_df.columns else pd.Series([], dtype=float)
+                n       = len(data)
+
+                # Column group header
                 col_widget.markdown(
-                    f'<div style="height:220px;display:flex;align-items:center;'
-                    f'justify-content:center;color:#9AAAC0;font-size:12px">'
-                    f'Insufficient data for {label}</div>', unsafe_allow_html=True)
+                    f'<div style="text-align:center;padding:4px 0;margin-bottom:4px;'
+                    f'border-bottom:2px solid {grp_color}">'
+                    f'<span style="font-size:9px;font-weight:700;letter-spacing:0.1em;'
+                    f'text-transform:uppercase;color:{grp_color}">{grp_label}</span>'
+                    f'<span style="font-size:9px;color:#9AAAC0;margin-left:4px">n={n}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+
+                if n < 4:
+                    col_widget.markdown(
+                        f'<div style="height:180px;display:flex;align-items:center;'
+                        f'justify-content:center;color:#9AAAC0;font-size:11px;'
+                        f'text-align:center">Insufficient<br>data</div>',
+                        unsafe_allow_html=True)
+                    continue
+
+                q25 = data.quantile(0.25 if not inv else 0.75)
+                q50 = data.median()
+                q75 = data.quantile(0.75 if not inv else 0.25)
+
+                if ref_chart == "Histogram":
+                    fig = go.Figure()
+                    fig.add_trace(go.Histogram(
+                        x=data, nbinsx=nbins,
+                        marker_color=grp_color,
+                        marker_line=dict(color="white", width=0.4),
+                        opacity=0.85,
+                    ))
+                    for q, lbl, dash in [(q25,"p25","dash"),(q50,"p50","solid"),(q75,"p75","dash")]:
+                        fig.add_vline(
+                            x=q, line_dash=dash,
+                            line_color=NAV, line_width=1.5,
+                            annotation=dict(
+                                text=f"{lbl}<br><b>{q:.{digits}f}{suffix}</b>",
+                                font=dict(color=NAV, size=8),
+                                bgcolor="white", borderpad=2,
+                                yref="paper", y=0.98, showarrow=False,
+                            ),
+                        )
+                    fig.update_layout(
+                        height=200,
+                        margin=dict(l=20, r=8, t=30, b=30),
+                        paper_bgcolor="white", plot_bgcolor="white",
+                        font=dict(family="Arial", color=NAV, size=9),
+                        xaxis=dict(tickfont=dict(size=8), showgrid=True,
+                                   gridcolor=BORD, zeroline=False),
+                        yaxis=dict(tickfont=dict(size=8), showgrid=True,
+                                   gridcolor=BORD, title=""),
+                        showlegend=False, template="plotly_white",
+                    )
+                else:
+                    fig = go.Figure()
+                    fig.add_trace(go.Box(
+                        x=data, name="",
+                        marker_color=grp_color,
+                        line_color=NAV, line_width=1.5,
+                        fillcolor=f"rgba(17,34,90,0.08)",
+                        boxmean="sd",
+                        boxpoints="outliers",
+                        marker=dict(size=4, opacity=0.4, color=grp_color),
+                    ))
+                    fig.update_layout(
+                        height=200,
+                        margin=dict(l=20, r=8, t=30, b=30),
+                        paper_bgcolor="white", plot_bgcolor="white",
+                        font=dict(family="Arial", color=NAV, size=9),
+                        xaxis=dict(tickfont=dict(size=8), showgrid=True,
+                                   gridcolor=BORD,
+                                   autorange="reversed" if inv else True),
+                        yaxis=dict(showticklabels=False),
+                        showlegend=False, template="plotly_white",
+                    )
+
+                col_widget.plotly_chart(
+                    fig, use_container_width=True,
+                    key=f"ref_{section_name}_{metric_col}_{grp_label}")
+
+        st.markdown('<hr style="border-color:#E8ECF0;margin:8px 0">', unsafe_allow_html=True)
