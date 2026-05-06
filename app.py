@@ -865,7 +865,7 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card, tab_pct, tab_guide, tab_ref = st.tabs(["Leaderboard", "Athlete Scorecard", "Distributions", "Guide", "Reference"])
+tab_board, tab_card, tab_pct, tab_guide, tab_ref, tab_proj = st.tabs(["Leaderboard", "Athlete Scorecard", "Distributions", "Guide", "Reference", "Development Projection"])
 
 # =============================================================================
 # TAB 1 — LEADERBOARD
@@ -2065,3 +2065,268 @@ with tab_ref:
                      use_container_width=True, hide_index=True, key="ref_school_iqr")
 
     st.caption("Values are medians / IQR within each school level for the selected filters.")
+
+# =============================================================================
+# TAB 6 — DEVELOPMENT PROJECTION
+# =============================================================================
+with tab_proj:
+
+    st.markdown(
+        f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {GREEN};'
+        f'border-radius:10px;padding:20px 24px;margin-bottom:20px;'
+        f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
+        f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
+        f'text-transform:uppercase;color:{GREEN};margin:0 0 6px 0">DEVELOPMENT PROJECTION</p>'
+        f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">CI Projection with Weight Gain</h2>'
+        f'<p style="font-size:13px;color:#6b7fa3;margin:0">'
+        f'Projects Concentric Impulse if the athlete adds 10–15 lbs. '
+        f'Assumes relative CI per kg of bodyweight decreases by 5% with added mass — '
+        f'accounting for the adjustment period as the body adapts to new weight.</p></div>',
+        unsafe_allow_html=True)
+
+    # ── Athlete selector ──────────────────────────────────────────────────────
+    proj1, proj1b, proj2 = st.columns([1.5, 2, 1])
+    with proj1:
+        proj_search = st.text_input("Search athlete", placeholder="Type a name…", key="proj_search")
+    with proj1b:
+        proj_filtered = ([a for a in athletes if proj_search.lower() in a.lower()]
+                         if proj_search else athletes)
+        if not proj_filtered: proj_filtered = athletes
+        proj_ath = st.selectbox("Select athlete", proj_filtered, key="proj_ath")
+    with proj2:
+        proj_years = sorted(df[df["athleteName"] == proj_ath]["Year"]
+                            .dropna().unique().astype(int).tolist(), reverse=True)
+        proj_yr_opts = ["Most recent"] + [str(y) for y in proj_years]
+        proj_yr_str  = st.selectbox("Year", proj_yr_opts, key="proj_yr")
+
+    # Get athlete row
+    proj_all = df[df["athleteName"] == proj_ath].sort_values("Year")
+    if proj_yr_str == "Most recent":
+        proj_row = proj_all.iloc[-1] if not proj_all.empty else None
+    else:
+        sub = proj_all[proj_all["Year"] == int(proj_yr_str)]
+        proj_row = sub.iloc[0] if not sub.empty else None
+
+    if proj_row is None:
+        st.warning("No data found for this athlete.")
+        st.stop()
+
+    # ── Pull values ───────────────────────────────────────────────────────────
+    ci_cur     = safe_float(proj_row.get("Concentric Impulse"))
+    mass_kg    = safe_float(proj_row.get("Mass"))
+    height_cm  = safe_float(proj_row.get("Height"))
+    yr_display = int(proj_row["Year"]) if pd.notna(proj_row.get("Year")) else "—"
+
+    has_data = pd.notna(ci_cur) and pd.notna(mass_kg) and ci_cur > 0 and mass_kg > 0
+
+    if not has_data:
+        st.warning("This athlete is missing CI or body mass data — projection cannot be calculated.")
+        st.stop()
+
+    # ── Calculations ──────────────────────────────────────────────────────────
+    lbs_10 = 10 / 2.20462   # 10 lbs in kg
+    lbs_15 = 15 / 2.20462   # 15 lbs in kg
+
+    ci_per_kg     = ci_cur / mass_kg                   # current relative CI (N·s/kg)
+    ci_per_kg_new = ci_per_kg * 0.95                   # 5% decrease in relative CI
+
+    mass_10 = mass_kg + lbs_10
+    mass_15 = mass_kg + lbs_15
+
+    ci_proj_10 = ci_per_kg_new * mass_10               # projected CI at +10 lbs
+    ci_proj_15 = ci_per_kg_new * mass_15               # projected CI at +15 lbs
+
+    # BW/Ht ratio (lbs/inch) — current and projected
+    def bwht_lbs_in(kg, cm):
+        if pd.isna(kg) or pd.isna(cm) or cm == 0: return np.nan
+        return (kg * 2.20462) / (cm / 2.54)
+
+    bwht_cur  = bwht_lbs_in(mass_kg, height_cm)
+    bwht_10   = bwht_lbs_in(mass_10, height_cm)
+    bwht_15   = bwht_lbs_in(mass_15, height_cm)
+
+    # BW/Ht percentiles from pool (lower = better = leaner)
+    bwht_pool = df["bmi_raw"].dropna()
+    def bwht_pct(val):
+        if pd.isna(val) or len(bwht_pool) == 0: return np.nan
+        # bmi_raw is lbs/inch — lower is better so percentile = % above this value
+        return float((bwht_pool > val).mean() * 100)
+
+    bwht_pct_cur = bwht_pct(bwht_cur)
+    bwht_pct_10  = bwht_pct(bwht_10)
+    bwht_pct_15  = bwht_pct(bwht_15)
+
+    # CI all-time percentile
+    ci_pool = df["Concentric Impulse"].dropna()
+    def ci_pct_fn(val):
+        if pd.isna(val) or len(ci_pool) == 0: return np.nan
+        return float((ci_pool < val).mean() * 100)
+
+    ci_pct_cur = ci_pct_fn(ci_cur)
+    ci_pct_10  = ci_pct_fn(ci_proj_10)
+    ci_pct_15  = ci_pct_fn(ci_proj_15)
+
+    # ── Current snapshot ──────────────────────────────────────────────────────
+    st.markdown(f"""
+    <div style="background:white;border:1px solid {BORD};border-radius:10px;
+        padding:16px 22px;margin-bottom:20px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div>
+                <p style="font-size:9px;font-weight:700;letter-spacing:0.16em;
+                    text-transform:uppercase;color:#6b7fa3;margin:0 0 4px 0">CURRENT BASELINE · {yr_display}</p>
+                <h3 style="font-family:'Playfair Display',serif;margin:0;font-size:22px;color:{NAV}">{proj_ath}</h3>
+            </div>
+            <div style="display:flex;gap:24px;flex-wrap:wrap;margin-left:auto">
+                <div style="text-align:center">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">CI</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{RED}">{ci_cur:.1f}</div>
+                    <div style="font-size:10px;color:#9AAAC0">{ci_pct_cur:.0f}th pct</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">BODY MASS</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{mass_kg*2.20462:.1f} lbs</div>
+                    <div style="font-size:10px;color:#9AAAC0">{mass_kg:.1f} kg</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">CI / KG</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{ci_per_kg:.2f}</div>
+                    <div style="font-size:10px;color:#9AAAC0">N·s per kg</div>
+                </div>
+                <div style="text-align:center">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">BW/HT RATIO</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{bwht_cur:.2f if pd.notna(bwht_cur) else '—'}</div>
+                    <div style="font-size:10px;color:#9AAAC0">{bwht_pct_cur:.0f if pd.notna(bwht_pct_cur) else '—'}th pct (leanness)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Projection cards ──────────────────────────────────────────────────────
+    st.markdown('<p class="label" style="margin-bottom:8px">Projected outcomes</p>',
+                unsafe_allow_html=True)
+
+    card1, card2 = st.columns(2)
+
+    def proj_card(col_widget, lbs_gain, new_mass_kg, ci_proj, ci_pct_new,
+                  bwht_new, bwht_pct_new, accent):
+        delta_ci   = ci_proj - ci_cur
+        delta_bwht = bwht_new - bwht_cur if pd.notna(bwht_new) and pd.notna(bwht_cur) else np.nan
+        prog_cat   = programming_category(ci_proj,
+                         proj_row.get("P1 Concentric Impulse", np.nan))
+        prog_color = PROG_COLORS.get(prog_cat, "#9AAAC0")
+
+        col_widget.markdown(f"""
+        <div style="background:white;border:1px solid {BORD};border-top:5px solid {accent};
+            border-radius:10px;padding:20px 22px;box-shadow:0 2px 12px rgba(17,34,90,0.08)">
+            <p style="font-size:10px;font-weight:700;letter-spacing:0.16em;
+                text-transform:uppercase;color:{accent};margin:0 0 12px 0">
+                +{lbs_gain} LBS SCENARIO</p>
+
+            <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+                <div style="flex:1;min-width:80px">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;
+                        color:#6b7fa3;text-transform:uppercase">Projected CI</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:40px;
+                        font-weight:900;color:{accent};line-height:1">{ci_proj:.1f}</div>
+                    <div style="font-size:12px;color:#6b7fa3">{ci_pct_new:.0f}th percentile</div>
+                    <div style="font-size:12px;font-weight:700;
+                        color:{'#4CAF82' if delta_ci >= 0 else RED};margin-top:2px">
+                        {"+" if delta_ci >= 0 else ""}{delta_ci:.1f} from current</div>
+                </div>
+                <div style="flex:1;min-width:80px">
+                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;
+                        color:#6b7fa3;text-transform:uppercase">New Body Mass</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:40px;
+                        font-weight:900;color:{NAV};line-height:1">{new_mass_kg*2.20462:.1f}</div>
+                    <div style="font-size:12px;color:#6b7fa3">lbs ({new_mass_kg:.1f} kg)</div>
+                </div>
+            </div>
+
+            <div style="background:{SURF};border-radius:8px;padding:12px 14px;margin-bottom:12px">
+                <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;
+                    color:#6b7fa3;text-transform:uppercase;margin-bottom:8px">BW/HT RATIO</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                    <span style="font-size:12px;color:#6b7fa3">New ratio</span>
+                    <span style="font-weight:700;color:{NAV}">{f"{bwht_new:.2f}" if pd.notna(bwht_new) else "—"}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                    <span style="font-size:12px;color:#6b7fa3">Leanness percentile</span>
+                    <span style="font-weight:700;color:{NAV}">{f"{bwht_pct_new:.0f}th" if pd.notna(bwht_pct_new) else "—"}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:12px;color:#6b7fa3">Change from current</span>
+                    <span style="font-weight:700;color:{RED}">{f"+{delta_bwht:.2f}" if pd.notna(delta_bwht) else "—"}</span>
+                </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;
+                    color:#6b7fa3;text-transform:uppercase">Program at this weight</span>
+                <span style="background:{prog_color};color:white;font-size:11px;
+                    font-weight:700;padding:2px 12px;border-radius:20px">⚙ {prog_cat}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with card1:
+        proj_card(card1, 10, mass_10, ci_proj_10, ci_pct_10,
+                  bwht_10, bwht_pct_10, RED)
+    with card2:
+        proj_card(card2, 15, mass_15, ci_proj_15, ci_pct_15,
+                  bwht_15, bwht_pct_15, NAV)
+
+    # ── Visual CI comparison chart ────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    fig_proj = go.Figure()
+
+    scenarios   = ["Current", "+10 lbs", "+15 lbs"]
+    ci_vals     = [ci_cur, ci_proj_10, ci_proj_15]
+    bar_colors  = [NAV, RED, GREEN]
+
+    fig_proj.add_trace(go.Bar(
+        x=scenarios, y=ci_vals,
+        marker_color=bar_colors,
+        marker_line=dict(color="white", width=1),
+        text=[f"{v:.1f}" for v in ci_vals],
+        textposition="outside",
+        textfont=dict(color=NAV, size=13, family="Playfair Display, serif"),
+    ))
+
+    # Pool median and p75 reference lines
+    ci_med = float(ci_pool.median())
+    ci_p75 = float(ci_pool.quantile(0.75))
+    ci_p90 = float(ci_pool.quantile(0.90))
+
+    for val, lbl, color, dash in [
+        (ci_med, "Median", "#9AAAC0", "dot"),
+        (ci_p75, "p75",    GOLD,      "dash"),
+        (ci_p90, "p90",    GREEN,     "dash"),
+    ]:
+        fig_proj.add_hline(y=val, line_dash=dash, line_color=color, line_width=1.5,
+                           annotation_text=f"{lbl} = {val:.0f}",
+                           annotation_font_color=color, annotation_font_size=10,
+                           annotation_position="right")
+
+    fig_proj.update_layout(**_layout(
+        title=dict(text="Projected CI vs Pool Benchmarks", font=dict(size=14, color=NAV), x=0),
+        height=360, margin=dict(l=40, r=100, t=50, b=40),
+        yaxis=dict(title="Concentric Impulse (N·s)", range=[0, max(ci_proj_15, ci_p90) * 1.2]),
+        xaxis=dict(tickfont=dict(size=12)),
+        showlegend=False,
+        plot_bgcolor="white",
+    ))
+    st.plotly_chart(fig_proj, use_container_width=True, key="proj_ci_bar")
+
+    # ── Assumptions footnote ──────────────────────────────────────────────────
+    st.markdown(f"""
+    <div style="background:{SURF};border-radius:8px;padding:12px 16px;margin-top:8px;
+        border-left:3px solid #9AAAC0">
+        <p style="font-size:11px;color:#6b7fa3;margin:0;line-height:1.7">
+            <strong>Assumptions:</strong> Projected CI = (current CI/kg × 0.95) × new body mass.
+            The 5% reduction in relative CI accounts for the short-term adaptation cost of added mass.
+            BW/Ht leanness percentile is all-time (lower ratio = leaner = higher percentile).
+            Programming category uses current P1 CI threshold unchanged.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
