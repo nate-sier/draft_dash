@@ -2223,9 +2223,11 @@ with tab_proj:
                          proj_row.get("P1 Concentric Impulse", np.nan))
         prog_color = PROG_COLORS.get(prog_cat, "#9AAAC0")
 
-        _bwht_new_str     = f"{bwht_new:.2f}"       if pd.notna(bwht_new)     else "—"
+        _bwht_new_str     = f"{bwht_new:.2f}"        if pd.notna(bwht_new)     else "—"
         _bwht_pct_new_str = f"{bwht_pct_new:.0f}th"  if pd.notna(bwht_pct_new) else "—"
         _delta_bwht_str   = f"+{delta_bwht:.2f}"      if pd.notna(delta_bwht)   else "—"
+        _delta_ci_color   = "#4CAF82" if delta_ci >= 0 else RED
+        _delta_ci_sign    = "+" if delta_ci >= 0 else ""
 
         st.markdown(f"""
         <div style="background:white;border:1px solid {BORD};border-top:5px solid {accent};
@@ -2242,8 +2244,8 @@ with tab_proj:
                         font-weight:900;color:{accent};line-height:1">{ci_proj:.1f}</div>
                     <div style="font-size:12px;color:#6b7fa3">{ci_pct_new:.0f}th percentile</div>
                     <div style="font-size:12px;font-weight:700;
-                        color:{'#4CAF82' if delta_ci >= 0 else RED};margin-top:2px">
-                        {"+" if delta_ci >= 0 else ""}{delta_ci:.1f} from current</div>
+                        color:{_delta_ci_color};margin-top:2px">
+                        {_delta_ci_sign}{delta_ci:.1f} from current</div>
                 </div>
                 <div style="flex:1;min-width:80px">
                     <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;
