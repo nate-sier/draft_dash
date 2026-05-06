@@ -2218,71 +2218,47 @@ with tab_proj:
 
     def proj_card(col_widget, lbs_gain, new_mass_kg, ci_proj, ci_pct_new,
                   bwht_new, bwht_pct_new, accent):
-        delta_ci   = ci_proj - ci_cur
-        delta_bwht = bwht_new - bwht_cur if pd.notna(bwht_new) and pd.notna(bwht_cur) else np.nan
-        prog_cat   = programming_category(ci_proj,
-                         proj_row.get("P1 Concentric Impulse", np.nan))
-        prog_color = PROG_COLORS.get(prog_cat, "#9AAAC0")
+        delta_ci         = ci_proj - ci_cur
+        delta_bwht       = (bwht_new - bwht_cur) if (pd.notna(bwht_new) and pd.notna(bwht_cur)) else None
+        prog_cat         = programming_category(ci_proj, proj_row.get("P1 Concentric Impulse", np.nan))
+        prog_color       = PROG_COLORS.get(prog_cat, "#9AAAC0")
+        s_bwht           = f"{bwht_new:.2f}"        if pd.notna(bwht_new)     else "—"
+        s_bwht_pct       = f"{bwht_pct_new:.0f}th"  if pd.notna(bwht_pct_new) else "—"
+        s_delta_bwht     = f"+{delta_bwht:.2f}"      if delta_bwht is not None else "—"
+        s_delta_ci_color = "#4CAF82" if delta_ci >= 0 else RED
+        s_delta_ci_sign  = "+" if delta_ci >= 0 else ""
+        s_mass_lbs       = f"{new_mass_kg * 2.20462:.1f}"
+        s_mass_kg_str    = f"{new_mass_kg:.1f}"
+        s_ci             = f"{ci_proj:.1f}"
+        s_ci_pct         = f"{ci_pct_new:.0f}th percentile"
+        s_delta_ci       = f"{s_delta_ci_sign}{delta_ci:.1f} from current"
+        PF               = "Playfair Display"
 
-        _bwht_new_str     = f"{bwht_new:.2f}"        if pd.notna(bwht_new)     else "—"
-        _bwht_pct_new_str = f"{bwht_pct_new:.0f}th"  if pd.notna(bwht_pct_new) else "—"
-        _delta_bwht_str   = f"+{delta_bwht:.2f}"      if pd.notna(delta_bwht)   else "—"
-        _delta_ci_color   = "#4CAF82" if delta_ci >= 0 else RED
-        _delta_ci_sign    = "+" if delta_ci >= 0 else ""
-
-        st.markdown(f"""
-        <div style="background:white;border:1px solid {BORD};border-top:5px solid {accent};
-            border-radius:10px;padding:20px 22px;box-shadow:0 2px 12px rgba(17,34,90,0.08)">
-            <p style="font-size:10px;font-weight:700;letter-spacing:0.16em;
-                text-transform:uppercase;color:{accent};margin:0 0 12px 0">
-                +{lbs_gain} LBS SCENARIO</p>
-
-            <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-                <div style="flex:1;min-width:80px">
-                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;
-                        color:#6b7fa3;text-transform:uppercase">Projected CI</div>
-                    <div style="font-family:'Playfair Display',serif;font-size:40px;
-                        font-weight:900;color:{accent};line-height:1">{ci_proj:.1f}</div>
-                    <div style="font-size:12px;color:#6b7fa3">{ci_pct_new:.0f}th percentile</div>
-                    <div style="font-size:12px;font-weight:700;
-                        color:{_delta_ci_color};margin-top:2px">
-                        {_delta_ci_sign}{delta_ci:.1f} from current</div>
-                </div>
-                <div style="flex:1;min-width:80px">
-                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;
-                        color:#6b7fa3;text-transform:uppercase">New Body Mass</div>
-                    <div style="font-family:'Playfair Display',serif;font-size:40px;
-                        font-weight:900;color:{NAV};line-height:1">{new_mass_kg*2.20462:.1f}</div>
-                    <div style="font-size:12px;color:#6b7fa3">lbs ({new_mass_kg:.1f} kg)</div>
-                </div>
-            </div>
-
-            <div style="background:{SURF};border-radius:8px;padding:12px 14px;margin-bottom:12px">
-                <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;
-                    color:#6b7fa3;text-transform:uppercase;margin-bottom:8px">BW/HT RATIO</div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                    <span style="font-size:12px;color:#6b7fa3">New ratio</span>
-                    <span style="font-weight:700;color:{NAV}">{_bwht_new_str}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                    <span style="font-size:12px;color:#6b7fa3">Leanness percentile</span>
-                    <span style="font-weight:700;color:{NAV}">{_bwht_pct_new_str}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                    <span style="font-size:12px;color:#6b7fa3">Change from current</span>
-                    <span style="font-weight:700;color:{RED}">{_delta_bwht_str}</span>
-                </div>
-            </div>
-
-            <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;
-                    color:#6b7fa3;text-transform:uppercase">Program at this weight</span>
-                <span style="background:{prog_color};color:white;font-size:11px;
-                    font-weight:700;padding:2px 12px;border-radius:20px">⚙ {prog_cat}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
+        parts = []
+        parts.append(f'<div style="background:white;border:1px solid {BORD};border-top:5px solid {accent};')
+        parts.append('border-radius:10px;padding:20px 22px;box-shadow:0 2px 12px rgba(17,34,90,0.08)">')
+        parts.append(f'<p style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:{accent};margin:0 0 12px 0">+{lbs_gain} LBS SCENARIO</p>')
+        parts.append('<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">')
+        parts.append('<div style="flex:1;min-width:80px">')
+        parts.append('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3;text-transform:uppercase">Projected CI</div>')
+        parts.append(f'<div style="font-family:{PF},serif;font-size:40px;font-weight:900;color:{accent};line-height:1">{s_ci}</div>')
+        parts.append(f'<div style="font-size:12px;color:#6b7fa3">{s_ci_pct}</div>')
+        parts.append(f'<div style="font-size:12px;font-weight:700;color:{s_delta_ci_color};margin-top:2px">{s_delta_ci}</div>')
+        parts.append('</div>')
+        parts.append('<div style="flex:1;min-width:80px">')
+        parts.append('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3;text-transform:uppercase">New Body Mass</div>')
+        parts.append(f'<div style="font-family:{PF},serif;font-size:40px;font-weight:900;color:{NAV};line-height:1">{s_mass_lbs}</div>')
+        parts.append(f'<div style="font-size:12px;color:#6b7fa3">lbs ({s_mass_kg_str} kg)</div>')
+        parts.append('</div></div>')
+        parts.append(f'<div style="background:{SURF};border-radius:8px;padding:12px 14px;margin-bottom:12px">')
+        parts.append('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3;text-transform:uppercase;margin-bottom:8px">BW/HT RATIO</div>')
+        parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;color:#6b7fa3">New ratio</span><span style="font-weight:700;color:{NAV}">{s_bwht}</span></div>')
+        parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;color:#6b7fa3">Leanness percentile</span><span style="font-weight:700;color:{NAV}">{s_bwht_pct}</span></div>')
+        parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#6b7fa3">Change from current</span><span style="font-weight:700;color:{RED}">{s_delta_bwht}</span></div>')
+        parts.append('</div>')
+        parts.append(f'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:9px;font-weight:700;color:#6b7fa3;text-transform:uppercase">Program at this weight</span><span style="background:{prog_color};color:white;font-size:11px;font-weight:700;padding:2px 12px;border-radius:20px">&#9881; {prog_cat}</span></div>')
+        parts.append('</div>')
+        st.markdown("".join(parts), unsafe_allow_html=True)
     with card1:
         proj_card(card1, 10, mass_10, ci_proj_10, ci_pct_10,
                   bwht_10, bwht_pct_10, RED)
