@@ -2423,48 +2423,53 @@ with tab_proj:
     st.markdown(
         f'<div style="border-left:4px solid {GOLD};padding-left:12px;margin:0 0 16px 0">' +
         f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:{GOLD}">CI Calculator</span>' +
-        f'<p style="font-size:12px;color:#6b7fa3;margin:4px 0 0 0">Adjust weight gain, target BW/Ht ratio, and adaptation penalty to explore custom scenarios.</p></div>',
+        f'<p style="font-size:12px;color:#6b7fa3;margin:4px 0 0 0">Explore custom weight gain scenarios. Switch between setting a weight gain directly or targeting a BW/Ht percentile.</p></div>',
         unsafe_allow_html=True)
 
     if not has_data:
         st.info("Select an athlete with CI and body mass data to use the calculator.")
     else:
-        calc1, calc2, calc3 = st.columns(3)
-        with calc1:
-            calc_gain = st.slider("Weight gain (lbs)", 0, 40, 10, 1, key="calc_gain")
-        with calc2:
-            st.markdown('<p style="font-size:11px;font-weight:600;color:#6b7fa3;margin-bottom:4px">TARGET BW/HT RATIO</p>', unsafe_allow_html=True)
-            ratio_mode = st.radio("Set by", ["Direct value", "Percentile"], horizontal=True, key="calc_ratio_mode", label_visibility="collapsed")
-        with calc3:
+        # ── Mode toggle + adaptation penalty ─────────────────────────────────
+        mc1, mc2 = st.columns([2, 1])
+        with mc1:
+            calc_mode = st.radio("Input mode", ["Weight gain", "Target BW/Ht percentile", "Target BW/Ht ratio"],
+                                 horizontal=True, key="calc_mode")
+        with mc2:
             adapt_pct = st.slider("Adaptation penalty (%)", 0, 15, 3, 1, key="calc_adapt") / 100
 
-        # Resolve target ratio
-        if ratio_mode == "Direct value":
-            default_ratio = round(float(bwht_cur) if pd.notna(bwht_cur) else 2.4, 2)
-            target_ratio  = st.slider("Target BW/Ht ratio (lbs/in)", 1.5, 4.0,
-                                       default_ratio + round(calc_gain / (height_cm / 2.54), 2),
-                                       0.01, key="calc_ratio_val", format="%.2f")
-            # Compute implied body weight from target ratio
-            height_in       = height_cm / 2.54 if pd.notna(height_cm) else None
-            implied_bw_lbs  = target_ratio * height_in if height_in else None
-            implied_bw_kg   = implied_bw_lbs / 2.20462 if implied_bw_lbs else None
-            calc_gain_actual = (implied_bw_lbs - mass_kg * 2.20462) if implied_bw_lbs else calc_gain
-        else:
-            bwht_pool_calc = df["bmi_raw"].dropna().sort_values()
-            pct_options    = list(range(5, 100, 5))
-            default_pct    = min(pct_options, key=lambda p: abs(p - (sc_bwht_pct(bwht_cur) or 50)))
-            target_pct     = st.select_slider("Target leanness percentile",
-                                               options=pct_options,
-                                               value=min(default_pct + 10, 95),
-                                               key="calc_ratio_pct")
-            target_ratio   = float(bwht_pool_calc.quantile(target_pct / 100))
-            height_in      = height_cm / 2.54 if pd.notna(height_cm) else None
-            implied_bw_lbs = target_ratio * height_in if height_in else None
-            implied_bw_kg  = implied_bw_lbs / 2.20462 if implied_bw_lbs else None
-            calc_gain_actual = (implied_bw_lbs - mass_kg * 2.20462) if implied_bw_lbs else calc_gain
+        # ── Mode-specific input ───────────────────────────────────────────────
+        if calc_mode == "Weight gain":
+            calc_gain_lbs = st.slider("Weight gain (lbs)", 0, 40, 10, 1, key="calc_gain")
+            calc_new_mass_kg = mass_kg + (calc_gain_lbs / 2.20462)
+            gain_label       = f"+{calc_gain_lbs} lbs"
 
-        # Calculate projected CI using weight gain slider
-        calc_new_mass_kg   = mass_kg + (calc_gain / 2.20462)
+        elif calc_mode == "Target BW/Ht percentile":
+            bwht_pool_calc = df["bmi_raw"].dropna().sort_values()
+            cur_pct_approx = int(round(float((bwht_pool_calc < bwht_cur).mean() * 100))) if pd.notna(bwht_cur) else 50
+            target_pct = st.select_slider(
+                "Target leanness percentile (higher = heavier relative to height)",
+                options=list(range(5, 100, 5)),
+                value=min(cur_pct_approx + 10, 95),
+                key="calc_ratio_pct")
+            target_ratio     = float(bwht_pool_calc.quantile(target_pct / 100))
+            height_in        = height_cm / 2.54 if pd.notna(height_cm) else None
+            implied_bw_lbs   = target_ratio * height_in if height_in else None
+            calc_new_mass_kg = implied_bw_lbs / 2.20462 if implied_bw_lbs else mass_kg
+            calc_gain_lbs    = (calc_new_mass_kg - mass_kg) * 2.20462
+            gain_label       = f"{calc_gain_lbs:+.1f} lbs to reach {target_pct}th pct ratio ({target_ratio:.2f})"
+
+        else:  # Direct ratio
+            height_in      = height_cm / 2.54 if pd.notna(height_cm) else None
+            default_ratio  = round(float(bwht_cur) + (10 / height_in), 2) if (pd.notna(bwht_cur) and height_in) else 2.5
+            target_ratio   = st.slider("Target BW/Ht ratio (lbs/in)", 1.5, 4.0,
+                                        min(max(float(bwht_cur or 2.4), 1.5), 4.0) if pd.notna(bwht_cur) else 2.5,
+                                        0.01, key="calc_ratio_val", format="%.2f")
+            implied_bw_lbs   = target_ratio * height_in if height_in else None
+            calc_new_mass_kg = implied_bw_lbs / 2.20462 if implied_bw_lbs else mass_kg
+            calc_gain_lbs    = (calc_new_mass_kg - mass_kg) * 2.20462
+            gain_label       = f"{calc_gain_lbs:+.1f} lbs to reach ratio {target_ratio:.2f}"
+
+        # ── Calculations ──────────────────────────────────────────────────────
         calc_ci_per_kg_new = ci_per_kg * (1 - adapt_pct)
         calc_ci_proj       = calc_ci_per_kg_new * calc_new_mass_kg
         calc_ci_pct        = sc_ci_pct(calc_ci_proj)
@@ -2474,44 +2479,24 @@ with tab_proj:
         calc_prog          = programming_category(calc_ci_proj, proj_row.get("P1 Concentric Impulse", np.nan))
         calc_prog_color    = PROG_COLORS.get(calc_prog, "#9AAAC0")
 
-        # Also calculate CI for ratio-target weight if different
-        if implied_bw_kg and abs(implied_bw_kg - calc_new_mass_kg) > 0.5:
-            ratio_ci_proj  = ci_per_kg * (1 - adapt_pct) * implied_bw_kg
-            ratio_ci_pct   = sc_ci_pct(ratio_ci_proj)
-            ratio_delta_ci = ratio_ci_proj - ci_cur
-            ratio_prog     = programming_category(ratio_ci_proj, proj_row.get("P1 Concentric Impulse", np.nan))
-            ratio_prog_col = PROG_COLORS.get(ratio_prog, "#9AAAC0")
-            show_ratio_row = True
-        else:
-            show_ratio_row = False
+        s_calc_ci    = f"{calc_ci_proj:.1f}"
+        s_calc_delta = ("+" if calc_delta_ci >= 0 else "") + f"{calc_delta_ci:.1f}"
+        s_calc_pct   = f"{calc_ci_pct:.0f}th pct" if pd.notna(calc_ci_pct) else "—"
+        s_calc_mass  = f"{calc_new_mass_kg * 2.20462:.1f} lbs"
+        s_calc_bwht  = f"{calc_bwht:.2f}" if pd.notna(calc_bwht) else "—"
+        s_calc_bpct  = f"{calc_bwht_pct_val:.0f}th pct" if pd.notna(calc_bwht_pct_val) else "—"
+        PF           = "Playfair Display"
 
-        # Display results
         st.markdown("<br>", unsafe_allow_html=True)
         r1, r2, r3, r4, r5 = st.columns(5)
-
-        def calc_metric(col, label, value, sub="", color=NAV):
-            col.markdown(
-                f'<div style="background:white;border:1px solid {BORD};border-top:3px solid ' + color + f';border-radius:8px;padding:12px 14px;text-align:center">' +
-                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#6b7fa3;margin-bottom:4px">{label}</div>' +
-                f'<div style="font-family:Playfair Display,serif;font-size:24px;font-weight:700;color:' + color + f'">{value}</div>' +
-                (f'<div style="font-size:11px;color:#6b7fa3;margin-top:2px">{sub}</div>' if sub else '') +
-                '</div>',
-                unsafe_allow_html=True)
-
-        s_calc_ci     = f"{calc_ci_proj:.1f}"
-        s_calc_delta  = ("+" if calc_delta_ci >= 0 else "") + f"{calc_delta_ci:.1f}"
-        s_calc_pct    = f"{calc_ci_pct:.0f}th pct" if pd.notna(calc_ci_pct) else "—"
-        s_calc_mass   = f"{calc_new_mass_kg * 2.20462:.1f} lbs"
-        s_calc_bwht   = f"{calc_bwht:.2f}" if pd.notna(calc_bwht) else "—"
-        s_calc_bpct   = f"{calc_bwht_pct_val:.0f}th pct" if pd.notna(calc_bwht_pct_val) else "—"
 
         r1.markdown(
             f'<div style="background:white;border:1px solid {BORD};border-top:3px solid {RED};border-radius:8px;padding:12px 14px;text-align:center">' +
             f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#6b7fa3;margin-bottom:4px">Projected CI</div>' +
-            f'<div style="font-family:Playfair Display,serif;font-size:28px;font-weight:700;color:{RED}">{s_calc_ci}</div>' +
+            f'<div style="font-family:{PF},serif;font-size:28px;font-weight:700;color:{RED}">{s_calc_ci}</div>' +
             f'<div style="font-size:11px;color:#6b7fa3">{s_calc_delta} · {s_calc_pct}</div></div>',
             unsafe_allow_html=True)
-        r2.metric("Body Mass", s_calc_mass, f"+{calc_gain} lbs")
+        r2.metric("Body Mass", s_calc_mass, f"{calc_gain_lbs:+.1f} lbs")
         r3.metric("BW/Ht Ratio", s_calc_bwht, s_calc_bpct)
         r4.metric("CI / kg", f"{calc_ci_per_kg_new:.2f}", f"-{adapt_pct*100:.0f}%")
         r5.markdown(
@@ -2520,22 +2505,6 @@ with tab_proj:
             f'<span style="background:{calc_prog_color};color:white;font-size:12px;font-weight:700;padding:3px 14px;border-radius:20px">&#9881; {calc_prog}</span></div>',
             unsafe_allow_html=True)
 
-        # Target ratio scenario row
-        if show_ratio_row:
-            st.markdown("<br>", unsafe_allow_html=True)
-            label_gain = f"{calc_gain_actual:+.1f} lbs"
-            st.markdown(
-                f'<p style="font-size:11px;color:#6b7fa3;margin-bottom:6px">At target ratio <strong style="color:{NAV}">{target_ratio:.2f}</strong> ' +
-                (f'({target_pct}th percentile)' if ratio_mode == "Percentile" else '') +
-                f' — requires <strong style="color:{NAV}">{label_gain}</strong> from current weight:</p>',
-                unsafe_allow_html=True)
-            rr1, rr2, rr3, rr4 = st.columns(4)
-            s_r_delta = ("+" if ratio_delta_ci >= 0 else "") + f"{ratio_delta_ci:.1f}"
-            s_r_pct   = f"{ratio_ci_pct:.0f}th pct" if pd.notna(ratio_ci_pct) else "—"
-            rr1.metric("Projected CI", f"{ratio_ci_proj:.1f}", f"{s_r_delta} · {s_r_pct}")
-            rr2.metric("Body Mass", f"{implied_bw_lbs:.1f} lbs", label_gain)
-            rr3.metric("BW/Ht Ratio", f"{target_ratio:.2f}")
-            rr4.markdown(
-                f'<div style="background:white;border:1px solid {BORD};border-top:3px solid {ratio_prog_col};border-radius:8px;padding:12px 14px;text-align:center;margin-top:4px">' +
-                f'<span style="background:{ratio_prog_col};color:white;font-size:12px;font-weight:700;padding:3px 14px;border-radius:20px">&#9881; {ratio_prog}</span></div>',
-                unsafe_allow_html=True)
+        st.markdown(
+            f'<p style="font-size:11px;color:#9AAAC0;margin-top:10px">{gain_label} · {adapt_pct*100:.0f}% adaptation penalty · current CI/kg: {ci_per_kg:.2f}</p>',
+            unsafe_allow_html=True)
