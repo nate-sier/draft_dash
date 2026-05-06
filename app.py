@@ -2227,7 +2227,7 @@ with tab_proj:
         _bwht_pct_new_str = f"{bwht_pct_new:.0f}th"  if pd.notna(bwht_pct_new) else "—"
         _delta_bwht_str   = f"+{delta_bwht:.2f}"      if pd.notna(delta_bwht)   else "—"
 
-        col_widget.markdown(f"""
+        st.markdown(f"""
         <div style="background:white;border:1px solid {BORD};border-top:5px solid {accent};
             border-radius:10px;padding:20px 22px;box-shadow:0 2px 12px rgba(17,34,90,0.08)">
             <p style="font-size:10px;font-weight:700;letter-spacing:0.16em;
