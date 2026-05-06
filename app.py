@@ -1382,8 +1382,9 @@ with tab_card:
         def pp(v): return f"{v:.0f}th" if pd.notna(v) else "—"
 
         rows_html = ""
+        sc_bwht_pct_cur = sc_bwht_pct(sc_bwht_cur)
         for label, ci_v, ci_p, mass_v, bwht_v, bwht_p, prog_c in [
-            ("Current",  sc_ci,    sc_ci_pct_cur, sc_mass,    sc_bwht_cur,  None,          None),
+            ("Current",  sc_ci,    sc_ci_pct_cur, sc_mass,    sc_bwht_cur,  sc_bwht_pct_cur, None),
             ("+10 lbs",  sc_ci_10, sc_ci_pct_10,  sc_mass_10, sc_bwht_10v,  sc_bwht_pct_10, programming_category(sc_ci_10, row.get("P1 Concentric Impulse", np.nan))),
             ("+15 lbs",  sc_ci_15, sc_ci_pct_15,  sc_mass_15, sc_bwht_15v,  sc_bwht_pct_15, programming_category(sc_ci_15, row.get("P1 Concentric Impulse", np.nan))),
         ]:
