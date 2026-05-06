@@ -2080,7 +2080,7 @@ with tab_proj:
         f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">CI Projection with Weight Gain</h2>'
         f'<p style="font-size:13px;color:#6b7fa3;margin:0">'
         f'Projects Concentric Impulse if the athlete adds 10–15 lbs. '
-        f'Assumes relative CI per kg of bodyweight decreases by 5% with added mass — '
+        f'Assumes relative CI per kg of bodyweight decreases by 3% with added mass — '
         f'accounting for the adjustment period as the body adapts to new weight.</p></div>',
         unsafe_allow_html=True)
 
@@ -2128,7 +2128,7 @@ with tab_proj:
     lbs_15 = 15 / 2.20462   # 15 lbs in kg
 
     ci_per_kg     = ci_cur / mass_kg                   # current relative CI (N·s/kg)
-    ci_per_kg_new = ci_per_kg * 0.95                   # 5% decrease in relative CI
+    ci_per_kg_new = ci_per_kg * 0.97                   # 3% decrease in relative CI
 
     mass_10 = mass_kg + lbs_10
     mass_15 = mass_kg + lbs_15
@@ -2166,7 +2166,7 @@ with tab_proj:
     ci_pct_10  = ci_pct_fn(ci_proj_10)
     ci_pct_15  = ci_pct_fn(ci_proj_15)
 
-    # ── Current snapshot ──────────────────────────────────────────────────────
+    # Pre-compute all display strings to avoid ternaries inside f-strings
     bwht_cur_str     = f"{bwht_cur:.2f}"        if pd.notna(bwht_cur)     else "—"
     bwht_pct_cur_str = f"{bwht_pct_cur:.0f}th"  if pd.notna(bwht_pct_cur) else "—"
     bwht_10_str      = f"{bwht_10:.2f}"          if pd.notna(bwht_10)      else "—"
@@ -2174,6 +2174,7 @@ with tab_proj:
     bwht_15_str      = f"{bwht_15:.2f}"          if pd.notna(bwht_15)      else "—"
     bwht_pct_15_str  = f"{bwht_pct_15:.0f}th"   if pd.notna(bwht_pct_15)  else "—"
 
+    # ── Current snapshot ──────────────────────────────────────────────────────
     st.markdown(f"""
     <div style="background:white;border:1px solid {BORD};border-radius:10px;
         padding:16px 22px;margin-bottom:20px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">
@@ -2337,7 +2338,7 @@ with tab_proj:
         border-left:3px solid #9AAAC0">
         <p style="font-size:11px;color:#6b7fa3;margin:0;line-height:1.7">
             <strong>Assumptions:</strong> Projected CI = (current CI/kg × 0.95) × new body mass.
-            The 5% reduction in relative CI accounts for the short-term adaptation cost of added mass.
+            The 3% reduction in relative CI accounts for the short-term adaptation cost of added mass.
             BW/Ht leanness percentile is all-time (lower ratio = leaner = higher percentile).
             Programming category uses current P1 CI threshold unchanged.
         </p>
