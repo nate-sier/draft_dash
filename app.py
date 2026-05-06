@@ -1332,6 +1332,103 @@ with tab_card:
             </div>
             """, unsafe_allow_html=True)
 
+    # ── Development Projection ────────────────────────────────────────────────
+    sc_ci    = safe_float(row.get("Concentric Impulse"))
+    sc_mass  = safe_float(row.get("Mass"))
+    sc_ht    = safe_float(row.get("Height"))
+
+    if pd.notna(sc_ci) and pd.notna(sc_mass) and sc_ci > 0 and sc_mass > 0:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="border-left:4px solid {GREEN};padding-left:12px;margin:0 0 14px 0">' +
+            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:{GREEN}">Development Projection</span></div>',
+            unsafe_allow_html=True)
+
+        sc_lbs_10    = 10 / 2.20462
+        sc_lbs_15    = 15 / 2.20462
+        sc_ci_per_kg = sc_ci / sc_mass
+        sc_ci_per_kg_new = sc_ci_per_kg * 0.97
+        sc_mass_10   = sc_mass + sc_lbs_10
+        sc_mass_15   = sc_mass + sc_lbs_15
+        sc_ci_10     = sc_ci_per_kg_new * sc_mass_10
+        sc_ci_15     = sc_ci_per_kg_new * sc_mass_15
+
+        def sc_bwht(kg, cm):
+            if pd.isna(kg) or pd.isna(cm) or cm == 0: return np.nan
+            return (kg * 2.20462) / (cm / 2.54)
+
+        bwht_pool_sc  = df["bmi_raw"].dropna()
+        def sc_bwht_pct(val):
+            if pd.isna(val) or len(bwht_pool_sc) == 0: return np.nan
+            return float((bwht_pool_sc > val).mean() * 100)
+
+        ci_pool_sc = df["Concentric Impulse"].dropna()
+        def sc_ci_pct(val):
+            if pd.isna(val) or len(ci_pool_sc) == 0: return np.nan
+            return float((ci_pool_sc < val).mean() * 100)
+
+        sc_bwht_cur  = sc_bwht(sc_mass,    sc_ht)
+        sc_bwht_10v  = sc_bwht(sc_mass_10, sc_ht)
+        sc_bwht_15v  = sc_bwht(sc_mass_15, sc_ht)
+
+        sc_ci_pct_cur = sc_ci_pct(sc_ci)
+        sc_ci_pct_10  = sc_ci_pct(sc_ci_10)
+        sc_ci_pct_15  = sc_ci_pct(sc_ci_15)
+        sc_bwht_pct_10 = sc_bwht_pct(sc_bwht_10v)
+        sc_bwht_pct_15 = sc_bwht_pct(sc_bwht_15v)
+
+        # Summary table
+        def pf(v, d=1): return f"{v:.{d}f}" if pd.notna(v) else "—"
+        def pp(v): return f"{v:.0f}th" if pd.notna(v) else "—"
+
+        rows_html = ""
+        for label, ci_v, ci_p, mass_v, bwht_v, bwht_p, prog_c in [
+            ("Current",  sc_ci,    sc_ci_pct_cur, sc_mass,    sc_bwht_cur,  None,          None),
+            ("+10 lbs",  sc_ci_10, sc_ci_pct_10,  sc_mass_10, sc_bwht_10v,  sc_bwht_pct_10, programming_category(sc_ci_10, row.get("P1 Concentric Impulse", np.nan))),
+            ("+15 lbs",  sc_ci_15, sc_ci_pct_15,  sc_mass_15, sc_bwht_15v,  sc_bwht_pct_15, programming_category(sc_ci_15, row.get("P1 Concentric Impulse", np.nan))),
+        ]:
+            is_cur   = label == "Current"
+            bg       = "white" if is_cur else SURF
+            prog_html = ""
+            if prog_c:
+                pc = PROG_COLORS.get(prog_c, "#9AAAC0")
+                prog_html = f'<span style="background:{pc};color:white;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px;margin-left:6px">{prog_c}</span>'
+            delta_ci_html = ""
+            if not is_cur:
+                d = ci_v - sc_ci
+                dc = "#4CAF82" if d >= 0 else RED
+                s  = "+" if d >= 0 else ""
+                delta_ci_html = f' <span style="font-size:11px;color:{dc};font-weight:600">({s}{d:.1f})</span>'
+            rows_html += (
+                f'<tr style="background:{bg};border-bottom:1px solid {BORD}">' +
+                f'<td style="padding:10px 12px;font-weight:700;color:{NAV};font-size:13px">{label}{prog_html}</td>' +
+                f'<td style="padding:10px 12px;text-align:right;color:{NAV};font-size:13px;font-weight:600">{pf(ci_v, 1)}{delta_ci_html}</td>' +
+                f'<td style="padding:10px 12px;text-align:right;color:#6b7fa3;font-size:12px">{pp(ci_p)}</td>' +
+                f'<td style="padding:10px 12px;text-align:right;color:{NAV};font-size:13px">{pf(mass_v * 2.20462, 1)} lbs</td>' +
+                f'<td style="padding:10px 12px;text-align:right;color:{NAV};font-size:13px">{pf(bwht_v, 2)}</td>' +
+                f'<td style="padding:10px 12px;text-align:right;color:#6b7fa3;font-size:12px">{pp(bwht_p) if bwht_p is not None else "—"}</td>' +
+                '</tr>'
+            )
+
+        table_html = (
+            f'<div style="background:white;border:1px solid {BORD};border-radius:10px;overflow:hidden;margin-bottom:12px">' +
+            '<table style="width:100%;border-collapse:collapse">' +
+            f'<thead><tr style="background:{NAV}">' +
+            '<th style="padding:10px 12px;text-align:left;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">Scenario</th>' +
+            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">CI (N·s)</th>' +
+            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">CI Pct</th>' +
+            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">Body Mass</th>' +
+            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">BW/Ht</th>' +
+            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">Leanness Pct</th>' +
+            '</tr></thead>' +
+            '<tbody>' + rows_html + '</tbody>' +
+            '</table></div>'
+        )
+        st.markdown(table_html, unsafe_allow_html=True)
+        st.markdown(
+            f'<p style="font-size:11px;color:#9AAAC0;margin:0">Assumes 3% decrease in CI/kg with added mass. All-time percentiles.</p>',
+            unsafe_allow_html=True)
+
 
 
 # =============================================================================
