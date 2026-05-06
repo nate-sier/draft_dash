@@ -480,7 +480,7 @@ def build_scores(_df,
     df["height_pct"]  = pct_rank(df["Height"])
     # BMI-style (kg/cm) — leaner = better → invert
     df["bmi_raw"]     = safe_div(df["Mass"] * 2.20462, df["Height"] / 2.54)  # lbs/inch
-    df["bmi_pct"]     = 100 - pct_rank(df["bmi_raw"])
+    df["bmi_pct"]     = pct_rank(df["bmi_raw"])  # higher ratio = higher pct
     # School type: HS > 4-Year College > Junior College
     school_score_map  = {"High School": 100, "4-Year College": 60, "Junior College": 40}
     df["school_score"] = df["School Type"].map(school_score_map).fillna(50)
@@ -1360,7 +1360,7 @@ with tab_card:
         bwht_pool_sc  = df["bmi_raw"].dropna()
         def sc_bwht_pct(val):
             if pd.isna(val) or len(bwht_pool_sc) == 0: return np.nan
-            return float((bwht_pool_sc > val).mean() * 100)
+            return float((bwht_pool_sc < val).mean() * 100)
 
         ci_pool_sc = df["Concentric Impulse"].dropna()
         def sc_ci_pct(val):
@@ -2246,8 +2246,7 @@ with tab_proj:
     bwht_pool = df["bmi_raw"].dropna()
     def bwht_pct(val):
         if pd.isna(val) or len(bwht_pool) == 0: return np.nan
-        # bmi_raw is lbs/inch — lower is better so percentile = % above this value
-        return float((bwht_pool > val).mean() * 100)
+        return float((bwht_pool < val).mean() * 100)
 
     bwht_pct_cur = bwht_pct(bwht_cur)
     bwht_pct_10  = bwht_pct(bwht_10)
