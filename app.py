@@ -1118,7 +1118,7 @@ with tab_card:
                 ★ ATHLETE QUALITY</div>
             <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{RED};line-height:1">
-                {f"{aq_val:.0f}" if pd.notna(aq_val) else "—"}</div>
+                {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
             <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">
                 {aq_pct_str}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:2px">score out of 100 · all-time</div>
@@ -2167,6 +2167,13 @@ with tab_proj:
     ci_pct_15  = ci_pct_fn(ci_proj_15)
 
     # ── Current snapshot ──────────────────────────────────────────────────────
+    bwht_cur_str     = f"{bwht_cur:.2f}"        if pd.notna(bwht_cur)     else "—"
+    bwht_pct_cur_str = f"{bwht_pct_cur:.0f}th"  if pd.notna(bwht_pct_cur) else "—"
+    bwht_10_str      = f"{bwht_10:.2f}"          if pd.notna(bwht_10)      else "—"
+    bwht_pct_10_str  = f"{bwht_pct_10:.0f}th"   if pd.notna(bwht_pct_10)  else "—"
+    bwht_15_str      = f"{bwht_15:.2f}"          if pd.notna(bwht_15)      else "—"
+    bwht_pct_15_str  = f"{bwht_pct_15:.0f}th"   if pd.notna(bwht_pct_15)  else "—"
+
     st.markdown(f"""
     <div style="background:white;border:1px solid {BORD};border-radius:10px;
         padding:16px 22px;margin-bottom:20px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">
@@ -2194,8 +2201,8 @@ with tab_proj:
                 </div>
                 <div style="text-align:center">
                     <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">BW/HT RATIO</div>
-                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{bwht_cur:.2f if pd.notna(bwht_cur) else '—'}</div>
-                    <div style="font-size:10px;color:#9AAAC0">{bwht_pct_cur:.0f if pd.notna(bwht_pct_cur) else '—'}th pct (leanness)</div>
+                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{bwht_cur_str}</div>
+                    <div style="font-size:10px;color:#9AAAC0">{bwht_pct_cur_str} pct (leanness)</div>
                 </div>
             </div>
         </div>
@@ -2215,6 +2222,10 @@ with tab_proj:
         prog_cat   = programming_category(ci_proj,
                          proj_row.get("P1 Concentric Impulse", np.nan))
         prog_color = PROG_COLORS.get(prog_cat, "#9AAAC0")
+
+        _bwht_new_str     = f"{bwht_new:.2f}"       if pd.notna(bwht_new)     else "—"
+        _bwht_pct_new_str = f"{bwht_pct_new:.0f}th"  if pd.notna(bwht_pct_new) else "—"
+        _delta_bwht_str   = f"+{delta_bwht:.2f}"      if pd.notna(delta_bwht)   else "—"
 
         col_widget.markdown(f"""
         <div style="background:white;border:1px solid {BORD};border-top:5px solid {accent};
@@ -2248,15 +2259,15 @@ with tab_proj:
                     color:#6b7fa3;text-transform:uppercase;margin-bottom:8px">BW/HT RATIO</div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
                     <span style="font-size:12px;color:#6b7fa3">New ratio</span>
-                    <span style="font-weight:700;color:{NAV}">{f"{bwht_new:.2f}" if pd.notna(bwht_new) else "—"}</span>
+                    <span style="font-weight:700;color:{NAV}">{_bwht_new_str}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
                     <span style="font-size:12px;color:#6b7fa3">Leanness percentile</span>
-                    <span style="font-weight:700;color:{NAV}">{f"{bwht_pct_new:.0f}th" if pd.notna(bwht_pct_new) else "—"}</span>
+                    <span style="font-weight:700;color:{NAV}">{_bwht_pct_new_str}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <span style="font-size:12px;color:#6b7fa3">Change from current</span>
-                    <span style="font-weight:700;color:{RED}">{f"+{delta_bwht:.2f}" if pd.notna(delta_bwht) else "—"}</span>
+                    <span style="font-weight:700;color:{RED}">{_delta_bwht_str}</span>
                 </div>
             </div>
 
