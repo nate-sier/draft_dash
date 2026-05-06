@@ -2445,11 +2445,9 @@ with tab_proj:
 
         elif calc_mode == "Target BW/Ht percentile":
             bwht_pool_calc = df["bmi_raw"].dropna().sort_values()
-            opts = list(range(5, 100, 5))
+            opts = list(range(1, 100))
             cur_pct_approx = int(round(float((bwht_pool_calc < bwht_cur).mean() * 100))) if pd.notna(bwht_cur) else 50
-            # Snap to nearest valid option
-            raw_default = min(cur_pct_approx + 10, 95)
-            default_pct = min(opts, key=lambda x: abs(x - raw_default))
+            default_pct = max(1, min(99, cur_pct_approx))
             target_pct = st.select_slider(
                 "Target leanness percentile (higher = heavier relative to height)",
                 options=opts,
