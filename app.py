@@ -479,7 +479,7 @@ def build_scores(_df,
     # Height percentile (taller = better)
     df["height_pct"]  = pct_rank(df["Height"])
     # BMI-style (kg/cm) — leaner = better → invert
-    df["bmi_raw"]     = safe_div(df["Mass"], df["Height"])
+    df["bmi_raw"]     = safe_div(df["Mass"] * 2.20462, df["Height"] / 2.54)  # lbs/inch
     df["bmi_pct"]     = 100 - pct_rank(df["bmi_raw"])
     # School type: HS > 4-Year College > Junior College
     school_score_map  = {"High School": 100, "4-Year College": 60, "Junior College": 40}
@@ -1271,7 +1271,7 @@ with tab_card:
             <div class="stat-row"><span class="stat-label">Wingspan Adv.</span>
                 <span class="stat-val">{fmt_wingspan_adv(row.get('wingspan_advantage'))}</span></div>
             <div class="stat-row"><span class="stat-label">BW/Ht Ratio</span>
-                <span class="stat-val">{fmt_bwht(row.get('Mass'), row.get('Height'))}</span></div>
+                <span class="stat-val">{fmt(row.get('bmi_raw'), 2)}</span></div>
         </div>
         <div class="card card-gold">
             <p class="label" style="color:{RED}">CMJ Strategy — Why Flagged</p>
@@ -1502,7 +1502,7 @@ with tab_pct:
             ("Mass",               "Mass (lbs)",       20, False, 1, " lbs"),
             ("Wingspan",           "Wingspan (ft''in)",20, False, 0, ""),
             ("wingspan_advantage", "Wingspan Adv. (in)",20, False, 1, "\"  "),
-            ("bmi_raw",            "BW/Ht Ratio",      20, False, 3, ""),
+            ("bmi_raw",            "BW/Ht Ratio (lbs/in)", 20, False, 2, ""),
         ],
 
     }
