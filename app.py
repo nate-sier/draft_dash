@@ -2445,11 +2445,15 @@ with tab_proj:
 
         elif calc_mode == "Target BW/Ht percentile":
             bwht_pool_calc = df["bmi_raw"].dropna().sort_values()
+            opts = list(range(5, 100, 5))
             cur_pct_approx = int(round(float((bwht_pool_calc < bwht_cur).mean() * 100))) if pd.notna(bwht_cur) else 50
+            # Snap to nearest valid option
+            raw_default = min(cur_pct_approx + 10, 95)
+            default_pct = min(opts, key=lambda x: abs(x - raw_default))
             target_pct = st.select_slider(
                 "Target leanness percentile (higher = heavier relative to height)",
-                options=list(range(5, 100, 5)),
-                value=min(cur_pct_approx + 10, 95),
+                options=opts,
+                value=default_pct,
                 key="calc_ratio_pct")
             target_ratio     = float(bwht_pool_calc.quantile(target_pct / 100))
             height_in        = height_cm / 2.54 if pd.notna(height_cm) else None
@@ -2476,8 +2480,6 @@ with tab_proj:
         calc_bwht          = sc_bwht(calc_new_mass_kg, height_cm)
         calc_bwht_pct_val  = sc_bwht_pct(calc_bwht)
         calc_delta_ci      = calc_ci_proj - ci_cur
-        calc_prog          = programming_category(calc_ci_proj, proj_row.get("P1 Concentric Impulse", np.nan))
-        calc_prog_color    = PROG_COLORS.get(calc_prog, "#9AAAC0")
 
         s_calc_ci    = f"{calc_ci_proj:.1f}"
         s_calc_delta = ("+" if calc_delta_ci >= 0 else "") + f"{calc_delta_ci:.1f}"
@@ -2488,7 +2490,7 @@ with tab_proj:
         PF           = "Playfair Display"
 
         st.markdown("<br>", unsafe_allow_html=True)
-        r1, r2, r3, r4, r5 = st.columns(5)
+        r1, r2, r3, r4 = st.columns(4)
 
         r1.markdown(
             f'<div style="background:white;border:1px solid {BORD};border-top:3px solid {RED};border-radius:8px;padding:12px 14px;text-align:center">' +
@@ -2499,11 +2501,7 @@ with tab_proj:
         r2.metric("Body Mass", s_calc_mass, f"{calc_gain_lbs:+.1f} lbs")
         r3.metric("BW/Ht Ratio", s_calc_bwht, s_calc_bpct)
         r4.metric("CI / kg", f"{calc_ci_per_kg_new:.2f}", f"-{adapt_pct*100:.0f}%")
-        r5.markdown(
-            f'<div style="background:white;border:1px solid {BORD};border-top:3px solid {calc_prog_color};border-radius:8px;padding:12px 14px;text-align:center">' +
-            f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#6b7fa3;margin-bottom:8px">Program</div>' +
-            f'<span style="background:{calc_prog_color};color:white;font-size:12px;font-weight:700;padding:3px 14px;border-radius:20px">&#9881; {calc_prog}</span></div>',
-            unsafe_allow_html=True)
+
 
         st.markdown(
             f'<p style="font-size:11px;color:#9AAAC0;margin-top:10px">{gain_label} · {adapt_pct*100:.0f}% adaptation penalty · current CI/kg: {ci_per_kg:.2f}</p>',
