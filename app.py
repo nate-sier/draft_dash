@@ -9,6 +9,9 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.covariance import MinCovDet
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 SHEET_ID   = "1RKyeb4CfU4wACUKqpbiR_--PJJ9KKO-LH-Ov9e6zNQs"
@@ -322,27 +325,25 @@ def build_scores(_df,
         df[f"rz_{c}"] = robust_z(df[c])
     all_rz_cols = [f"rz_{f}" for f in strategy_features]
 
-    # Strategy distance (Mahalanobis, all-time pool) — pure numpy
-    X_s = df[strategy_features].fillna(0).values.astype(float)
-    # Standardize
-    mu_s  = X_s.mean(axis=0)
-    sd_s  = X_s.std(axis=0)
-    sd_s[sd_s == 0] = 1.0
-    X_sc  = (X_s - mu_s) / sd_s
-    # PCA via SVD
-    _, s_vals, Vt = np.linalg.svd(X_sc, full_matrices=False)
-    ncomp  = min(len(strategy_features), max(3, min(6, len(df) - 1)))
-    X_pca  = X_sc @ Vt[:ncomp].T
-    # Mahalanobis via covariance of projected data
+    # Strategy distance — identical pipeline to international scouting app
+    # StandardScaler → PCA (whitened) → MinCovDet Mahalanobis
+    X_s      = df[strategy_features].fillna(0).values.astype(float)
+    scaler_s = StandardScaler()
+    X_sc     = scaler_s.fit_transform(X_s)
+    ncomp    = min(len(strategy_features), max(3, min(6, len(df) - 1)))
+    pca_s    = PCA(n_components=ncomp, whiten=True, random_state=42)
+    X_pca    = pca_s.fit_transform(X_sc)
     try:
-        cov    = np.cov(X_pca, rowvar=False)
-        cov_inv = np.linalg.pinv(cov)
-        mu_pca = X_pca.mean(axis=0)
-        diff   = X_pca - mu_pca
-        dist2  = np.einsum("ij,jk,ik->i", diff, cov_inv, diff)
-        df["strategy_distance_raw"] = np.sqrt(np.abs(dist2))
+        mcd = MinCovDet(random_state=42, support_fraction=0.8).fit(X_pca)
+        df["strategy_distance_raw"] = np.sqrt(mcd.mahalanobis(X_pca))
     except Exception:
-        df["strategy_distance_raw"] = np.linalg.norm(X_pca, axis=1)
+        # Fallback to standard covariance if MinCovDet fails
+        cov     = np.cov(X_pca, rowvar=False)
+        cov_inv = np.linalg.pinv(cov)
+        mu_pca  = X_pca.mean(axis=0)
+        diff    = X_pca - mu_pca
+        dist2   = np.einsum("ij,jk,ik->i", diff, cov_inv, diff)
+        df["strategy_distance_raw"] = np.sqrt(np.abs(dist2))
     df["strategy_distance_score"] = pct_rank(df["strategy_distance_raw"])
 
     # Archetypes
