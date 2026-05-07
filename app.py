@@ -1427,7 +1427,7 @@ with tab_card:
         )
         st.markdown(table_html, unsafe_allow_html=True)
         st.markdown(
-            f'<p style="font-size:11px;color:#9AAAC0;margin:0">Assumes 3% decrease in CI/kg with added mass. All-time percentiles.</p>',
+            f'<p style="font-size:11px;color:#9AAAC0;margin:0">Assumes 3% decrease in CI/kg with added mass. All-time percentiles.<br>Internal data has shown a trend towards pitchers having smaller penalties (0–3%) than position players (3–5%).</p>',
             unsafe_allow_html=True)
 
 
@@ -2410,10 +2410,10 @@ with tab_proj:
     <div style="background:{SURF};border-radius:8px;padding:12px 16px;margin-top:8px;
         border-left:3px solid #9AAAC0">
         <p style="font-size:11px;color:#6b7fa3;margin:0;line-height:1.7">
-            <strong>Assumptions:</strong> Projected CI = (current CI/kg × 0.95) × new body mass.
-            The 3% reduction in relative CI accounts for the short-term adaptation cost of added mass.
-            BW/Ht leanness percentile is all-time (lower ratio = leaner = higher percentile).
-            Programming category uses current P1 CI threshold unchanged.
+            <strong>Assumptions:</strong> Projected CI = (current CI/kg × adaptation factor) × new body mass.
+            The adaptation penalty accounts for the short-term cost of added mass on relative CI.
+            Internal data has shown a trend towards pitchers having smaller penalties (0–3%) than position players (3–5%).
+            BW/Ht leanness percentile is all-time. Programming category uses current P1 CI threshold unchanged.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -2502,5 +2502,5 @@ with tab_proj:
 
 
         st.markdown(
-            f'<p style="font-size:11px;color:#9AAAC0;margin-top:10px">{gain_label} · {adapt_pct*100:.0f}% adaptation penalty · current CI/kg: {ci_per_kg:.2f}</p>',
+            f'<p style="font-size:11px;color:#9AAAC0;margin-top:10px">{gain_label} · {adapt_pct*100:.0f}% adaptation penalty · current CI/kg: {ci_per_kg:.2f}<br>Internal data has shown a trend towards pitchers having smaller penalties (0–3%) than position players (3–5%).</p>',
             unsafe_allow_html=True)
