@@ -907,11 +907,11 @@ with tab_board:
     dff = dff.sort_values(sort_col, ascending=asc, na_position="last").reset_index(drop=True)
 
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Athletes", str(len(dff)))
-    k2.metric("Avg Quality", fmt(dff["athlete_quality_score"].mean()))
-    k3.metric("Avg Potential", fmt(dff["potential_score"].mean()))
-    k4.metric("Median CI", fmt(dff["Concentric Impulse"].median(), 0))
-    k5.metric("Median 30yd", fmt(dff["30yd Split"].median(), 3, "s"))
+    k1.metric("Athletes",     str(len(dff)))
+    k2.metric("Median CI",    fmt(dff["Concentric Impulse"].median(), 1))
+    k3.metric("Median RSI",   fmt(dff["RSI-modified"].median(), 3))
+    k4.metric("Median Pk Pwr/BM", fmt(dff["Peak Power / BM"].median(), 1))
+    k5.metric("Median 30yd", fmt(dff["30yd Split"].median(), 3, "s") if dff["30yd Split"].notna().any() else "—")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
