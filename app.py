@@ -2404,10 +2404,11 @@ with tab_proj:
         marker_color=bar_colors,
         marker_line=dict(color="white", width=1.5),
         width=0.5,
-        text=[f"{v:.1f}<br><span style='font-size:11px'>{('+' if d>0 else '')}{d:.1f}</span>"
+        text=[f"{v:.1f}  ({('+' if d>0 else '')}{d:.1f})"
               if d != 0 else f"{v:.1f}" for v, d in zip(ci_vals, deltas)],
-        textposition="outside",
-        textfont=dict(color=NAV, size=13),
+        textposition="inside",
+        textfont=dict(color="white", size=14, family="Arial"),
+        insidetextanchor="middle",
     ))
 
     for val, lbl, color, dash, width in [
