@@ -1,7 +1,7 @@
 streamlit
 plotly
 pandas
-openpyxl
-scipy
+numpy
 gspread
 google-auth
+scikit-learn
