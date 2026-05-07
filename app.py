@@ -865,7 +865,7 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card, tab_pct, tab_guide, tab_ref, tab_proj = st.tabs(["Leaderboard", "Athlete Scorecard", "Distributions", "Guide", "Reference", "Development Projection"])
+tab_board, tab_card, tab_ref, tab_guide, tab_proj = st.tabs(["Leaderboard", "Athlete Scorecard", "Reference & Distributions", "Guide", "Development Projection"])
 
 # =============================================================================
 # TAB 1 — LEADERBOARD
@@ -1430,9 +1430,9 @@ with tab_card:
 
 
 # =============================================================================
-# TAB 3 — PERCENTILE REFERENCE
+# TAB 3 — REFERENCE & DISTRIBUTIONS (combined)
 # =============================================================================
-with tab_pct:
+with tab_ref:
 
     rf1, rf2, rf3 = st.columns([1, 1.2, 1.2])
     with rf1:
@@ -1586,6 +1586,8 @@ with tab_pct:
     ALL_METRICS = {
         "Athleticism": [
             ("Concentric Impulse",                  "CI (N·s)",       25, False, 1, ""),
+            ("P1 Concentric Impulse",               "P1 CI (N·s)",    25, False, 1, ""),
+            ("Concentric Impulse-100ms",            "CI-100ms",       25, False, 1, ""),
             ("RSI-modified",                        "RSI-modified",   25, False, 3, ""),
             ("Peak Power / BM",                     "Peak Pwr/BM",    25, False, 1, ""),
             ("30yd Split",                          "30yd (s)",       25, True,  3, "s"),
@@ -1965,7 +1967,7 @@ with tab_guide:
          "Ready for the most advanced programming track from day one."),
         ("High-Low",  "#E2C188", "CI ≥ 285 N·s", "P1 CI < 195 N·s",
          "Strong total output but early-phase production needs development. "
-         "High base to work from — focus shifts to front-loading the impulse curve."),
+         "High base to work from — focus will be on building strength and the ability to overcome inertia."),
         ("Low",       "#BA0C2F", "CI < 285 N·s", "—",
          "Foundational program. Build total force production capacity before addressing strategy. "
          "Most common entry point for high school athletes."),
@@ -2006,10 +2008,10 @@ with tab_guide:
         "without losing athleticism. Lower is better in the potential score.")
 
 
-# =============================================================================
-# TAB 5 — REFERENCE
-# =============================================================================
-with tab_ref:
+    # =========================================================================
+    # REFERENCE TABLES (appended below distributions)
+    # =========================================================================
+    st.markdown("---")
     st.markdown(
         f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
         f'border-radius:10px;padding:20px 24px;margin-bottom:20px;'
