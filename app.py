@@ -2382,43 +2382,53 @@ with tab_proj:
 
     # ── Visual CI comparison chart ────────────────────────────────────────────
     st.markdown("<br>", unsafe_allow_html=True)
-    fig_proj = go.Figure()
-
-    scenarios   = ["Current", "+10 lbs", "+15 lbs"]
-    ci_vals     = [ci_cur, ci_proj_10, ci_proj_15]
-    bar_colors  = [NAV, RED, GREEN]
-
-    fig_proj.add_trace(go.Bar(
-        x=scenarios, y=ci_vals,
-        marker_color=bar_colors,
-        marker_line=dict(color="white", width=1),
-        text=[f"{v:.1f}" for v in ci_vals],
-        textposition="outside",
-        textfont=dict(color=NAV, size=13, family="Playfair Display, serif"),
-    ))
-
-    # Pool median and p75 reference lines
     ci_med = float(ci_pool.median())
     ci_p75 = float(ci_pool.quantile(0.75))
     ci_p90 = float(ci_pool.quantile(0.90))
 
-    for val, lbl, color, dash in [
-        (ci_med, "Median", "#9AAAC0", "dot"),
-        (ci_p75, "p75",    GOLD,      "dash"),
-        (ci_p90, "p90",    GREEN,     "dash"),
-    ]:
-        fig_proj.add_hline(y=val, line_dash=dash, line_color=color, line_width=1.5,
-                           annotation_text=f"{lbl} = {val:.0f}",
-                           annotation_font_color=color, annotation_font_size=10,
-                           annotation_position="right")
+    fig_proj = go.Figure()
 
+    # Subtle benchmark band background
+    fig_proj.add_hrect(y0=ci_p75, y1=ci_p90,
+                       fillcolor="rgba(226,193,136,0.12)", line_width=0,
+                       annotation_text="p75–p90 zone", annotation_position="right",
+                       annotation_font_size=9, annotation_font_color=GOLD)
+
+    scenarios  = ["Current", "+10 lbs", "+15 lbs"]
+    ci_vals    = [ci_cur, ci_proj_10, ci_proj_15]
+    bar_colors = [NAV, RED, GREEN]
+    deltas     = [0, ci_proj_10 - ci_cur, ci_proj_15 - ci_cur]
+
+    fig_proj.add_trace(go.Bar(
+        x=scenarios, y=ci_vals,
+        marker_color=bar_colors,
+        marker_line=dict(color="white", width=1.5),
+        width=0.5,
+        text=[f"{v:.1f}<br><span style='font-size:11px'>{('+' if d>0 else '')}{d:.1f}</span>"
+              if d != 0 else f"{v:.1f}" for v, d in zip(ci_vals, deltas)],
+        textposition="outside",
+        textfont=dict(color=NAV, size=13),
+    ))
+
+    for val, lbl, color, dash, width in [
+        (ci_med, f"Median  {ci_med:.0f}", "#9AAAC0", "dot",  1.5),
+        (ci_p75, f"p75  {ci_p75:.0f}",    GOLD,      "dash", 2),
+        (ci_p90, f"p90  {ci_p90:.0f}",    GREEN,     "dash", 2),
+    ]:
+        fig_proj.add_hline(y=val, line_dash=dash, line_color=color, line_width=width,
+                           annotation_text=lbl, annotation_font_color=color,
+                           annotation_font_size=10, annotation_position="right")
+
+    y_max = max(ci_proj_15, ci_p90) * 1.18
     fig_proj.update_layout(**_layout(
         title=dict(text="Projected CI vs Pool Benchmarks", font=dict(size=14, color=NAV), x=0),
-        height=360, margin=dict(l=40, r=100, t=50, b=40),
-        yaxis=dict(title="Concentric Impulse (N·s)", range=[0, max(ci_proj_15, ci_p90) * 1.2]),
-        xaxis=dict(tickfont=dict(size=12)),
+        height=400, margin=dict(l=40, r=110, t=50, b=40),
+        yaxis=dict(title="Concentric Impulse (N·s)", range=[0, y_max],
+                   gridcolor=BORD, tickfont=dict(size=10)),
+        xaxis=dict(tickfont=dict(size=13, color=NAV)),
         showlegend=False,
         plot_bgcolor="white",
+        bargap=0.35,
     ))
     st.plotly_chart(fig_proj, use_container_width=True, key="proj_ci_bar")
 
@@ -2430,7 +2440,7 @@ with tab_proj:
             <strong>Assumptions:</strong> Projected CI = (current CI/kg × adaptation factor) × new body mass.
             The adaptation penalty accounts for the short-term cost of added mass on relative CI.
             Internal data has shown a trend towards pitchers having smaller penalties (0–3%) than position players (3–5%).
-            BW/Ht leanness percentile is all-time. Programming category uses current P1 CI threshold unchanged.
+            BW/Ht leanness percentile is all-time.
         </p>
     </div>
     """, unsafe_allow_html=True)
