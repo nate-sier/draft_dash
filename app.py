@@ -1248,6 +1248,8 @@ with tab_card:
                 <span class="stat-val">{fmt(row.get('Concentric Impulse'), 1)}</span></div>
             <div class="stat-row"><span class="stat-label">P1 Conc. Impulse</span>
                 <span class="stat-val">{fmt(row.get('P1 Concentric Impulse'), 1)}</span></div>
+            <div class="stat-row"><span class="stat-label">CI-100ms</span>
+                <span class="stat-val">{fmt(row.get('Concentric Impulse-100ms'), 1)}</span></div>
             <div class="stat-row"><span class="stat-label">RSI-modified</span>
                 <span class="stat-val">{fmt(row.get('RSI-modified'), 3)}</span></div>
             <div class="stat-row"><span class="stat-label">30yd Sprint</span>
@@ -1546,6 +1548,8 @@ with tab_ref:
     # ── Summary stats table ───────────────────────────────────────────────────
     metrics_summary = [
         ("Concentric Impulse",                 "CI (N·s)",        1, "",     False),
+        ("P1 Concentric Impulse",              "P1 CI (N·s)",     1, "",     False),
+        ("Concentric Impulse-100ms",           "CI-100ms",        1, "",     False),
         ("RSI-modified",                       "RSI-mod",         3, "",     False),
         ("Peak Power / BM",                    "Peak Pwr/BM",     1, "",     False),
         ("30yd Split",                         "30yd (s)",        3, "s",    True),
