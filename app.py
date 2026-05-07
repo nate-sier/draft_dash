@@ -2196,8 +2196,8 @@ with tab_proj:
         f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">CI Projection with Weight Gain</h2>'
         f'<p style="font-size:13px;color:#6b7fa3;margin:0">'
         f'Projects Concentric Impulse if the athlete adds 10–15 lbs. '
-        f'Assumes relative CI per kg of bodyweight decreases by 3% with added mass — '
-        f'accounting for the adjustment period as the body adapts to new weight.</p></div>',
+        f'Assumes relative CI per kg of bodyweight decreases by 3% with added mass. '
+        f'This penalty is applied to give a more reasonable projection, given that CI relative to bodyweight may not stay consistent as substantial size is added.</p></div>',
         unsafe_allow_html=True)
 
     # ── Athlete selector ──────────────────────────────────────────────────────
