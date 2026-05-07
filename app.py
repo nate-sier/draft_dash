@@ -1944,15 +1944,15 @@ with tab_guide:
     metric_def("30yd Sprint", "seconds",
         "Time to cover 30 yards from a standing start. The primary speed metric. "
         "Lower = faster. Elite amateur range: sub-3.80s. Above average: 3.80–4.00s.",
-        "Lower is better. Elite < 3.80s.", good_label="✓ Lower is better:")
+        good="Lower is better · Elite < 3.80s", good_label="✓")
     metric_def("10yd Split", "seconds",
         "Time to cover the first 10 yards — measures pure acceleration and first-step quickness. "
         "Derived from the same timed run as the 30yd.",
-        "Lower is better. Elite < 1.55s.", good_label="✓ Lower is better:")
+        good="Lower is better · Elite < 1.55s", good_label="✓")
     metric_def("20yd Split", "seconds",
         "Time to cover the first 20 yards — transition between acceleration and top speed. "
         "Derived from the same timed run as the 30yd.",
-        "Lower is better.", good_label="✓ Lower is better:")
+        good="Lower is better", good_label="✓")
 
     st.markdown(f'<div style="border-left:4px solid {GREEN};padding-left:10px;margin:20px 0 6px 0">'
                 f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
