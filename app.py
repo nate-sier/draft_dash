@@ -1869,8 +1869,8 @@ with tab_guide:
 
     gs("Metric Definitions", "#6b7fa3")
 
-    def metric_def(name, unit, desc, good=None):
-        good_html = f'<div style="font-size:11px;color:#4CAF82;margin-top:3px">✓ Higher is better: {good}</div>' if good else ""
+    def metric_def(name, unit, desc, good=None, good_label="✓"):
+        good_html = f'<div style="font-size:11px;color:#4CAF82;margin-top:3px">{good_label} {good}</div>' if good else ""
         st.markdown(f"""
         <div style="padding:12px 16px;border-bottom:1px solid {BORD}">
             <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">
@@ -1944,15 +1944,15 @@ with tab_guide:
     metric_def("30yd Sprint", "seconds",
         "Time to cover 30 yards from a standing start. The primary speed metric. "
         "Lower = faster. Elite amateur range: sub-3.80s. Above average: 3.80–4.00s.",
-        "Lower is better. Elite < 3.80s.")
+        "Lower is better. Elite < 3.80s.", good_label="✓ Lower is better:")
     metric_def("10yd Split", "seconds",
         "Time to cover the first 10 yards — measures pure acceleration and first-step quickness. "
         "Derived from the same timed run as the 30yd.",
-        "Lower is better. Elite < 1.55s.")
+        "Lower is better. Elite < 1.55s.", good_label="✓ Lower is better:")
     metric_def("20yd Split", "seconds",
         "Time to cover the first 20 yards — transition between acceleration and top speed. "
         "Derived from the same timed run as the 30yd.",
-        "Lower is better.")
+        "Lower is better.", good_label="✓ Lower is better:")
 
     st.markdown(f'<div style="border-left:4px solid {GREEN};padding-left:10px;margin:20px 0 6px 0">'
                 f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
