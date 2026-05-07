@@ -739,14 +739,14 @@ def make_scatter(dff):
         hover_data={"Year": True, "athlete_quality_score": ":.1f",
                     "potential_score": ":.1f", "archetype": True},
         color_discrete_map=ARCHETYPE_COLORS,
-        labels={"athlete_quality_score": "Athleticism Score Score",
+        labels={"athlete_quality_score": "Athleticism Score",
                 "potential_score": "Potential Score"},
         height=480,
     )
     fig.update_traces(marker=dict(size=10, line=dict(width=1, color="white")))
     fig.update_layout(**_layout(
         margin=dict(l=40, r=20, t=40, b=40),
-        title=dict(text="Quality vs Potential", font=dict(size=14, color=NAV), x=0),
+        title=dict(text="Athleticism vs Potential", font=dict(size=14, color=NAV), x=0),
         legend=dict(title="Archetype", font=dict(color=NAV)),
     ))
     return fig
