@@ -1156,9 +1156,9 @@ with tab_card:
         _pg  = str(row.get('pos_group',''))
         _pos = str(row.get('Position',''))
         if _pg and _pg not in ('Unknown','nan',''):
-            pos_grp_label = f"{_pg} Quality"
+            pos_grp_label = f"Athleticism relative to {_pg}s"
         elif _pos and _pos not in ('nan','None',''):
-            pos_grp_label = f"{_pos} Quality"
+            pos_grp_label = f"Athleticism relative to {_pos}s"
         else:
             pos_grp_label = "Position Data Unavailable"
         st.plotly_chart(make_gauge(pos_val if (pd.notna(pos_val) and pos_val > 0) else None, pos_grp_label, "#6b7fa3"),
