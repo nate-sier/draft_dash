@@ -350,7 +350,7 @@ def build_scores(_df,
     df["why_flagged"] = df.apply(lambda r: explain_strategy(
         {f"rz_{f}": r.get(f"rz_{f}", 0) for f in strategy_features}, strategy_features), axis=1)
 
-    # ── Athlete Quality Score ──────────────────────────────────────────────────
+    # ── Athleticism Score Score ──────────────────────────────────────────────────
     # Position group
     df["pos_group"] = df["Position"].astype(str).map(pos_group)
 
@@ -739,7 +739,7 @@ def make_scatter(dff):
         hover_data={"Year": True, "athlete_quality_score": ":.1f",
                     "potential_score": ":.1f", "archetype": True},
         color_discrete_map=ARCHETYPE_COLORS,
-        labels={"athlete_quality_score": "Athlete Quality Score",
+        labels={"athlete_quality_score": "Athleticism Score Score",
                 "potential_score": "Potential Score"},
         height=480,
     )
@@ -886,7 +886,7 @@ with tab_board:
         st_opts = ["All"] + sorted(df["School Type"].dropna().unique())
         st_sel  = st.selectbox("School Type", st_opts, key="lb_st")
     with fc6:
-        sort_by = st.selectbox("Sort by", ["Athlete Quality", "Pos. Group Quality",
+        sort_by = st.selectbox("Sort by", ["Athleticism Score", "Pos. Group Athleticism",
                                             "Potential", "CI", "30yd Sprint"],
                                key="lb_sort")
 
@@ -897,8 +897,8 @@ with tab_board:
     if arch_sel != "All":   dff = dff[dff["archetype"] == arch_sel]
     if st_sel != "All":     dff = dff[dff["School Type"] == st_sel]
 
-    sort_col = {"Athlete Quality": "athlete_quality_score",
-                "Pos. Group Quality": "aq_pos_score",
+    sort_col = {"Athleticism Score": "athlete_quality_score",
+                "Pos. Group Athleticism": "aq_pos_score",
                 "Potential": "potential_score",
                 "CI": "Concentric Impulse",
                 "30yd Sprint": "30yd Split"}[sort_by]
@@ -950,13 +950,13 @@ with tab_board:
     tbl = tbl.rename(columns={
         "athleteName": "Athlete", "pos_group": "Group", "School Type": "School",
         "archetype": "Archetype", "programming_category": "Program",
-        "athlete_quality_score": "Quality",
-        "aq_pos_score": "Pos. Quality", "potential_score": "Potential",
+        "athlete_quality_score": "Athleticism",
+        "aq_pos_score": "Pos. Athleticism", "potential_score": "Potential",
         "Concentric Impulse": "CI", "P1 Concentric Impulse": "P1 CI",
         "30yd Split": "30yd (s)",
         "RSI-modified": "RSI-mod", "Peak Power / BM": "PkPwr/BM",
     })
-    for c in ["Quality","Pos. Quality","Potential","CI","P1 CI","RSI-mod","PkPwr/BM"]:
+    for c in ["Athleticism","Pos. Athleticism","Potential","CI","P1 CI","RSI-mod","PkPwr/BM"]:
         tbl[c] = tbl[c].round(1)
     tbl["30yd (s)"] = tbl["30yd (s)"].round(3)
 
@@ -1115,7 +1115,7 @@ with tab_card:
             border-top:6px solid {RED};margin-bottom:4px">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{RED};margin-bottom:8px">
-                ★ ATHLETE QUALITY</div>
+                ★ ATHLETICISM SCORE</div>
             <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{RED};line-height:1">
                 {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
@@ -1385,15 +1385,12 @@ with tab_card:
         sc_bwht_pct_cur = sc_bwht_pct(sc_bwht_cur)
         for label, ci_v, ci_p, mass_v, bwht_v, bwht_p, prog_c in [
             ("Current",  sc_ci,    sc_ci_pct_cur, sc_mass,    sc_bwht_cur,  sc_bwht_pct_cur, None),
-            ("+10 lbs",  sc_ci_10, sc_ci_pct_10,  sc_mass_10, sc_bwht_10v,  sc_bwht_pct_10, programming_category(sc_ci_10, row.get("P1 Concentric Impulse", np.nan))),
-            ("+15 lbs",  sc_ci_15, sc_ci_pct_15,  sc_mass_15, sc_bwht_15v,  sc_bwht_pct_15, programming_category(sc_ci_15, row.get("P1 Concentric Impulse", np.nan))),
+            ("+10 lbs",  sc_ci_10, sc_ci_pct_10,  sc_mass_10, sc_bwht_10v,  sc_bwht_pct_10, None),
+            ("+15 lbs",  sc_ci_15, sc_ci_pct_15,  sc_mass_15, sc_bwht_15v,  sc_bwht_pct_15, None),
         ]:
             is_cur   = label == "Current"
             bg       = "white" if is_cur else SURF
             prog_html = ""
-            if prog_c:
-                pc = PROG_COLORS.get(prog_c, "#9AAAC0")
-                prog_html = f'<span style="background:{pc};color:white;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px;margin-left:6px">{prog_c}</span>'
             delta_ci_html = ""
             if not is_cur:
                 d = ci_v - sc_ci
@@ -1780,21 +1777,21 @@ with tab_guide:
     gs("The Two Scores That Matter", RED)
     st.markdown(
         f'<p style="font-size:14px;line-height:1.75;color:#2a3a5a">'
-        f'Every athlete is evaluated on two headline numbers — <strong>Athlete Quality</strong> '
+        f'Every athlete is evaluated on two headline numbers — <strong>Athleticism Score</strong> '
         f'and <strong>Development Potential</strong>. Both are scaled 0–100 and shown prominently '
         f'at the top of every scorecard. These are the numbers to focus on.</p>',
         unsafe_allow_html=True)
 
-    score_block("Athlete Quality", "CI × 0.35 + Sprint × 0.30 + RSI × 0.15 + Peak Power × 0.20",
+    score_block("Athleticism Score", "CI × 0.35 + Sprint × 0.30 + RSI × 0.15 + Peak Power × 0.20",
         "How good an athlete they are right now, based on force plate and sprint performance. "
         "Weights are adjustable in the sidebar. Players without sprint data use a separate CI/RSI/Peak Power formula.", accent=RED)
     score_block("Development Potential", "Peak Power + Height + Leanness + School Type + Wingspan",
         "How much room they have to grow. Rewards tall, lean high schoolers with long wingspans and high relative power output. "
         "Weights are adjustable in the sidebar.", accent=NAV)
-    score_block("Position Group Quality", "Same formula as Athlete Quality, ranked within position group only",
+    score_block("Position Group Quality", "Same formula as Athleticism Score, ranked within position group only",
         "How the athlete compares to players at their position specifically — Pitchers vs Pitchers, Infielders vs Infielders, etc.")
 
-    gs("Athlete Quality — Component Metrics", RED)
+    gs("Athleticism Score — Component Metrics", RED)
     for label, desc in [
         ("Concentric Impulse (CI)", "Total force applied during the upward phase of the jump (N·s). The primary measure of lower body power output. Higher = better."),
         ("30yd Sprint", "Time to cover 30 yards from a standing start (seconds). Lower = faster = better. 10yd and 20yd splits also recorded."),
@@ -2317,8 +2314,7 @@ with tab_proj:
                   bwht_new, bwht_pct_new, accent):
         delta_ci         = ci_proj - ci_cur
         delta_bwht       = (bwht_new - bwht_cur) if (pd.notna(bwht_new) and pd.notna(bwht_cur)) else None
-        prog_cat         = programming_category(ci_proj, proj_row.get("P1 Concentric Impulse", np.nan))
-        prog_color       = PROG_COLORS.get(prog_cat, "#9AAAC0")
+
         s_bwht           = f"{bwht_new:.2f}"        if pd.notna(bwht_new)     else "—"
         s_bwht_pct       = f"{bwht_pct_new:.0f}th"  if pd.notna(bwht_pct_new) else "—"
         s_delta_bwht     = f"+{delta_bwht:.2f}"      if delta_bwht is not None else "—"
@@ -2353,7 +2349,7 @@ with tab_proj:
         parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;color:#6b7fa3">Leanness percentile</span><span style="font-weight:700;color:{NAV}">{s_bwht_pct}</span></div>')
         parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#6b7fa3">Change from current</span><span style="font-weight:700;color:{RED}">{s_delta_bwht}</span></div>')
         parts.append('</div>')
-        parts.append(f'<div style="display:flex;align-items:center;gap:8px"><span style="font-size:9px;font-weight:700;color:#6b7fa3;text-transform:uppercase">Program at this weight</span><span style="background:{prog_color};color:white;font-size:11px;font-weight:700;padding:2px 12px;border-radius:20px">&#9881; {prog_cat}</span></div>')
+
         parts.append('</div>')
         st.markdown("".join(parts), unsafe_allow_html=True)
     with card1:
