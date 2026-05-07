@@ -1561,9 +1561,24 @@ with tab_ref:
         ("wingspan_advantage",                 "Wingspan Adv.",   1, " cm",  False),
     ]
 
+    # Use appropriate base population for each metric group
+    fp_base     = ref_df[ref_df["Concentric Impulse"].notna()]
+    sprint_base = ref_df[ref_df["30yd Split"].notna()]
+    isak_base   = ref_df[ref_df["Height"].notna()]
+
+    FP_COLS     = {"Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
+                   "RSI-modified", "Peak Power / BM", "Jump Height (Flight Time) in Inches"}
+    SPRINT_COLS = {"30yd Split", "10yd Split"}
+
     summary_rows = []
     for col, label, digits, suffix, inv in metrics_summary:
-        data = ref_df[col].dropna()
+        if col in FP_COLS:
+            base = fp_base
+        elif col in SPRINT_COLS:
+            base = sprint_base
+        else:
+            base = isak_base
+        data = base[col].dropna()
         if len(data) < 2:
             continue
         summary_rows.append({
