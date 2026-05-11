@@ -19,6 +19,67 @@ PITCHER_POSITIONS = {"P", "SP", "RP", "Starting Pitcher", "Relief Pitcher",
                      "Right Hand Pitcher", "Left Hand Pitcher", "SC", "PC",
                      "Starting pitcher", "starting pitcher"}
 
+# ─── CI Tiers ─────────────────────────────────────────────────────────────────
+CI_TIERS = [
+    (None, 285,  "< 285"),
+    (285,  310,  "285–310"),
+    (310,  335,  "310–335"),
+    (335,  None, "335+"),
+]
+
+def ci_tier_label(ci):
+    if pd.isna(ci): return "—"
+    for lo, hi, label in CI_TIERS:
+        if (lo is None or ci >= lo) and (hi is None or ci < hi):
+            return label
+    return "335+"
+
+def ci_tier_index(ci):
+    if pd.isna(ci): return -1
+    for i, (lo, hi, label) in enumerate(CI_TIERS):
+        if (lo is None or ci >= lo) and (hi is None or ci < hi):
+            return i
+    return len(CI_TIERS) - 1
+
+def ci_next_tier_target(ci):
+    """Returns (next_tier_label, target_ci) or None if already at top."""
+    idx = ci_tier_index(ci)
+    if idx < 0 or idx >= len(CI_TIERS) - 1:
+        return None
+    lo, hi, label = CI_TIERS[idx + 1]
+    return label, lo  # next tier lower bound is the target
+
+def lbs_to_target(ci, mass_kg, target_ci, penalty=0.03):
+    """
+    How many lbs needed to reach target_ci given current CI/kg and 3% penalty?
+    Formula: target_ci = (ci/mass_kg * (1 - penalty)) * (mass_kg + gain_kg)
+    Solving: gain_kg = target_ci / (ci/mass_kg * (1-penalty)) - mass_kg
+    """
+    if pd.isna(ci) or pd.isna(mass_kg) or mass_kg == 0 or ci == 0:
+        return np.nan
+    ci_per_kg_adj = (ci / mass_kg) * (1 - penalty)
+    if ci_per_kg_adj <= 0:
+        return np.nan
+    new_mass_kg = target_ci / ci_per_kg_adj
+    gain_kg     = new_mass_kg - mass_kg
+    return gain_kg * 2.20462  # convert to lbs
+
+def weight_gain_classification(lbs):
+    if pd.isna(lbs) or lbs <= 0:
+        return "At or above target"
+    if lbs < 10:
+        return "Standard Off-Season"
+    if lbs < 20:
+        return "Needs Strength Camp"
+    return "Needs Development Year"
+
+WEIGHT_CLASS_COLORS = {
+    "At or above target":   "#4CAF82",
+    "Standard Off-Season":  "#4CAF82",
+    "Needs Strength Camp":  "#E2C188",
+    "Needs Development Year": "#BA0C2F",
+}
+
 # ─── Position groups ──────────────────────────────────────────────────────────
 PITCHERS   = {"SP", "RHP", "LHP", "RP", "TWP"}
 CATCHERS   = {"C"}
@@ -539,6 +600,47 @@ def build_scores(_df,
         )
     df["overall_rank"] = df["overall_rank"].astype("Int64")
 
+    # ── CI tier classification ───────────────────────────────────────────────
+    df["ci_tier"]       = df["Concentric Impulse"].apply(ci_tier_label)
+    df["ci_tier_idx"]   = df["Concentric Impulse"].apply(ci_tier_index)
+
+    # Weight needed to hit 300 and next tier
+    TARGET_300 = 300.0
+    def ci_pathway(row):
+        ci      = row.get("Concentric Impulse", np.nan)
+        mass_kg = row.get("Mass", np.nan)
+        result  = {}
+        # Lbs to 300
+        if pd.notna(ci) and ci < TARGET_300 and pd.notna(mass_kg):
+            result["lbs_to_300"]       = lbs_to_target(ci, mass_kg, TARGET_300)
+            result["weight_class_300"] = weight_gain_classification(result["lbs_to_300"])
+        elif pd.notna(ci) and ci >= TARGET_300:
+            result["lbs_to_300"]       = 0.0
+            result["weight_class_300"] = "At or above target"
+        else:
+            result["lbs_to_300"]       = np.nan
+            result["weight_class_300"] = "—"
+        # Lbs to next tier
+        next_tier = ci_next_tier_target(ci) if pd.notna(ci) else None
+        if next_tier and pd.notna(mass_kg):
+            next_label, next_target    = next_tier
+            result["next_tier_label"]  = next_label
+            result["lbs_to_next_tier"] = lbs_to_target(ci, mass_kg, next_target)
+            result["weight_class_next"]= weight_gain_classification(result["lbs_to_next_tier"])
+        elif ci_tier_index(ci) == len(CI_TIERS) - 1:
+            result["next_tier_label"]  = "Top tier"
+            result["lbs_to_next_tier"] = 0.0
+            result["weight_class_next"]= "At or above target"
+        else:
+            result["next_tier_label"]  = "—"
+            result["lbs_to_next_tier"] = np.nan
+            result["weight_class_next"]= "—"
+        return pd.Series(result)
+
+    pathway_df = df.apply(ci_pathway, axis=1)
+    for col in pathway_df.columns:
+        df[col] = pathway_df[col]
+
     return df, strategy_features, all_rz_cols
 
 # ─── CSS ──────────────────────────────────────────────────────────────────────
@@ -944,22 +1046,28 @@ with tab_board:
                 unsafe_allow_html=True)
 
     tbl = dff[["athleteName","Year","Position","pos_group","School Type","archetype",
-               "programming_category",
-               "athlete_quality_score","aq_pos_score","potential_score",
-               "Concentric Impulse","P1 Concentric Impulse","30yd Split",
-               "RSI-modified","Peak Power / BM"]].copy()
+               "programming_category","athlete_quality_score","aq_pos_score",
+               "Concentric Impulse","ci_tier","lbs_to_next_tier","next_tier_label",
+               "weight_class_next","lbs_to_300","weight_class_300",
+               "P1 Concentric Impulse","30yd Split","RSI-modified","Peak Power / BM"]].copy()
+    tbl["lbs_to_next_tier"] = tbl["lbs_to_next_tier"].apply(
+        lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x > 0 else ("Top tier" if x == 0 else "—"))
+    tbl["lbs_to_300"] = tbl["lbs_to_300"].apply(
+        lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x > 0 else ("✓" if x == 0 else "—"))
     tbl = tbl.rename(columns={
         "athleteName": "Athlete", "pos_group": "Group", "School Type": "School",
         "archetype": "Archetype", "programming_category": "Program",
-        "athlete_quality_score": "Athleticism",
-        "aq_pos_score": "Pos. Athleticism", "potential_score": "Potential",
-        "Concentric Impulse": "CI", "P1 Concentric Impulse": "P1 CI",
-        "30yd Split": "30yd (s)",
+        "athlete_quality_score": "Athleticism", "aq_pos_score": "Pos. Athleticism",
+        "Concentric Impulse": "CI", "ci_tier": "CI Tier",
+        "lbs_to_next_tier": "To Next Tier", "next_tier_label": "Next Tier",
+        "weight_class_next": "Classification",
+        "lbs_to_300": "To 300", "weight_class_300": "300 Class",
+        "P1 Concentric Impulse": "P1 CI", "30yd Split": "30yd (s)",
         "RSI-modified": "RSI-mod", "Peak Power / BM": "PkPwr/BM",
     })
-    for c in ["Athleticism","Pos. Athleticism","Potential","CI","P1 CI","RSI-mod","PkPwr/BM"]:
-        tbl[c] = tbl[c].round(1)
-    tbl["30yd (s)"] = tbl["30yd (s)"].round(3)
+    for c in ["Athleticism","Pos. Athleticism","CI","P1 CI","RSI-mod","PkPwr/BM"]:
+        if c in tbl.columns: tbl[c] = tbl[c].round(1)
+    if "30yd (s)" in tbl.columns: tbl["30yd (s)"] = tbl["30yd (s)"].round(3)
 
     sel = st.dataframe(tbl, use_container_width=True, hide_index=True,
                        on_select="rerun", selection_mode="single-row", key="lb_table")
@@ -1028,6 +1136,33 @@ with tab_card:
         sel_yr_display = str(sel_yr)
 
     arch_color = ARCHETYPE_COLORS.get(row.get("archetype","Unclassified"), "#9AAAC0")
+
+    # ── CI pathway values ────────────────────────────────────────────────────────
+    sc_ci_tier       = row.get("ci_tier", "—")
+    sc_lbs_300       = row.get("lbs_to_300", np.nan)
+    sc_wc_300        = row.get("weight_class_300", "—")
+    sc_next_tier     = row.get("next_tier_label", "—")
+    sc_lbs_next      = row.get("lbs_to_next_tier", np.nan)
+    sc_wc_next       = row.get("weight_class_next", "—")
+    sc_wc_color      = WEIGHT_CLASS_COLORS.get(sc_wc_next, "#9AAAC0")
+    sc_300_color     = WEIGHT_CLASS_COLORS.get(sc_wc_300, "#9AAAC0")
+    sc_lbs_next_str  = f"+{sc_lbs_next:.1f} lbs" if (pd.notna(sc_lbs_next) and sc_lbs_next > 0) else ("Top tier" if sc_lbs_next == 0 else "—")
+    sc_lbs_300_str   = f"+{sc_lbs_300:.1f} lbs" if (pd.notna(sc_lbs_300) and sc_lbs_300 > 0) else ("✓ Already there" if sc_lbs_300 == 0 else "—")
+
+    # Projected BW/Ht at target weights
+    sc_mass_cur = safe_float(row.get("Mass"))
+    sc_ht_cur   = safe_float(row.get("Height"))
+    def proj_bwht_str(lbs_gain):
+        if pd.isna(sc_mass_cur) or pd.isna(sc_ht_cur) or pd.isna(lbs_gain) or lbs_gain <= 0:
+            return "—"
+        new_kg  = sc_mass_cur + lbs_gain / 2.20462
+        ratio   = (new_kg * 2.20462) / (sc_ht_cur / 2.54)
+        pool_r  = df["bmi_raw"].dropna()
+        pct     = int(round(float((pool_r < ratio).mean() * 100)))
+        return f"{ratio:.2f} ({pct}th pct)"
+
+    sc_bwht_300_str  = proj_bwht_str(sc_lbs_300)
+    sc_bwht_next_str = proj_bwht_str(sc_lbs_next)
 
     # ── Compute score values early so they're available for header ─────────────
     def safe_float(v):
@@ -1165,6 +1300,58 @@ with tab_card:
         st.plotly_chart(make_gauge(pos_val if (pd.notna(pos_val) and pos_val > 0) else None, pos_grp_label, "#6b7fa3"),
                         use_container_width=True, key="g_pos")
         st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
+
+    # ── CI Pathway card ───────────────────────────────────────────────────────
+    cp1, cp2 = st.columns(2)
+    with cp1:
+        tier_idx = ci_tier_index(safe_float(row.get("Concentric Impulse")))
+        tier_colors = ["#BA0C2F", "#E2C188", "#4CAF82", "#11225A"]
+        tier_color  = tier_colors[tier_idx] if tier_idx >= 0 else "#9AAAC0"
+        parts = []
+        parts.append(f'<div style="background:white;border:1px solid {BORD};border-top:4px solid ' + tier_color + f';border-radius:10px;padding:18px 22px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">')
+        parts.append(f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#6b7fa3;margin:0 0 6px 0">CI TIER</p>')
+        parts.append(f'<div style="font-family:Playfair Display,serif;font-size:36px;font-weight:900;color:' + tier_color + f'">{sc_ci_tier}</div>')
+        parts.append(f'<div style="font-size:12px;color:#6b7fa3;margin-top:4px">Current CI: <strong style="color:{NAV}">{fmt(safe_float(row.get("Concentric Impulse")), 1)}</strong></div>')
+        parts.append('<hr style="border-color:#E8ECF0;margin:12px 0">')
+        parts.append(f'<div style="display:flex;gap:20px;flex-wrap:wrap">')
+        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 3px 0">To next tier ({sc_next_tier})</p>')
+        parts.append(f'<div style="font-size:20px;font-weight:700;color:{sc_wc_color}">{sc_lbs_next_str}</div>')
+        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {sc_bwht_next_str}</div>')
+        parts.append(f'<span style="display:inline-block;background:{sc_wc_color};color:white;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;margin-top:4px">{sc_wc_next}</span></div>')
+        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 3px 0">To 300 CI</p>')
+        parts.append(f'<div style="font-size:20px;font-weight:700;color:{sc_300_color}">{sc_lbs_300_str}</div>')
+        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {sc_bwht_300_str}</div>')
+        parts.append(f'<span style="display:inline-block;background:{sc_300_color};color:white;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;margin-top:4px">{sc_wc_300}</span></div>')
+        parts.append('</div></div>')
+        st.markdown("".join(parts), unsafe_allow_html=True)
+    with cp2:
+        # CI tier progress bar
+        ci_val = safe_float(row.get("Concentric Impulse"))
+        tier_bounds = [(0, 285), (285, 310), (310, 335), (335, 370)]
+        tier_labels = ["< 285", "285–310", "310–335", "335+"]
+        tier_clrs   = ["#BA0C2F", "#E2C188", "#4CAF82", "#11225A"]
+        fig_tier = go.Figure()
+        for i, ((lo, hi), lbl, clr) in enumerate(zip(tier_bounds, tier_labels, tier_clrs)):
+            fig_tier.add_trace(go.Bar(
+                x=[lbl], y=[hi - lo],
+                base=[lo],
+                marker_color=clr if (ci_val is not None and lo <= ci_val < hi) else clr + "55" if clr != "#11225A" else "#11225A55",
+                marker_line=dict(color="white", width=2),
+                width=0.5, name=lbl, showlegend=False,
+            ))
+        if ci_val and pd.notna(ci_val):
+            fig_tier.add_hline(y=ci_val, line_color="white", line_width=3,
+                               annotation_text=f"  {ci_val:.1f}",
+                               annotation_font_color=NAV, annotation_font_size=12)
+        fig_tier.update_layout(**_layout(
+            title=dict(text="CI Tier Position", font=dict(size=13, color=NAV), x=0),
+            height=240, margin=dict(l=10, r=60, t=45, b=30),
+            yaxis=dict(range=[0, 375], tickvals=[285,310,335], tickfont=dict(size=10)),
+            xaxis=dict(tickfont=dict(size=11)),
+            plot_bgcolor="white", showlegend=False,
+            bargap=0.2,
+        ))
+        st.plotly_chart(fig_tier, use_container_width=True, key=f"ci_tier_chart_{sel_ath}")
 
     # ── Score context legend ──────────────────────────────────────────────────
     st.markdown(f"""
