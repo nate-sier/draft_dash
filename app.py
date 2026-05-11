@@ -603,22 +603,22 @@ def build_scores(_df,
     df["ci_tier"]       = df["Concentric Impulse"].apply(ci_tier_label)
     df["ci_tier_idx"]   = df["Concentric Impulse"].apply(ci_tier_index)
 
-    # Weight needed to hit 300 and next tier
-    TARGET_300 = 300.0
+    # Weight needed to hit 315 and next tier
+    TARGET_300 = 315.0
     def ci_pathway(row):
         ci      = row.get("Concentric Impulse", np.nan)
         mass_kg = row.get("Mass", np.nan)
         result  = {}
-        # Lbs to 300
+        # Lbs to 315
         if pd.notna(ci) and ci < TARGET_300 and pd.notna(mass_kg):
-            result["lbs_to_300"]       = lbs_to_target(ci, mass_kg, TARGET_300)
-            result["weight_class_300"] = weight_gain_classification(result["lbs_to_300"])
+            result["lbs_to_315"]       = lbs_to_target(ci, mass_kg, TARGET_300)
+            result["weight_class_315"] = weight_gain_classification(result["lbs_to_315"])
         elif pd.notna(ci) and ci >= TARGET_300:
-            result["lbs_to_300"]       = 0.0
-            result["weight_class_300"] = "At or above target"
+            result["lbs_to_315"]       = 0.0
+            result["weight_class_315"] = "At or above target"
         else:
-            result["lbs_to_300"]       = np.nan
-            result["weight_class_300"] = "—"
+            result["lbs_to_315"]       = np.nan
+            result["weight_class_315"] = "—"
         # Lbs to next tier
         next_tier = ci_next_tier_target(ci) if pd.notna(ci) else None
         if next_tier and pd.notna(mass_kg):
@@ -1002,39 +1002,27 @@ with tab_board:
     k5.metric("Median 30yd", fmt(dff["30yd Split"].median(), 3, "s")
               if dff["30yd Split"].notna().any() else "—")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── Scatter ───────────────────────────────────────────────────────────────
-    st.plotly_chart(make_scatter(dff), use_container_width=True, key="lb_scatter")
-
     # ── Table ─────────────────────────────────────────────────────────────────
-    tbl = dff[["athleteName","Year","Position","pos_group","School Type",
-               "programming_category",
-               "athlete_quality_score","aq_pos_score",
-               "Concentric Impulse","ci_tier",
-               "lbs_to_next_tier","next_tier_label","weight_class_next",
-               "lbs_to_300","weight_class_300",
-               "P1 Concentric Impulse","30yd Split","RSI-modified","Peak Power / BM"]].copy()
+    tbl = dff[["athleteName","Year","Position",
+               "athlete_quality_score",
+               "ci_tier","weight_class_next","lbs_to_next_tier",
+               "weight_class_315","lbs_to_315"]].copy()
 
     tbl["lbs_to_next_tier"] = tbl["lbs_to_next_tier"].apply(
         lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x > 0 else ("Top tier" if x == 0 else "—"))
-    tbl["lbs_to_300"] = tbl["lbs_to_300"].apply(
+    tbl["lbs_to_315"] = tbl["lbs_to_315"].apply(
         lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x > 0 else ("✓" if x == 0 else "—"))
 
     tbl = tbl.rename(columns={
-        "athleteName":"Athlete","pos_group":"Group","School Type":"School",
-        "programming_category":"Program",
-        "athlete_quality_score":"Athleticism","aq_pos_score":"Pos. Athleticism",
-        "Concentric Impulse":"CI","ci_tier":"CI Tier",
-        "lbs_to_next_tier":"To Next Tier","next_tier_label":"Next Tier",
-        "weight_class_next":"Classification",
-        "lbs_to_300":"To 300","weight_class_300":"300 Class",
-        "P1 Concentric Impulse":"P1 CI","30yd Split":"30yd (s)",
-        "RSI-modified":"RSI-mod","Peak Power / BM":"PkPwr/BM",
+        "athleteName":"Athlete",
+        "athlete_quality_score":"Athleticism",
+        "ci_tier":"CI Tier",
+        "weight_class_next":"To Next Tier Classification",
+        "lbs_to_next_tier":"Lbs to Next Tier",
+        "weight_class_315":"To 315 Classification",
+        "lbs_to_315":"Lbs to 315",
     })
-    for c in ["Athleticism","Pos. Athleticism","CI","P1 CI","RSI-mod","PkPwr/BM"]:
-        if c in tbl.columns: tbl[c] = tbl[c].round(1)
-    if "30yd (s)" in tbl.columns: tbl["30yd (s)"] = tbl["30yd (s)"].round(3)
+    tbl["Athleticism"] = tbl["Athleticism"].round(1)
 
     sel = st.dataframe(tbl, use_container_width=True, hide_index=True,
                        on_select="rerun", selection_mode="single-row", key="lb_tbl")
@@ -1121,12 +1109,12 @@ with tab_card:
     next_label = str(row.get("next_tier_label","—"))
     wc_next    = str(row.get("weight_class_next","—"))
     wc_col     = WEIGHT_CLASS_COLORS.get(wc_next,"#9AAAC0")
-    lbs_300    = sf(row.get("lbs_to_300"))
-    wc_300     = str(row.get("weight_class_300","—"))
-    wc_300_col = WEIGHT_CLASS_COLORS.get(wc_300,"#9AAAC0")
+    lbs_to_315 = sf(row.get("lbs_to_315"))
+    wc_315     = str(row.get("weight_class_315","—"))
+    wc_315_col = WEIGHT_CLASS_COLORS.get(wc_315,"#9AAAC0")
 
     lbs_next_str = f"+{lbs_next:.1f} lbs" if (pd.notna(lbs_next) and lbs_next>0) else ("Top tier" if lbs_next==0 else "—")
-    lbs_300_str  = f"+{lbs_300:.1f} lbs"  if (pd.notna(lbs_300)  and lbs_300>0)  else ("✓ Already ≥ 300" if lbs_300==0 else "—")
+    lbs_315_str  = f"+{lbs_to_315:.1f} lbs"  if (pd.notna(lbs_to_315)  and lbs_to_315>0)  else ("✓ Already ≥ 315" if lbs_to_315==0 else "—")
 
     def proj_bwht(lbs_gain):
         if pd.isna(mass_kg) or pd.isna(ht_cm) or pd.isna(lbs_gain) or lbs_gain<=0: return "—"
@@ -1216,10 +1204,10 @@ with tab_card:
         parts.append(f'<div style="font-size:18px;font-weight:700;color:' + wc_col + f'">{lbs_next_str}</div>')
         parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {proj_bwht(lbs_next)}</div>')
         parts.append(f'<span style="display:inline-block;background:' + wc_col + f';color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_next}</span></div>')
-        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 2px 0">To 300 CI</p>')
-        parts.append(f'<div style="font-size:18px;font-weight:700;color:' + wc_300_col + f'">{lbs_300_str}</div>')
+        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 2px 0">To 315 CI</p>')
+        parts.append(f'<div style="font-size:18px;font-weight:700;color:' + wc_315_col + f'">{lbs_315_str}</div>')
         parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {proj_bwht(lbs_300)}</div>')
-        parts.append(f'<span style="display:inline-block;background:' + wc_300_col + f';color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_300}</span></div>')
+        parts.append(f'<span style="display:inline-block;background:' + wc_315_col + f';color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_315}</span></div>')
         parts.append('</div></div>')
         st.markdown("".join(parts), unsafe_allow_html=True)
 
