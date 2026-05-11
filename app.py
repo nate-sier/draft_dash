@@ -1206,7 +1206,7 @@ with tab_card:
         parts.append(f'<span style="display:inline-block;background:' + wc_col + f';color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_next}</span></div>')
         parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 2px 0">To 315 CI</p>')
         parts.append(f'<div style="font-size:18px;font-weight:700;color:' + wc_315_col + f'">{lbs_315_str}</div>')
-        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {proj_bwht(lbs_300)}</div>')
+        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {proj_bwht(lbs_to_315)}</div>')
         parts.append(f'<span style="display:inline-block;background:' + wc_315_col + f';color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_315}</span></div>')
         parts.append('</div></div>')
         st.markdown("".join(parts), unsafe_allow_html=True)
