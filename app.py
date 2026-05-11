@@ -22,9 +22,8 @@ PITCHER_POSITIONS = {"P", "SP", "RP", "Starting Pitcher", "Relief Pitcher",
 # ─── CI Tiers ─────────────────────────────────────────────────────────────────
 CI_TIERS = [
     (None, 285,  "< 285"),
-    (285,  310,  "285–310"),
-    (310,  335,  "310–335"),
-    (335,  None, "335+"),
+    (285,  315,  "285–315"),
+    (315,  None, "315+"),
 ]
 
 def ci_tier_label(ci):
@@ -32,7 +31,7 @@ def ci_tier_label(ci):
     for lo, hi, label in CI_TIERS:
         if (lo is None or ci >= lo) and (hi is None or ci < hi):
             return label
-    return "335+"
+    return "315+"
 
 def ci_tier_index(ci):
     if pd.isna(ci): return -1
@@ -842,8 +841,7 @@ def make_scatter(dff):
         hover_data={"Year": True, "athlete_quality_score": ":.1f",
                     "ci_tier": True, "weight_class_next": True,
                     "lbs_to_next_tier": ":.1f"},
-        color_discrete_map={"< 285": "#BA0C2F", "285–310": "#E2C188",
-                             "310–335": "#4CAF82", "335+": "#11225A"},
+        color_discrete_map={"< 285": "#BA0C2F", "285–315": "#E2C188", "315+": "#11225A"},
         labels={"athlete_quality_score": "Athleticism Score",
                 "strategy_distance_score": "Strategy Distance"},
         height=480,
@@ -1113,7 +1111,7 @@ with tab_card:
     ht_cm           = sf(row.get("Height"))
     ci_tier_val     = ci_tier_label(ci_val)
     tier_idx        = ci_tier_index(ci_val)
-    tier_clrs       = ["#BA0C2F","#E2C188","#4CAF82","#11225A"]
+    tier_clrs       = ["#BA0C2F","#E2C188","#11225A"]
     tier_color      = tier_clrs[tier_idx] if tier_idx>=0 else "#9AAAC0"
     prog_cat        = str(row.get("programming_category","—"))
     prog_color      = PROG_COLORS.get(prog_cat, "#9AAAC0")
