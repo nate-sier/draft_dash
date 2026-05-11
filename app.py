@@ -837,13 +837,15 @@ def make_trend(player_df, col, label, invert=False):
 # ─── Scatter map ──────────────────────────────────────────────────────────────
 def make_scatter(dff):
     fig = px.scatter(
-        dff, x="athlete_quality_score", y="potential_score",
-        color="archetype", hover_name="athleteName",
+        dff, x="athlete_quality_score", y="strategy_distance_score",
+        color="ci_tier", hover_name="athleteName",
         hover_data={"Year": True, "athlete_quality_score": ":.1f",
-                    "potential_score": ":.1f", "archetype": True},
-        color_discrete_map=ARCHETYPE_COLORS,
+                    "ci_tier": True, "weight_class_next": True,
+                    "lbs_to_next_tier": ":.1f"},
+        color_discrete_map={"< 285": "#BA0C2F", "285–310": "#E2C188",
+                             "310–335": "#4CAF82", "335+": "#11225A"},
         labels={"athlete_quality_score": "Athleticism Score",
-                "potential_score": "Potential Score"},
+                "strategy_distance_score": "Strategy Distance"},
         height=480,
     )
     fig.update_traces(marker=dict(size=10, line=dict(width=1, color="white")))
@@ -983,8 +985,7 @@ with tab_board:
         pos_grp_opts = ["All", "Pitcher", "Catcher", "Infielder", "Outfielder"]
         pos_grp_sel  = st.selectbox("Position Group", pos_grp_opts, key="lb_posgrp")
     with fc4:
-        arch_opts = ["All"] + sorted(df["archetype"].dropna().unique())
-        arch_sel  = st.selectbox("Archetype", arch_opts, key="lb_arch")
+        arch_sel = "All"
     with fc5:
         st_opts = ["All"] + sorted(df["School Type"].dropna().unique())
         st_sel  = st.selectbox("School Type", st_opts, key="lb_st")
@@ -997,7 +998,6 @@ with tab_board:
     if search:              dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
     if yr_sel != "All":     dff = dff[dff["Year"] == int(yr_sel)]
     if pos_grp_sel != "All": dff = dff[dff["pos_group"] == pos_grp_sel]
-    if arch_sel != "All":   dff = dff[dff["archetype"] == arch_sel]
     if st_sel != "All":     dff = dff[dff["School Type"] == st_sel]
 
     sort_col = {"Athleticism Score": "athlete_quality_score",
@@ -1045,8 +1045,7 @@ with tab_board:
     st.markdown('<p class="label" style="margin-top:8px">Ranked Athletes</p>',
                 unsafe_allow_html=True)
 
-    tbl = dff[["athleteName","Year","Position","pos_group","School Type","archetype",
-               "programming_category","athlete_quality_score","aq_pos_score",
+    tbl = dff[["athleteName","Year","Position","pos_group","School Type","programming_category","athlete_quality_score","aq_pos_score",
                "Concentric Impulse","ci_tier","lbs_to_next_tier","next_tier_label",
                "weight_class_next","lbs_to_300","weight_class_300",
                "P1 Concentric Impulse","30yd Split","RSI-modified","Peak Power / BM"]].copy()
@@ -1056,7 +1055,7 @@ with tab_board:
         lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x > 0 else ("✓" if x == 0 else "—"))
     tbl = tbl.rename(columns={
         "athleteName": "Athlete", "pos_group": "Group", "School Type": "School",
-        "archetype": "Archetype", "programming_category": "Program",
+        "programming_category": "Program",
         "athlete_quality_score": "Athleticism", "aq_pos_score": "Pos. Athleticism",
         "Concentric Impulse": "CI", "ci_tier": "CI Tier",
         "lbs_to_next_tier": "To Next Tier", "next_tier_label": "Next Tier",
@@ -1150,8 +1149,13 @@ with tab_card:
     sc_lbs_300_str   = f"+{sc_lbs_300:.1f} lbs" if (pd.notna(sc_lbs_300) and sc_lbs_300 > 0) else ("✓ Already there" if sc_lbs_300 == 0 else "—")
 
     # Projected BW/Ht at target weights
-    sc_mass_cur = safe_float(row.get("Mass"))
-    sc_ht_cur   = safe_float(row.get("Height"))
+    def _sf(v):
+        try:
+            f = float(v)
+            return f if not np.isnan(f) else np.nan
+        except: return np.nan
+    sc_mass_cur = _sf(row.get("Mass"))
+    sc_ht_cur   = _sf(row.get("Height"))
     def proj_bwht_str(lbs_gain):
         if pd.isna(sc_mass_cur) or pd.isna(sc_ht_cur) or pd.isna(lbs_gain) or lbs_gain <= 0:
             return "—"
@@ -1187,8 +1191,7 @@ with tab_card:
                     WASHINGTON NATIONALS · ATHLETE SCORECARD</p>
                 <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
                     {sel_ath}</h2>
-                <span class="arch-badge" style="background:{arch_color}">{row.get('archetype','—')}</span>
-                <span style="font-size:12px;color:#6b7fa3;margin-left:10px">
+                <span style="font-size:12px;color:#6b7fa3;margin-left:0">
                     {sel_yr_display} · {str(row.get('Position','—')) if str(row.get('Position','')) not in ('nan','None','') else '—'} · {str(row.get('School Type','—')) if str(row.get('School Type','')) not in ('nan','None','') else '—'}</span>
                 <br>
                 <span style="display:inline-block;margin-top:8px;background:{PROG_COLORS.get(row.get('programming_category','Unclassified'),'#9AAAC0')};
