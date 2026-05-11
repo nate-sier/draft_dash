@@ -921,18 +921,7 @@ with st.sidebar:
     if not (0.99 < total_ns < 1.01):
         st.warning(f"No-sprint weights sum to {total_ns*100:.0f}% — should be 100%")
 
-    st.markdown("---")
-    st.markdown(f'<p style="font-size:10px;font-weight:600;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:#6b7fa3">Potential Weights</p>',
-                unsafe_allow_html=True)
-    wp_pp     = st.slider("Peak Power / BM",     0, 100, 25, 5, key="wp_pp") / 100
-    wp_ht     = st.slider("Height",              0, 100, 25, 5, key="wp_ht") / 100
-    wp_bmi    = st.slider("Leanness (BW/Ht)",    0, 100, 20, 5, key="wp_bmi") / 100
-    wp_school = st.slider("School Type",         0, 100, 15, 5, key="wp_school") / 100
-    wp_wings  = st.slider("Wingspan Advantage",  0, 100, 15, 5, key="wp_wings") / 100
-    total_pot = wp_pp + wp_ht + wp_bmi + wp_school + wp_wings
-    if not (0.99 < total_pot < 1.01):
-        st.warning(f"Weights sum to {total_pot*100:.0f}% — should be 100%")
+    wp_pp = 0.25; wp_ht = 0.25; wp_bmi = 0.20; wp_school = 0.15; wp_wings = 0.15
 
 # ─── Load & score ─────────────────────────────────────────────────────────────
 try:
@@ -970,29 +959,28 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card, tab_ref, tab_guide, tab_proj = st.tabs(["Leaderboard", "Athlete Scorecard", "Reference & Distributions", "Guide", "Development Projection"])
+tab_board, tab_card = st.tabs(["Leaderboard", "Athlete Scorecard"])
 
 # =============================================================================
 # TAB 1 — LEADERBOARD
 # =============================================================================
 with tab_board:
-    fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([2, 1, 1.2, 1.2, 1.2, 1.2])
-    with fc1: search  = st.text_input("Search athlete", placeholder="Name…", key="lb_search")
-    with fc2:
+
+    # ── Filters ───────────────────────────────────────────────────────────────
+    f1, f2, f3, f4, f5 = st.columns([2.5, 1, 1.2, 1.2, 1.2])
+    with f1: search      = st.text_input("Search", placeholder="Name…", key="lb_search")
+    with f2:
         yr_opts = ["All"] + sorted(df["Year"].dropna().unique().astype(int).tolist(), reverse=True)
         yr_sel  = st.selectbox("Year", yr_opts, key="lb_year")
-    with fc3:
-        pos_grp_opts = ["All", "Pitcher", "Catcher", "Infielder", "Outfielder"]
-        pos_grp_sel  = st.selectbox("Position Group", pos_grp_opts, key="lb_posgrp")
-    with fc4:
-        arch_sel = "All"
-    with fc5:
-        st_opts = ["All"] + sorted(df["School Type"].dropna().unique())
-        st_sel  = st.selectbox("School Type", st_opts, key="lb_st")
-    with fc6:
-        sort_by = st.selectbox("Sort by", ["Athleticism Score", "Pos. Group Athleticism",
-                                            "Potential", "CI", "30yd Sprint"],
-                               key="lb_sort")
+    with f3:
+        pos_grp_sel = st.selectbox("Position Group",
+                        ["All","Pitcher","Catcher","Infielder","Outfielder"], key="lb_pos")
+    with f4:
+        st_sel = st.selectbox("School Type",
+                    ["All"] + sorted(df["School Type"].dropna().unique()), key="lb_st")
+    with f5:
+        sort_by = st.selectbox("Sort by",
+                    ["Athleticism Score", "Pos. Athleticism", "CI", "30yd Sprint"], key="lb_sort")
 
     dff = df.copy()
     if search:              dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
@@ -1001,404 +989,278 @@ with tab_board:
     if st_sel != "All":     dff = dff[dff["School Type"] == st_sel]
 
     sort_col = {"Athleticism Score": "athlete_quality_score",
-                "Pos. Group Athleticism": "aq_pos_score",
-                "Potential": "potential_score",
-                "CI": "Concentric Impulse",
-                "30yd Sprint": "30yd Split"}[sort_by]
-    asc = sort_by == "30yd Sprint"
-    dff = dff.sort_values(sort_col, ascending=asc, na_position="last").reset_index(drop=True)
+                "Pos. Athleticism":  "aq_pos_score",
+                "CI":                "Concentric Impulse",
+                "30yd Sprint":       "30yd Split"}[sort_by]
+    dff = dff.sort_values(sort_col, ascending=(sort_by == "30yd Sprint"),
+                          na_position="last").reset_index(drop=True)
 
+    # ── Summary strip ─────────────────────────────────────────────────────────
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Athletes",     str(len(dff)))
-    k2.metric("Median CI",    fmt(dff["Concentric Impulse"].median(), 1))
-    k3.metric("Median RSI",   fmt(dff["RSI-modified"].median(), 3))
-    k4.metric("Median Pk Pwr/BM", fmt(dff["Peak Power / BM"].median(), 1))
-    k5.metric("Median 30yd", fmt(dff["30yd Split"].median(), 3, "s") if dff["30yd Split"].notna().any() else "—")
+    k1.metric("Athletes",    str(len(dff)))
+    k2.metric("Median CI",   fmt(dff["Concentric Impulse"].median(), 1))
+    k3.metric("Median RSI",  fmt(dff["RSI-modified"].median(), 3))
+    k4.metric("Median PkPwr/BM", fmt(dff["Peak Power / BM"].median(), 1))
+    k5.metric("Median 30yd", fmt(dff["30yd Split"].median(), 3, "s")
+              if dff["30yd Split"].notna().any() else "—")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    ch1, ch2 = st.columns([1.4, 1])
-    with ch1:
-        st.plotly_chart(make_scatter(dff), use_container_width=True, key="lb_scatter")
-    with ch2:
-        arch_vc = dff["archetype"].value_counts().reset_index()
-        arch_vc.columns = ["archetype", "count"]
-        fig_arch = px.bar(arch_vc, x="archetype", y="count", color="archetype",
-                          color_discrete_map=ARCHETYPE_COLORS, height=240)
-        fig_arch.update_layout(**_layout(
-            title=dict(text="Archetypes", font=dict(size=13, color=NAV), x=0),
-            margin=dict(l=20, r=10, t=45, b=80), showlegend=False,
-            xaxis_title="", yaxis_title="Athletes"))
-        st.plotly_chart(fig_arch, use_container_width=True, key="lb_arch_bar")
+    # ── Scatter ───────────────────────────────────────────────────────────────
+    st.plotly_chart(make_scatter(dff), use_container_width=True, key="lb_scatter")
 
-        st_vc = dff["School Type"].value_counts().reset_index()
-        st_vc.columns = ["School Type","count"]
-        fig_st = px.pie(st_vc, names="School Type", values="count",
-                        color_discrete_sequence=[RED, NAV, GOLD, "#6b7fa3"],
-                        height=220)
-        fig_st.update_layout(**_layout(
-            title=dict(text="School Type Mix", font=dict(size=13, color=NAV), x=0),
-            margin=dict(l=10, r=10, t=45, b=10),
-            legend=dict(font=dict(color=NAV, size=10))))
-        st.plotly_chart(fig_st, use_container_width=True, key="lb_st_pie")
-
-    st.markdown('<p class="label" style="margin-top:8px">Ranked Athletes</p>',
-                unsafe_allow_html=True)
-
-    tbl = dff[["athleteName","Year","Position","pos_group","School Type","programming_category","athlete_quality_score","aq_pos_score",
-               "Concentric Impulse","ci_tier","lbs_to_next_tier","next_tier_label",
-               "weight_class_next","lbs_to_300","weight_class_300",
+    # ── Table ─────────────────────────────────────────────────────────────────
+    tbl = dff[["athleteName","Year","Position","pos_group","School Type",
+               "programming_category",
+               "athlete_quality_score","aq_pos_score",
+               "Concentric Impulse","ci_tier",
+               "lbs_to_next_tier","next_tier_label","weight_class_next",
+               "lbs_to_300","weight_class_300",
                "P1 Concentric Impulse","30yd Split","RSI-modified","Peak Power / BM"]].copy()
+
     tbl["lbs_to_next_tier"] = tbl["lbs_to_next_tier"].apply(
         lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x > 0 else ("Top tier" if x == 0 else "—"))
     tbl["lbs_to_300"] = tbl["lbs_to_300"].apply(
         lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x > 0 else ("✓" if x == 0 else "—"))
+
     tbl = tbl.rename(columns={
-        "athleteName": "Athlete", "pos_group": "Group", "School Type": "School",
-        "programming_category": "Program",
-        "athlete_quality_score": "Athleticism", "aq_pos_score": "Pos. Athleticism",
-        "Concentric Impulse": "CI", "ci_tier": "CI Tier",
-        "lbs_to_next_tier": "To Next Tier", "next_tier_label": "Next Tier",
-        "weight_class_next": "Classification",
-        "lbs_to_300": "To 300", "weight_class_300": "300 Class",
-        "P1 Concentric Impulse": "P1 CI", "30yd Split": "30yd (s)",
-        "RSI-modified": "RSI-mod", "Peak Power / BM": "PkPwr/BM",
+        "athleteName":"Athlete","pos_group":"Group","School Type":"School",
+        "programming_category":"Program",
+        "athlete_quality_score":"Athleticism","aq_pos_score":"Pos. Athleticism",
+        "Concentric Impulse":"CI","ci_tier":"CI Tier",
+        "lbs_to_next_tier":"To Next Tier","next_tier_label":"Next Tier",
+        "weight_class_next":"Classification",
+        "lbs_to_300":"To 300","weight_class_300":"300 Class",
+        "P1 Concentric Impulse":"P1 CI","30yd Split":"30yd (s)",
+        "RSI-modified":"RSI-mod","Peak Power / BM":"PkPwr/BM",
     })
     for c in ["Athleticism","Pos. Athleticism","CI","P1 CI","RSI-mod","PkPwr/BM"]:
         if c in tbl.columns: tbl[c] = tbl[c].round(1)
     if "30yd (s)" in tbl.columns: tbl["30yd (s)"] = tbl["30yd (s)"].round(3)
 
     sel = st.dataframe(tbl, use_container_width=True, hide_index=True,
-                       on_select="rerun", selection_mode="single-row", key="lb_table")
+                       on_select="rerun", selection_mode="single-row", key="lb_tbl")
     sel_rows = sel.selection.rows if sel.selection else []
-    if sel_rows:
-        sel_pid = dff.iloc[sel_rows[0]]["playerID"]
-        st.session_state["scorecard_pid"] = sel_pid
-        st.session_state["scorecard_yr"]  = dff.iloc[sel_rows[0]]["Year"]
-        st.info("Row selected — switch to the Athlete Scorecard tab to view the full profile.")
+    default_ath = dff.iloc[sel_rows[0]]["athleteName"] if sel_rows else dff.iloc[0]["athleteName"]
+
 
 # =============================================================================
 # TAB 2 — ATHLETE SCORECARD
 # =============================================================================
 with tab_card:
-    athletes = sorted(df["athleteName"].dropna().unique())
-
-    # Pre-select from leaderboard click
-    default_ath = athletes[0]
-    if "scorecard_pid" in st.session_state:
-        pid_match = df[df["playerID"] == st.session_state["scorecard_pid"]]["athleteName"]
-        if not pid_match.empty:
-            default_ath = pid_match.iloc[0]
+    athletes = sorted(df["athleteName"].dropna().unique().tolist())
 
     sc1, sc2, sc3 = st.columns([1.5, 2, 1])
     with sc1:
         search_name = st.text_input("Search athlete", placeholder="Type a name…", key="sc_search")
     with sc2:
-        filtered_athletes = (
-            [a for a in athletes if search_name.lower() in a.lower()]
-            if search_name else athletes
-        )
-        if not filtered_athletes:
-            filtered_athletes = athletes
-        default_idx = 0
-        if default_ath in filtered_athletes:
-            default_idx = filtered_athletes.index(default_ath)
-        sel_ath = st.selectbox("Select athlete", filtered_athletes,
-                               index=default_idx, key="sc_ath")
+        filtered_athletes = ([a for a in athletes if search_name.lower() in a.lower()]
+                             if search_name else athletes)
+        if not filtered_athletes: filtered_athletes = athletes
+        default_idx = filtered_athletes.index(default_ath) if default_ath in filtered_athletes else 0
+        sel_ath = st.selectbox("Select athlete", filtered_athletes, index=default_idx, key="sc_ath")
     with sc3:
-        ath_years = sorted(df[df["athleteName"] == sel_ath]["Year"].dropna().unique().astype(int).tolist(),
+        ath_years = sorted(df[df["athleteName"]==sel_ath]["Year"].dropna().unique().astype(int).tolist(),
                            reverse=True)
-        yr_options = ["All years"] + [str(y) for y in ath_years]
-        sel_yr_str = st.selectbox("Year", yr_options, key="sc_yr")
-        sel_yr = None if sel_yr_str == "All years" else int(sel_yr_str)
+        yr_opts2   = ["All years"] + [str(y) for y in ath_years]
+        sel_yr_str = st.selectbox("Year", yr_opts2, key="sc_yr")
+        sel_yr     = None if sel_yr_str == "All years" else int(sel_yr_str)
 
     ath_all = df[df["athleteName"] == sel_ath].sort_values("Year")
-
     if sel_yr is None:
-        # All years — average numeric columns across years
         row_data = ath_all.select_dtypes(include=[np.number]).mean()
-        # Use most recent year for non-numeric fields
-        latest = ath_all.iloc[-1]
-        for col in ath_all.columns:
-            if col not in row_data.index:
-                row_data[col] = latest[col]
-        row = row_data
-        sel_yr_label = f"{ath_years[-1]}–{ath_years[0]}" if len(ath_years) > 1 else str(ath_years[0])
-        sel_yr_display = sel_yr_label
+        latest   = ath_all.iloc[-1]
+        for c in ath_all.columns:
+            if c not in row_data.index: row_data[c] = latest[c]
+        row            = row_data
+        sel_yr_display = f"{ath_years[-1]}–{ath_years[0]}" if len(ath_years)>1 else str(ath_years[0])
     else:
-        row = ath_all[ath_all["Year"] == sel_yr]
-        if row.empty:
-            st.warning("No data for this athlete/year combination.")
-            st.stop()
-        row = row.iloc[0]
-        sel_yr_label   = str(sel_yr)
+        sub = ath_all[ath_all["Year"]==sel_yr]
+        if sub.empty: st.warning("No data for this year."); st.stop()
+        row            = sub.iloc[0]
         sel_yr_display = str(sel_yr)
 
-    arch_color = ARCHETYPE_COLORS.get(row.get("archetype","Unclassified"), "#9AAAC0")
-
-    # ── CI pathway values ────────────────────────────────────────────────────────
-    sc_ci_tier       = row.get("ci_tier", "—")
-    sc_lbs_300       = row.get("lbs_to_300", np.nan)
-    sc_wc_300        = row.get("weight_class_300", "—")
-    sc_next_tier     = row.get("next_tier_label", "—")
-    sc_lbs_next      = row.get("lbs_to_next_tier", np.nan)
-    sc_wc_next       = row.get("weight_class_next", "—")
-    sc_wc_color      = WEIGHT_CLASS_COLORS.get(sc_wc_next, "#9AAAC0")
-    sc_300_color     = WEIGHT_CLASS_COLORS.get(sc_wc_300, "#9AAAC0")
-    sc_lbs_next_str  = f"+{sc_lbs_next:.1f} lbs" if (pd.notna(sc_lbs_next) and sc_lbs_next > 0) else ("Top tier" if sc_lbs_next == 0 else "—")
-    sc_lbs_300_str   = f"+{sc_lbs_300:.1f} lbs" if (pd.notna(sc_lbs_300) and sc_lbs_300 > 0) else ("✓ Already there" if sc_lbs_300 == 0 else "—")
-
-    # Projected BW/Ht at target weights
-    def _sf(v):
+    # ── Helper ────────────────────────────────────────────────────────────────
+    def sf(v):
         try:
             f = float(v)
             return f if not np.isnan(f) else np.nan
         except: return np.nan
-    sc_mass_cur = _sf(row.get("Mass"))
-    sc_ht_cur   = _sf(row.get("Height"))
-    def proj_bwht_str(lbs_gain):
-        if pd.isna(sc_mass_cur) or pd.isna(sc_ht_cur) or pd.isna(lbs_gain) or lbs_gain <= 0:
-            return "—"
-        new_kg  = sc_mass_cur + lbs_gain / 2.20462
-        ratio   = (new_kg * 2.20462) / (sc_ht_cur / 2.54)
-        pool_r  = df["bmi_raw"].dropna()
-        pct     = int(round(float((pool_r < ratio).mean() * 100)))
-        return f"{ratio:.2f} ({pct}th pct)"
 
-    sc_bwht_300_str  = proj_bwht_str(sc_lbs_300)
-    sc_bwht_next_str = proj_bwht_str(sc_lbs_next)
+    aq_val  = sf(row.get("athlete_quality_score"))
+    pos_val = sf(row.get("aq_pos_score"))
 
-    # ── Compute score values early so they're available for header ─────────────
-    def safe_float(v):
+    # Percentile helper
+    def pct_sfx(p):
+        if pd.isna(p): return "—"
+        p = int(round(p))
+        if 11<=p%100<=13: return f"{p}th"
+        return f"{p}{({1:'st',2:'nd',3:'rd'}.get(p%10,'th'))}"
+
+    def alltime_pct(val, col):
         try:
-            f = float(v)
-            return f if not np.isnan(f) else np.nan
-        except (TypeError, ValueError):
-            return np.nan
+            pool = df[col].dropna().apply(float)
+            v    = float(val)
+            if len(pool)==0: return "—"
+            return pct_sfx(int(round((pool<v).mean()*100)))
+        except: return "—"
 
-    aq_val  = safe_float(row.get("athlete_quality_score"))
-    pot_val = safe_float(row.get("potential_score"))
-    pos_val = safe_float(row.get("aq_pos_score"))
+    aq_pct_str = alltime_pct(aq_val, "athlete_quality_score")
 
-    # ── Header banner ─────────────────────────────────────────────────────────
+    # CI pathway
+    ci_val          = sf(row.get("Concentric Impulse"))
+    mass_kg         = sf(row.get("Mass"))
+    ht_cm           = sf(row.get("Height"))
+    ci_tier_val     = ci_tier_label(ci_val)
+    tier_idx        = ci_tier_index(ci_val)
+    tier_clrs       = ["#BA0C2F","#E2C188","#4CAF82","#11225A"]
+    tier_color      = tier_clrs[tier_idx] if tier_idx>=0 else "#9AAAC0"
+    prog_cat        = str(row.get("programming_category","—"))
+    prog_color      = PROG_COLORS.get(prog_cat, "#9AAAC0")
+    prog_desc       = PROG_DESC.get(prog_cat, "")
+
+    lbs_next   = sf(row.get("lbs_to_next_tier"))
+    next_label = str(row.get("next_tier_label","—"))
+    wc_next    = str(row.get("weight_class_next","—"))
+    wc_col     = WEIGHT_CLASS_COLORS.get(wc_next,"#9AAAC0")
+    lbs_300    = sf(row.get("lbs_to_300"))
+    wc_300     = str(row.get("weight_class_300","—"))
+    wc_300_col = WEIGHT_CLASS_COLORS.get(wc_300,"#9AAAC0")
+
+    lbs_next_str = f"+{lbs_next:.1f} lbs" if (pd.notna(lbs_next) and lbs_next>0) else ("Top tier" if lbs_next==0 else "—")
+    lbs_300_str  = f"+{lbs_300:.1f} lbs"  if (pd.notna(lbs_300)  and lbs_300>0)  else ("✓ Already ≥ 300" if lbs_300==0 else "—")
+
+    def proj_bwht(lbs_gain):
+        if pd.isna(mass_kg) or pd.isna(ht_cm) or pd.isna(lbs_gain) or lbs_gain<=0: return "—"
+        new_kg = mass_kg + lbs_gain/2.20462
+        ratio  = (new_kg*2.20462)/(ht_cm/2.54)
+        pool_r = df["bmi_raw"].dropna()
+        pct    = int(round(float((pool_r<ratio).mean()*100)))
+        return f"{ratio:.2f} ({pct_sfx(pct)})"
+
+    # ── Header card ───────────────────────────────────────────────────────────
+    pos_str  = str(row.get("Position","")) if str(row.get("Position","")) not in ("nan","None","") else "—"
+    sch_str  = str(row.get("School Type","")) if str(row.get("School Type","")) not in ("nan","None","") else "—"
+    rnk_val  = int((df["athlete_quality_score"].dropna()>aq_val).sum()+1) if pd.notna(aq_val) else None
+    pool_n   = int(df["athlete_quality_score"].notna().sum())
+
     st.markdown(f"""
-    <div style="background:white;border-radius:10px;padding:20px 28px;margin-bottom:20px;
-        border:1px solid {BORD};border-top:4px solid {RED};
-        box-shadow:0 2px 8px rgba(17,34,90,0.06);">
+    <div style="background:white;border:1px solid {BORD};border-top:4px solid {RED};
+        border-radius:10px;padding:20px 28px;margin-bottom:16px;
+        box-shadow:0 2px 8px rgba(17,34,90,0.06)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
             <div>
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:{RED};margin:0 0 4px 0">
                     WASHINGTON NATIONALS · ATHLETE SCORECARD</p>
                 <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
                     {sel_ath}</h2>
-                <span style="font-size:12px;color:#6b7fa3;margin-left:0">
-                    {sel_yr_display} · {str(row.get('Position','—')) if str(row.get('Position','')) not in ('nan','None','') else '—'} · {str(row.get('School Type','—')) if str(row.get('School Type','')) not in ('nan','None','') else '—'}</span>
-                <br>
-                <span style="display:inline-block;margin-top:8px;background:{PROG_COLORS.get(row.get('programming_category','Unclassified'),'#9AAAC0')};
+                <span style="font-size:12px;color:#6b7fa3">
+                    {sel_yr_display} · {pos_str} · {sch_str}</span><br>
+                <span style="display:inline-block;margin-top:8px;background:{prog_color};
                     color:white;font-size:11px;font-weight:700;padding:3px 14px;
-                    border-radius:20px;letter-spacing:0.06em">
-                    ⚙ {row.get('programming_category','—')}</span>
-                <span style="font-size:11px;color:#6b7fa3;margin-left:8px">
-                    {PROG_DESC.get(row.get('programming_category',''),'')}</span>
+                    border-radius:20px;letter-spacing:0.06em">⚙ {prog_cat}</span>
+                <span style="font-size:11px;color:#6b7fa3;margin-left:8px">{prog_desc}</span>
             </div>
             <div style="text-align:right">
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#6b7fa3;margin:0">
                     OVERALL RANK</p>
                 <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
-                    color:{RED};margin:0">{"#" + str(int((df["athlete_quality_score"].dropna() > aq_val).sum() + 1)) if pd.notna(aq_val) and aq_val > 0 else "—"}</p>
-                <p style="font-size:11px;color:#9AAAC0;margin:0">{"of " + str(int(df["athlete_quality_score"].notna().sum())) + " athletes (all years)" if sel_yr is None else f"of {int(df[df['Year']==sel_yr]['athlete_quality_score'].notna().sum())} athletes in {sel_yr}"}</p>
+                    color:{RED};margin:0">{"#"+str(rnk_val) if rnk_val else "—"}</p>
+                <p style="font-size:11px;color:#9AAAC0;margin:0">of {pool_n} athletes (all years)</p>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Score heroes — Quality + Potential front and center ──────────────────
+    # ── Hero scores + CI tier ─────────────────────────────────────────────────
+    h1, h2, h3 = st.columns([1, 1, 1.3])
 
-    # Percentile helpers
-    def pct_suffix(p):
-        if pd.isna(p): return "—"
-        p = int(round(p))
-        if 11 <= p % 100 <= 13: return f"{p}th"
-        return {1:"st",2:"nd",3:"rd"}.get(p % 10, "th")
-
-    # Percentile from score — what fraction of the pool scores below this athlete
-    # Use all-time pool regardless of year selector for consistency
-    def alltime_pct_str(val, col):
-        """Direct percentile: % of all athletes in pool scoring below this value."""
-        try:
-            v = float(val)
-            if np.isnan(v) or v <= 0: return "—"
-            pool = df[col].dropna().apply(float)
-            pool = pool[pool > 0]  # exclude zeroes from reference pool
-            if len(pool) == 0: return "—"
-            pct  = int(round((pool < v).mean() * 100))
-            return f"{pct}{pct_suffix(pct)} percentile"
-        except Exception:
-            return "—"
-
-    aq_pct_str  = alltime_pct_str(aq_val,  "athlete_quality_score")
-    pot_pct_str = alltime_pct_str(pot_val, "potential_score")
-
-    def score_color(v):
-        if pd.isna(v): return "#9AAAC0"
-        if v >= 75: return GREEN
-        if v >= 50: return GOLD
-        return RED
-
-    hero1, hero2, hero3 = st.columns([1, 1, 1.2])
-    with hero1:
+    with h1:
+        bar_w  = min(100, max(0, float(aq_val or 0)))
+        bar_cl = GREEN if pd.notna(aq_val) and aq_val>=75 else GOLD if pd.notna(aq_val) and aq_val>=50 else RED
         st.markdown(f"""
-        <div style="background:white;border:1px solid {BORD};border-radius:12px;
-            padding:24px 20px;text-align:center;
-            box-shadow:0 4px 16px rgba(186,12,47,0.12);
-            border-top:6px solid {RED};margin-bottom:4px">
+        <div style="background:white;border:1px solid {BORD};border-top:6px solid {RED};
+            border-radius:12px;padding:24px 20px;text-align:center;
+            box-shadow:0 4px 16px rgba(186,12,47,0.12)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
-                text-transform:uppercase;color:{RED};margin-bottom:8px">
-                ★ ATHLETICISM SCORE</div>
+                text-transform:uppercase;color:{RED};margin-bottom:8px">★ ATHLETICISM SCORE</div>
             <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{RED};line-height:1">
                 {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
-            <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">
-                {aq_pct_str}</div>
+            <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">{aq_pct_str}</div>
             <div style="font-size:11px;color:#6b7fa3;margin-top:2px">score out of 100 · all-time</div>
             <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{min(100,max(0,float(aq_val) if pd.notna(aq_val) else 0)):.0f}%;
-                    background:{"#4CAF82" if pd.notna(aq_val) and aq_val>=75 else "#E2C188" if pd.notna(aq_val) and aq_val>=50 else RED};
-                    border-radius:6px;height:8px;transition:width 0.5s"></div>
+                <div style="width:{bar_w:.0f}%;background:{bar_cl};border-radius:6px;height:8px"></div>
             </div>
         </div>
         """, unsafe_allow_html=True)
-    with hero2:
-        st.markdown(f"""
-        <div style="background:white;border:1px solid {BORD};border-radius:12px;
-            padding:24px 20px;text-align:center;
-            box-shadow:0 4px 16px rgba(17,34,90,0.12);
-            border-top:6px solid {NAV};margin-bottom:4px">
-            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
-                text-transform:uppercase;color:{NAV};margin-bottom:8px">
-                ★ DEVELOPMENT POTENTIAL</div>
-            <div style="font-family:'Playfair Display',serif;font-size:64px;
-                font-weight:900;color:{NAV};line-height:1">
-                {f"{pot_val:.0f}" if (pd.notna(pot_val) and pot_val > 0) else "—"}</div>
-            <div style="font-size:13px;font-weight:700;color:{NAV};margin-top:4px">
-                {pot_pct_str if (pd.notna(pot_val) and pot_val > 0) else "Insufficient data"}</div>
-            <div style="font-size:11px;color:#6b7fa3;margin-top:6px">out of 100 · all-time</div>
-            <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{min(100,max(0,float(pot_val) if (pd.notna(pot_val) and pot_val > 0) else 0)):.0f}%;
-                    background:{"#4CAF82" if pd.notna(pot_val) and pot_val>=75 else "#E2C188" if pd.notna(pot_val) and pot_val>=50 else NAV};
-                    border-radius:6px;height:8px;transition:width 0.5s"></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    with hero3:
-        # Pos group quality gauge + radar stacked
-        _pg  = str(row.get('pos_group',''))
-        _pos = str(row.get('Position',''))
-        if _pg and _pg not in ('Unknown','nan',''):
-            pos_grp_label = f"Athleticism relative to {_pg}s"
-        elif _pos and _pos not in ('nan','None',''):
-            pos_grp_label = f"Athleticism relative to {_pos}s"
-        else:
-            pos_grp_label = "Position Data Unavailable"
-        st.plotly_chart(make_gauge(pos_val if (pd.notna(pos_val) and pos_val > 0) else None, pos_grp_label, "#6b7fa3"),
-                        use_container_width=True, key="g_pos")
-        st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
 
-    # ── CI Pathway card ───────────────────────────────────────────────────────
-    cp1, cp2 = st.columns(2)
-    with cp1:
-        tier_idx = ci_tier_index(safe_float(row.get("Concentric Impulse")))
-        tier_colors = ["#BA0C2F", "#E2C188", "#4CAF82", "#11225A"]
-        tier_color  = tier_colors[tier_idx] if tier_idx >= 0 else "#9AAAC0"
+    with h2:
+        # Pos athleticism gauge
+        _pg  = str(row.get("pos_group",""))
+        _pos = str(row.get("Position",""))
+        if _pg and _pg not in ("Unknown","nan",""): pos_lbl = f"Athleticism relative to {_pg}s"
+        elif _pos and _pos not in ("nan","None",""): pos_lbl = f"Athleticism relative to {_pos}s"
+        else: pos_lbl = "Position Data Unavailable"
+        st.plotly_chart(make_gauge(pos_val if (pd.notna(pos_val) and pos_val>0) else None,
+                                   pos_lbl, "#6b7fa3"), use_container_width=True, key="g_pos")
+
+    with h3:
+        # CI tier card
         parts = []
-        parts.append(f'<div style="background:white;border:1px solid {BORD};border-top:4px solid ' + tier_color + f';border-radius:10px;padding:18px 22px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">')
-        parts.append(f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#6b7fa3;margin:0 0 6px 0">CI TIER</p>')
-        parts.append(f'<div style="font-family:Playfair Display,serif;font-size:36px;font-weight:900;color:' + tier_color + f'">{sc_ci_tier}</div>')
-        parts.append(f'<div style="font-size:12px;color:#6b7fa3;margin-top:4px">Current CI: <strong style="color:{NAV}">{fmt(safe_float(row.get("Concentric Impulse")), 1)}</strong></div>')
-        parts.append('<hr style="border-color:#E8ECF0;margin:12px 0">')
-        parts.append(f'<div style="display:flex;gap:20px;flex-wrap:wrap">')
-        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 3px 0">To next tier ({sc_next_tier})</p>')
-        parts.append(f'<div style="font-size:20px;font-weight:700;color:{sc_wc_color}">{sc_lbs_next_str}</div>')
-        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {sc_bwht_next_str}</div>')
-        parts.append(f'<span style="display:inline-block;background:{sc_wc_color};color:white;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;margin-top:4px">{sc_wc_next}</span></div>')
-        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 3px 0">To 300 CI</p>')
-        parts.append(f'<div style="font-size:20px;font-weight:700;color:{sc_300_color}">{sc_lbs_300_str}</div>')
-        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {sc_bwht_300_str}</div>')
-        parts.append(f'<span style="display:inline-block;background:{sc_300_color};color:white;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;margin-top:4px">{sc_wc_300}</span></div>')
+        parts.append(f'<div style="background:white;border:1px solid {BORD};border-top:4px solid ' + tier_color + f';border-radius:10px;padding:18px 20px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">')
+        parts.append(f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#6b7fa3;margin:0 0 4px 0">CI TIER</p>')
+        parts.append(f'<div style="font-family:Playfair Display,serif;font-size:32px;font-weight:900;color:' + tier_color + f'">{ci_tier_val}</div>')
+        parts.append(f'<div style="font-size:12px;color:#6b7fa3;margin-top:2px">Current CI: <strong style="color:{NAV}">{fmt(ci_val,1)}</strong></div>')
+        parts.append(f'<hr style="border-color:{BORD};margin:10px 0">')
+        parts.append(f'<div style="display:flex;gap:16px;flex-wrap:wrap">')
+        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 2px 0">To next tier ({next_label})</p>')
+        parts.append(f'<div style="font-size:18px;font-weight:700;color:' + wc_col + f'">{lbs_next_str}</div>')
+        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {proj_bwht(lbs_next)}</div>')
+        parts.append(f'<span style="display:inline-block;background:' + wc_col + f';color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_next}</span></div>')
+        parts.append(f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#6b7fa3;margin:0 0 2px 0">To 300 CI</p>')
+        parts.append(f'<div style="font-size:18px;font-weight:700;color:' + wc_300_col + f'">{lbs_300_str}</div>')
+        parts.append(f'<div style="font-size:11px;color:#6b7fa3">BW/Ht at target: {proj_bwht(lbs_300)}</div>')
+        parts.append(f'<span style="display:inline-block;background:' + wc_300_col + f';color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_300}</span></div>')
         parts.append('</div></div>')
         st.markdown("".join(parts), unsafe_allow_html=True)
-    with cp2:
-        # CI tier progress bar
-        ci_val = safe_float(row.get("Concentric Impulse"))
-        tier_bounds = [(0, 285), (285, 310), (310, 335), (335, 370)]
-        tier_labels = ["< 285", "285–310", "310–335", "335+"]
-        tier_clrs   = ["#BA0C2F", "#E2C188", "#4CAF82", "#11225A"]
-        fig_tier = go.Figure()
-        for i, ((lo, hi), lbl, clr) in enumerate(zip(tier_bounds, tier_labels, tier_clrs)):
-            fig_tier.add_trace(go.Bar(
-                x=[lbl], y=[hi - lo],
-                base=[lo],
-                marker_color=clr if (ci_val is not None and lo <= ci_val < hi) else clr + "55" if clr != "#11225A" else "#11225A55",
-                marker_line=dict(color="white", width=2),
-                width=0.5, name=lbl, showlegend=False,
-            ))
-        if ci_val and pd.notna(ci_val):
-            fig_tier.add_hline(y=ci_val, line_color="white", line_width=3,
-                               annotation_text=f"  {ci_val:.1f}",
-                               annotation_font_color=NAV, annotation_font_size=12)
-        fig_tier.update_layout(**_layout(
-            title=dict(text="CI Tier Position", font=dict(size=13, color=NAV), x=0),
-            height=240, margin=dict(l=10, r=60, t=45, b=30),
-            yaxis=dict(range=[0, 375], tickvals=[285,310,335], tickfont=dict(size=10)),
-            xaxis=dict(tickfont=dict(size=11)),
-            plot_bgcolor="white", showlegend=False,
-            bargap=0.2,
-        ))
-        st.plotly_chart(fig_tier, use_container_width=True, key=f"ci_tier_chart_{sel_ath}")
 
-    # ── Score context legend ──────────────────────────────────────────────────
+    # ── Score context legend ───────────────────────────────────────────────────
     st.markdown(f"""
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;margin-top:4px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px 0">
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
-                background:{GREEN}"></span>
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{GREEN}"></span>
             <strong>75–100</strong>&nbsp;Elite · clear draft target
         </div>
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
-                background:{GOLD}"></span>
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:{GOLD}"></span>
             <strong>50–74</strong>&nbsp;Above average · worth consideration
         </div>
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
-                background:#D0D7E6"></span>
-            <strong>25–49</strong>&nbsp;Below average · needs more development
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#D0D7E6"></span>
+            <strong>25–49</strong>&nbsp;Below average
         </div>
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
-                background:#9AAAC0"></span>
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#9AAAC0"></span>
             <strong>0–24</strong>&nbsp;Well below average
         </div>
     </div>
     """, unsafe_allow_html=True)
 
     # ── Percentile cards ──────────────────────────────────────────────────────
-    st.markdown('<p class="label" style="margin-top:4px">Percentiles</p>', unsafe_allow_html=True)
+    grp_key   = str(row.get("pos_group","")).lower()
+    grp_label = str(row.get("pos_group","")) if str(row.get("pos_group","")) not in ("Unknown","nan","") else "Pos."
     pc = st.columns(5)
-    grp       = row.get("pos_group", "Unknown")
-    grp_label = grp if grp != "Unknown" else "Pos. Group"
-    grp_key   = grp.lower() if grp != "Unknown" else None
-
     pct_items = [
-        ("CI",         "ci_pct_alltime",     "ci_pct_yr",      False),
-        ("30yd Sprint","sprint_pct_alltime",  "sprint_pct_yr",  True),
-        ("RSI-mod",    "rsi_pct_alltime",     "rsi_pct_yr",     False),
-        ("Pk Pwr/BM",  "pp_pct_alltime",      "pp_pct_yr",      False),
-        ("Height",     "height_pct",          None,             False),
+        ("CI",          "ci_pct_alltime",     "ci_pct_yr",     False),
+        ("30yd Sprint", "sprint_pct_alltime",  "sprint_pct_yr", True),
+        ("RSI-mod",     "rsi_pct_alltime",     "rsi_pct_yr",    False),
+        ("Pk Pwr/BM",   "pp_pct_alltime",      "pp_pct_yr",     False),
+        ("Height",      "height_pct",          None,            False),
     ]
     pos_pct_map = {
         "CI":         f"ci_pct_{grp_key}"     if grp_key else None,
@@ -1407,1319 +1269,137 @@ with tab_card:
         "Pk Pwr/BM":  f"pp_pct_{grp_key}"     if grp_key else None,
         "Height":     None,
     }
-    for col, pct_all_col, pct_yr_col, inv in pct_items:
-        p_all    = row.get(pct_all_col, np.nan)
-        p_yr     = row.get(pct_yr_col, np.nan) if pct_yr_col else np.nan
-        p_pos    = row.get(pos_pct_map[col], np.nan) if pos_pct_map[col] else np.nan
-        with pc[pct_items.index((col, pct_all_col, pct_yr_col, inv))]:
+    for i, (col_lbl, pa, py, inv) in enumerate(pct_items):
+        p_all = sf(row.get(pa))
+        p_yr  = sf(row.get(py)) if py else np.nan
+        p_pos = sf(row.get(pos_pct_map[col_lbl])) if pos_pct_map[col_lbl] else np.nan
+        with pc[i]:
             st.markdown(f"""
             <div class="card card-red" style="text-align:center;padding:14px 10px">
-                <div class="label">{col}</div>
-                <div class="score-big" style="color:{RED};font-size:30px">{fmt(p_all, 0)}</div>
+                <div class="label">{col_lbl}</div>
+                <div class="score-big" style="color:{RED};font-size:28px">{fmt(p_all,0)}</div>
                 <div style="font-size:10px;color:#9AAAC0;margin-top:2px">All-time pct</div>
                 <div style="font-size:13px;font-weight:600;color:{NAV};margin-top:4px">
-                    {fmt(p_yr, 0) if pd.notna(p_yr) else '—'}</div>
+                    {fmt(p_yr,0) if pd.notna(p_yr) else "—"}</div>
                 <div style="font-size:10px;color:#9AAAC0">{sel_yr_display} pct</div>
                 <div style="font-size:13px;font-weight:600;color:#6b7fa3;margin-top:4px">
-                    {fmt(p_pos, 0) if pd.notna(p_pos) else '—'}</div>
+                    {fmt(p_pos,0) if pd.notna(p_pos) else "—"}</div>
                 <div style="font-size:10px;color:#9AAAC0">{grp_label} pct</div>
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    # ── Raw metrics + visuals ─────────────────────────────────────────────────
+    m1, m2, m3 = st.columns([1, 1.3, 1.3])
 
-    # ── Detail columns ────────────────────────────────────────────────────────
-    d1, d2, d3 = st.columns([1, 1.2, 1.2])
-
-    with d1:
+    with m1:
         st.markdown(f"""
         <div class="card card-navy">
-            <p class="label">Raw Metrics</p>
+            <p class="label">Force Plate</p>
             <div class="stat-row"><span class="stat-label">Concentric Impulse</span>
-                <span class="stat-val">{fmt(row.get('Concentric Impulse'), 1)}</span></div>
+                <span class="stat-val">{fmt(sf(row.get("Concentric Impulse")),1)}</span></div>
             <div class="stat-row"><span class="stat-label">P1 Conc. Impulse</span>
-                <span class="stat-val">{fmt(row.get('P1 Concentric Impulse'), 1)}</span></div>
+                <span class="stat-val">{fmt(sf(row.get("P1 Concentric Impulse")),1)}</span></div>
             <div class="stat-row"><span class="stat-label">CI-100ms</span>
-                <span class="stat-val">{fmt(row.get('Concentric Impulse-100ms'), 1)}</span></div>
+                <span class="stat-val">{fmt(sf(row.get("Concentric Impulse-100ms")),1)}</span></div>
             <div class="stat-row"><span class="stat-label">RSI-modified</span>
-                <span class="stat-val">{fmt(row.get('RSI-modified'), 3)}</span></div>
-            <div class="stat-row"><span class="stat-label">30yd Sprint</span>
-                <span class="stat-val">{fmt(row.get('30yd Split'), 3, 's')}</span></div>
-            <div class="stat-row"><span class="stat-label">10yd Split</span>
-                <span class="stat-val">{fmt(row.get('10yd Split'), 3, 's')}</span></div>
-            <div class="stat-row"><span class="stat-label">20yd Split</span>
-                <span class="stat-val">{fmt(row.get('20yd Split'), 3, 's')}</span></div>
-            <div class="stat-row"><span class="stat-label">Jump Height</span>
-                <span class="stat-val">{fmt(row.get('Jump Height (Flight Time) in Inches'), 2, ' in')}</span></div>
+                <span class="stat-val">{fmt(sf(row.get("RSI-modified")),3)}</span></div>
             <div class="stat-row"><span class="stat-label">Peak Power / BM</span>
-                <span class="stat-val">{fmt(row.get('Peak Power / BM'), 1)}</span></div>
-            <hr style="border-color:{BORD};margin:10px 0">
-            <p class="label">Anthropometrics</p>
+                <span class="stat-val">{fmt(sf(row.get("Peak Power / BM")),1)}</span></div>
+            <div class="stat-row"><span class="stat-label">Jump Height</span>
+                <span class="stat-val">{fmt(sf(row.get("Jump Height (Flight Time) in Inches")),2," in")}</span></div>
+            <p class="label" style="margin-top:12px">Sprint</p>
+            <div class="stat-row"><span class="stat-label">30yd</span>
+                <span class="stat-val">{fmt(sf(row.get("30yd Split")),3,"s")}</span></div>
+            <div class="stat-row"><span class="stat-label">10yd</span>
+                <span class="stat-val">{fmt(sf(row.get("10yd Split")),3,"s")}</span></div>
+            <div class="stat-row"><span class="stat-label">20yd</span>
+                <span class="stat-val">{fmt(sf(row.get("20yd Split")),3,"s")}</span></div>
+            <p class="label" style="margin-top:12px">Anthropometrics</p>
             <div class="stat-row"><span class="stat-label">Height</span>
-                <span class="stat-val">{fmt_height(row.get('Height'))}</span></div>
+                <span class="stat-val">{fmt_height(sf(row.get("Height")))}</span></div>
             <div class="stat-row"><span class="stat-label">Mass</span>
-                <span class="stat-val">{fmt_mass(row.get('Mass'))}</span></div>
+                <span class="stat-val">{fmt_mass(sf(row.get("Mass")))}</span></div>
             <div class="stat-row"><span class="stat-label">Wingspan</span>
-                <span class="stat-val">{fmt_wingspan(row.get('Wingspan'))}</span></div>
+                <span class="stat-val">{fmt_wingspan(sf(row.get("Wingspan")))}</span></div>
             <div class="stat-row"><span class="stat-label">Wingspan Adv.</span>
-                <span class="stat-val">{fmt_wingspan_adv(row.get('wingspan_advantage'))}</span></div>
+                <span class="stat-val">{fmt_wingspan_adv(sf(row.get("wingspan_advantage")))}</span></div>
             <div class="stat-row"><span class="stat-label">BW/Ht Ratio</span>
-                <span class="stat-val">{fmt(row.get('bmi_raw'), 2)}</span></div>
-        </div>
-        <div class="card card-gold">
-            <p class="label" style="color:{RED}">CMJ Strategy — Why Flagged</p>
-            <div class="why-text">{row.get('why_flagged','—')}</div>
+                <span class="stat-val">{fmt(sf(row.get("bmi_raw")),2)}</span></div>
         </div>
         """, unsafe_allow_html=True)
 
-    with d2:
-        st.plotly_chart(make_profile(row, strat_feats),
-                        use_container_width=True, key="sc_profile")
+    with m2:
+        st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
+        st.plotly_chart(make_profile(row, strat_feats), use_container_width=True, key="g_profile")
 
-        # Potential breakdown bar
-        pot_components = {
-            "Peak Pwr/BM": row.get("pp_pct", np.nan),
-            "Height":      row.get("height_pct", np.nan),
-            "Leanness":    row.get("bmi_pct", np.nan),
-            "School Type": row.get("school_score", np.nan),
-            "Wingspan":    row.get("wingspan_pct", np.nan),
-        }
-        fig_pot = go.Figure(go.Bar(
-            y=list(pot_components.keys()),
-            x=[v if pd.notna(v) else 0 for v in pot_components.values()],
-            orientation="h",
-            marker_color=[RED, NAV, GOLD, GREEN, "#6b7fa3"],
-            text=[f"{v:.0f}" if pd.notna(v) else "—" for v in pot_components.values()],
-            textposition="outside",
-        ))
-        fig_pot.add_vline(x=50, line_dash="dot", line_color="#9AAAC0", line_width=1)
-        fig_pot.update_layout(**_layout(
-            title=dict(text="Potential Components (percentile)", font=dict(size=12, color=NAV), x=0),
-            height=260, margin=dict(l=100, r=40, t=45, b=20),
-            xaxis=dict(range=[0, 115], showgrid=False),
-            yaxis=dict(tickfont=dict(size=10)),
-            showlegend=False,
-        ))
-        st.plotly_chart(fig_pot, use_container_width=True, key="sc_pot_bar")
+    with m3:
+        st.markdown(f'<p class="label" style="margin-bottom:4px">Why Flagged</p>', unsafe_allow_html=True)
+        why = str(row.get("why_flagged","—"))
+        st.markdown(f'<div class="why-text">{why}</div>', unsafe_allow_html=True)
 
-    with d3:
-        if len(ath_all) >= 2:
-            st.markdown('<p class="label">Year-over-Year Trends</p>', unsafe_allow_html=True)
-            trend_items = [
-                ("Concentric Impulse", "Concentric Impulse", False),
-                ("RSI-modified",       "RSI-modified",       False),
-                ("30yd Split",         "30yd Sprint",        True),
-                ("Peak Power / BM",    "Peak Power / BM",    False),
-                ("Mass",               "Body Mass (kg)",     False),
-            ]
-            for col, lbl, inv in trend_items:
-                fig_t = make_trend(ath_all, col, lbl, invert=inv)
+        # Year-over-year trends
+        multi = ath_all[ath_all["Year"].notna()]
+        if len(multi) >= 2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(f'<p class="label">Year-over-year trends</p>', unsafe_allow_html=True)
+            for tcol, tlbl, tinv in [
+                ("Concentric Impulse", "CI", False),
+                ("RSI-modified",       "RSI-mod", False),
+                ("30yd Split",         "30yd Sprint", True),
+                ("athlete_quality_score", "Athleticism Score", False),
+            ]:
+                fig_t = make_trend(multi, tcol, tlbl, tinv)
                 if fig_t:
                     st.plotly_chart(fig_t, use_container_width=True,
-                                    key=f"trend_{col}_{sel_ath}")
-        else:
-            st.markdown(f"""
-            <div class="card" style="text-align:center;padding:40px 20px">
-                <p style="color:#9AAAC0;font-size:13px;margin:0">
-                    Trend charts appear once a second year of data is recorded.</p>
-            </div>
-            """, unsafe_allow_html=True)
+                                    key=f"trend_{sel_ath}_{tcol}")
 
-    # ── Development Projection ────────────────────────────────────────────────
-    sc_ci    = safe_float(row.get("Concentric Impulse"))
-    sc_mass  = safe_float(row.get("Mass"))
-    sc_ht    = safe_float(row.get("Height"))
-
-    if pd.notna(sc_ci) and pd.notna(sc_mass) and sc_ci > 0 and sc_mass > 0:
+    # ── Development projection table ──────────────────────────────────────────
+    if pd.notna(ci_val) and pd.notna(mass_kg) and ci_val>0 and mass_kg>0:
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown(
-            f'<div style="border-left:4px solid {GREEN};padding-left:12px;margin:0 0 14px 0">' +
-            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:{GREEN}">Development Projection</span></div>',
+            f'<div style="border-left:4px solid {GREEN};padding-left:12px;margin:0 0 14px 0">'
+            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
+            f'text-transform:uppercase;color:{GREEN}">Development Projection</span></div>',
             unsafe_allow_html=True)
 
-        sc_lbs_10    = 10 / 2.20462
-        sc_lbs_15    = 15 / 2.20462
-        sc_ci_per_kg = sc_ci / sc_mass
-        sc_ci_per_kg_new = sc_ci_per_kg * 0.97
-        sc_mass_10   = sc_mass + sc_lbs_10
-        sc_mass_15   = sc_mass + sc_lbs_15
-        sc_ci_10     = sc_ci_per_kg_new * sc_mass_10
-        sc_ci_15     = sc_ci_per_kg_new * sc_mass_15
+        ci_per_kg = ci_val / mass_kg
+        ci_per_kg_new = ci_per_kg * 0.97
 
         def sc_bwht(kg, cm):
-            if pd.isna(kg) or pd.isna(cm) or cm == 0: return np.nan
-            return (kg * 2.20462) / (cm / 2.54)
-
-        bwht_pool_sc  = df["bmi_raw"].dropna()
+            if pd.isna(kg) or pd.isna(cm) or cm==0: return np.nan
+            return (kg*2.20462)/(cm/2.54)
         def sc_bwht_pct(val):
-            if pd.isna(val) or len(bwht_pool_sc) == 0: return np.nan
-            return float((bwht_pool_sc < val).mean() * 100)
-
-        ci_pool_sc = df["Concentric Impulse"].dropna()
+            pool_r = df["bmi_raw"].dropna()
+            if pd.isna(val) or len(pool_r)==0: return np.nan
+            return float((pool_r<val).mean()*100)
         def sc_ci_pct(val):
-            if pd.isna(val) or len(ci_pool_sc) == 0: return np.nan
-            return float((ci_pool_sc < val).mean() * 100)
-
-        sc_bwht_cur  = sc_bwht(sc_mass,    sc_ht)
-        sc_bwht_10v  = sc_bwht(sc_mass_10, sc_ht)
-        sc_bwht_15v  = sc_bwht(sc_mass_15, sc_ht)
-
-        sc_ci_pct_cur = sc_ci_pct(sc_ci)
-        sc_ci_pct_10  = sc_ci_pct(sc_ci_10)
-        sc_ci_pct_15  = sc_ci_pct(sc_ci_15)
-        sc_bwht_pct_10 = sc_bwht_pct(sc_bwht_10v)
-        sc_bwht_pct_15 = sc_bwht_pct(sc_bwht_15v)
-
-        # Summary table
-        def pf(v, d=1): return f"{v:.{d}f}" if pd.notna(v) else "—"
-        def pp(v): return f"{v:.0f}th" if pd.notna(v) else "—"
-
-        rows_html = ""
-        sc_bwht_pct_cur = sc_bwht_pct(sc_bwht_cur)
-        for label, ci_v, ci_p, mass_v, bwht_v, bwht_p, prog_c in [
-            ("Current",  sc_ci,    sc_ci_pct_cur, sc_mass,    sc_bwht_cur,  sc_bwht_pct_cur, None),
-            ("+10 lbs",  sc_ci_10, sc_ci_pct_10,  sc_mass_10, sc_bwht_10v,  sc_bwht_pct_10, None),
-            ("+15 lbs",  sc_ci_15, sc_ci_pct_15,  sc_mass_15, sc_bwht_15v,  sc_bwht_pct_15, None),
-        ]:
-            is_cur   = label == "Current"
-            bg       = "white" if is_cur else SURF
-            prog_html = ""
-            delta_ci_html = ""
-            if not is_cur:
-                d = ci_v - sc_ci
-                dc = "#4CAF82" if d >= 0 else RED
-                s  = "+" if d >= 0 else ""
-                delta_ci_html = f' <span style="font-size:11px;color:{dc};font-weight:600">({s}{d:.1f})</span>'
-            rows_html += (
-                f'<tr style="background:{bg};border-bottom:1px solid {BORD}">' +
-                f'<td style="padding:10px 12px;font-weight:700;color:{NAV};font-size:13px">{label}{prog_html}</td>' +
-                f'<td style="padding:10px 12px;text-align:right;color:{NAV};font-size:13px;font-weight:600">{pf(ci_v, 1)}{delta_ci_html}</td>' +
-                f'<td style="padding:10px 12px;text-align:right;color:#6b7fa3;font-size:12px">{pp(ci_p)}</td>' +
-                f'<td style="padding:10px 12px;text-align:right;color:{NAV};font-size:13px">{pf(mass_v * 2.20462, 1)} lbs</td>' +
-                f'<td style="padding:10px 12px;text-align:right;color:{NAV};font-size:13px">{pf(bwht_v, 2)}</td>' +
-                f'<td style="padding:10px 12px;text-align:right;color:#6b7fa3;font-size:12px">{pp(bwht_p) if bwht_p is not None else "—"}</td>' +
-                '</tr>'
-            )
-
-        table_html = (
-            f'<div style="background:white;border:1px solid {BORD};border-radius:10px;overflow:hidden;margin-bottom:12px">' +
-            '<table style="width:100%;border-collapse:collapse">' +
-            f'<thead><tr style="background:{NAV}">' +
-            '<th style="padding:10px 12px;text-align:left;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">Scenario</th>' +
-            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">CI (N·s)</th>' +
-            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">CI Pct</th>' +
-            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">Body Mass</th>' +
-            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">BW/Ht</th>' +
-            '<th style="padding:10px 12px;text-align:right;color:white;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase">Leanness Pct</th>' +
-            '</tr></thead>' +
-            '<tbody>' + rows_html + '</tbody>' +
-            '</table></div>'
-        )
-        st.markdown(table_html, unsafe_allow_html=True)
-        st.markdown(
-            f'<p style="font-size:11px;color:#9AAAC0;margin:0">Assumes 3% decrease in CI/kg with added mass. All-time percentiles.<br>Internal data has shown a trend towards pitchers having smaller penalties (0–3%) than position players (3–5%).</p>',
-            unsafe_allow_html=True)
-
-
-
-# =============================================================================
-# TAB 3 — REFERENCE & DISTRIBUTIONS (combined)
-# =============================================================================
-with tab_ref:
-
-    rf1, rf2, rf3 = st.columns([1, 1.2, 1.2])
-    with rf1:
-        yr_opts_ref = ["All years"] + sorted(df["Year"].dropna().unique().astype(int).tolist(), reverse=True)
-        ref_yr      = st.selectbox("Year", yr_opts_ref, key="ref_yr")
-    with rf2:
-        ref_pos_opts = ["All positions", "Pitcher", "Catcher", "Infielder", "Outfielder"]
-        ref_pos      = st.selectbox("Position Group", ref_pos_opts, key="ref_pos")
-    with rf3:
-        ref_chart    = st.selectbox("Chart type", ["Histogram", "Box plot"], key="ref_chart")
-
-    # Filter population
-    ref_df = df.copy()
-    if ref_yr != "All years":
-        ref_df = ref_df[ref_df["Year"] == int(ref_yr)]
-    if ref_pos != "All positions":
-        ref_df = ref_df[ref_df["pos_group"] == ref_pos]
-
-    n_pop = len(ref_df)
-    st.markdown(
-        f'<p style="font-size:12px;color:#6b7fa3;margin-bottom:16px">'
-        f'Showing distribution for <strong style="color:{NAV}">{n_pop} athlete-years</strong>'
-        f'{" · " + ref_yr if ref_yr != "All years" else ""}'
-        f'{" · " + ref_pos if ref_pos != "All positions" else ""}</p>',
-        unsafe_allow_html=True)
-
-    def dist_fig(col, label, nbins=25, invert=False, digits=2, suffix=""):
-        data = ref_df[col].dropna()
-        if len(data) < 3:
-            return None
-
-        q10 = data.quantile(0.10 if not invert else 0.90)
-        q25 = data.quantile(0.25 if not invert else 0.75)
-        q50 = data.median()
-        q75 = data.quantile(0.75 if not invert else 0.25)
-        q90 = data.quantile(0.90 if not invert else 0.10)
-
-        if ref_chart == "Histogram":
-            fig = go.Figure()
-            fig.add_trace(go.Histogram(
-                x=data, nbinsx=nbins,
-                marker_color=NAV,
-                marker_line=dict(color="white", width=0.5),
-                opacity=0.9,
-            ))
-            # Clean vertical lines for key percentiles
-            line_styles = [
-                (q25, "p25", GOLD,  "dash"),
-                (q50, "p50", RED,   "solid"),
-                (q75, "p75", GOLD,  "dash"),
-                (q90, "p90", GREEN, "dot"),
-            ]
-            for q, lbl, col_color, dash in line_styles:
-                fig.add_vline(
-                    x=q, line_dash=dash, line_color=col_color, line_width=2,
-                    annotation=dict(
-                        text=f"<b>{lbl}</b><br>{q:.{digits}f}{suffix}",
-                        font=dict(color=col_color, size=10),
-                        bgcolor="white",
-                        bordercolor=col_color,
-                        borderwidth=1,
-                        borderpad=3,
-                        yref="paper", y=0.98,
-                        showarrow=False,
-                    ),
-                )
-            fig.update_layout(**_layout(
-                title=dict(text=f"<b>{label}</b>", font=dict(size=13, color=NAV), x=0),
-                height=280,
-                margin=dict(l=40, r=20, t=55, b=40),
-                xaxis=dict(
-                    tickfont=dict(size=10, color=NAV),
-                    showgrid=True, gridcolor=BORD, gridwidth=1,
-                    zeroline=False,
-                ),
-                yaxis=dict(
-                    title="Count", tickfont=dict(size=10, color=NAV),
-                    showgrid=True, gridcolor=BORD, gridwidth=1,
-                ),
-                showlegend=False,
-                plot_bgcolor="white",
-            ))
-        else:
-            fig = go.Figure()
-            fig.add_trace(go.Box(
-                x=data, name=label,
-                marker_color=RED,
-                line_color=NAV,
-                line_width=2,
-                fillcolor=f"rgba(186,12,47,0.15)",
-                boxmean="sd",
-                boxpoints="outliers",
-                jitter=0.4,
-                marker=dict(size=5, opacity=0.5, color=NAV),
-            ))
-            fig.update_layout(**_layout(
-                title=dict(text=f"<b>{label}</b>", font=dict(size=13, color=NAV), x=0),
-                height=280,
-                margin=dict(l=40, r=20, t=55, b=40),
-                xaxis=dict(
-                    tickfont=dict(size=10, color=NAV),
-                    showgrid=True, gridcolor=BORD,
-                    autorange="reversed" if invert else True,
-                ),
-                yaxis=dict(showticklabels=False),
-                showlegend=False,
-                plot_bgcolor="white",
-            ))
-        return fig
-
-    # ── Summary stats table ───────────────────────────────────────────────────
-    metrics_summary = [
-        ("Concentric Impulse",                 "CI (N·s)",        1, "",     False),
-        ("P1 Concentric Impulse",              "P1 CI (N·s)",     1, "",     False),
-        ("Concentric Impulse-100ms",           "CI-100ms",        1, "",     False),
-        ("RSI-modified",                       "RSI-mod",         3, "",     False),
-        ("Peak Power / BM",                    "Peak Pwr/BM",     1, "",     False),
-        ("30yd Split",                         "30yd (s)",        3, "s",    True),
-        ("10yd Split",                         "10yd (s)",        3, "s",    True),
-        ("Jump Height (Flight Time) in Inches","Jump Ht (in)",    2, " in",  False),
-        ("Height",                             "Height (ft''in)",  0, "",  False),
-        ("Mass",                               "Mass (kg)",       1, " kg",  False),
-        ("Wingspan",                           "Wingspan (cm)",   1, " cm",  False),
-        ("wingspan_advantage",                 "Wingspan Adv.",   1, " cm",  False),
-    ]
-
-    # Use appropriate base population for each metric group
-    fp_base     = ref_df[ref_df["Concentric Impulse"].notna()]
-    sprint_base = ref_df[ref_df["30yd Split"].notna()]
-    isak_base   = ref_df[ref_df["Height"].notna()]
-
-    FP_COLS     = {"Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
-                   "RSI-modified", "Peak Power / BM", "Jump Height (Flight Time) in Inches"}
-    SPRINT_COLS = {"30yd Split", "10yd Split"}
-
-    summary_rows = []
-    for col, label, digits, suffix, inv in metrics_summary:
-        if col in FP_COLS:
-            base = fp_base
-        elif col in SPRINT_COLS:
-            base = sprint_base
-        else:
-            base = isak_base
-        data = base[col].dropna()
-        if len(data) < 2:
-            continue
-        summary_rows.append({
-            "Metric":  label,
-            "N":       int(len(data)),
-            "Mean":    f"{data.mean():.{digits}f}{suffix}",
-            "Median":  f"{data.median():.{digits}f}{suffix}",
-            "p25":     f"{data.quantile(0.25):.{digits}f}{suffix}",
-            "p75":     f"{data.quantile(0.75):.{digits}f}{suffix}",
-            "p90":     f"{data.quantile(0.90 if not inv else 0.10):.{digits}f}{suffix}",
-            "Min":     f"{data.min():.{digits}f}{suffix}",
-            "Max":     f"{data.max():.{digits}f}{suffix}",
-        })
-
-    st.markdown('<p class="label" style="margin-top:4px">Summary Statistics</p>',
-                unsafe_allow_html=True)
-    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True,
-                 hide_index=True, key="ref_summary")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown('<p class="label">Distributions</p>', unsafe_allow_html=True)
-
-    # ── Metric groups ─────────────────────────────────────────────────────────
-    ALL_METRICS = {
-        "Athleticism": [
-            ("Concentric Impulse",                  "CI (N·s)",       25, False, 1, ""),
-            ("P1 Concentric Impulse",               "P1 CI (N·s)",    25, False, 1, ""),
-            ("Concentric Impulse-100ms",            "CI-100ms",       25, False, 1, ""),
-            ("RSI-modified",                        "RSI-modified",   25, False, 3, ""),
-            ("Peak Power / BM",                     "Peak Pwr/BM",    25, False, 1, ""),
-            ("30yd Split",                          "30yd (s)",       25, True,  3, "s"),
-            ("10yd Split",                          "10yd (s)",       20, True,  3, "s"),
-            ("Jump Height (Flight Time) in Inches", "Jump Ht (in)",   20, False, 2, " in"),
-        ],
-        "Anthropometrics": [
-            ("Height",             "Height (ft''in)", 20, False, 0, ""),
-            ("Mass",               "Mass (lbs)",       20, False, 1, " lbs"),
-            ("Wingspan",           "Wingspan (ft''in)",20, False, 0, ""),
-            ("wingspan_advantage", "Wingspan Adv. (in)",20, False, 1, "\"  "),
-            ("bmi_raw",            "BW/Ht Ratio (lbs/in)", 20, False, 2, ""),
-        ],
-
-    }
-
-    SECTION_COLORS = {
-        "Athleticism":      RED,
-        "Anthropometrics":  NAV,
-    }
-
-    # Population groups: (label, accent color, filter mask or None)
-    POP_GROUPS = [
-        ("All Players",      "#6b7fa3", None),
-        ("Position Players", GREEN,     df["pos_group"].isin(["Catcher","Infielder","Outfielder"])),
-        ("Pitchers",         RED,       df["pos_group"] == "Pitcher"),
-        ("Catchers",         NAV,       df["pos_group"] == "Catcher"),
-        ("Infielders",       GOLD,      df["pos_group"] == "Infielder"),
-        ("Outfielders",      GREEN,     df["pos_group"] == "Outfielder"),
-    ]
-
-    # Apply the year filter from the top of the tab to each group
-    def get_group_df(mask):
-        base = df.copy() if ref_yr == "All years" else df[df["Year"] == int(ref_yr)].copy()
-        return base[mask] if mask is not None else base
-
-    # ── Render each metric section ─────────────────────────────────────────────
-    for section_name, metrics in ALL_METRICS.items():
-        sec_color = SECTION_COLORS[section_name]
-        st.markdown(
-            f'<div style="border-left:4px solid {sec_color};padding-left:10px;'
-            f'margin:28px 0 12px 0">'
-            f'<span style="font-size:11px;font-weight:700;letter-spacing:0.14em;'
-            f'text-transform:uppercase;color:{sec_color}">{section_name}</span></div>',
-            unsafe_allow_html=True)
-
-        for metric_col, label, nbins, inv, digits, suffix in metrics:
-            # Row header for this metric
-            st.markdown(
-                f'<p style="font-size:10px;font-weight:600;letter-spacing:0.1em;'
-                f'text-transform:uppercase;color:#6b7fa3;margin:12px 0 6px 0">'
-                f'{label}</p>',
-                unsafe_allow_html=True)
-
-            # One column per population group
-            group_cols = st.columns(len(POP_GROUPS))
-            for col_widget, (grp_label, grp_color, grp_mask) in zip(group_cols, POP_GROUPS):
-                grp_df  = get_group_df(grp_mask)
-                data    = grp_df[metric_col].dropna() if metric_col in grp_df.columns else pd.Series([], dtype=float)
-                n       = len(data)
-
-                # Column group header
-                col_widget.markdown(
-                    f'<div style="text-align:center;padding:4px 0;margin-bottom:4px;'
-                    f'border-bottom:2px solid {grp_color}">'
-                    f'<span style="font-size:9px;font-weight:700;letter-spacing:0.1em;'
-                    f'text-transform:uppercase;color:{grp_color}">{grp_label}</span>'
-                    f'<span style="font-size:9px;color:#9AAAC0;margin-left:4px">n={n}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True)
-
-                if n < 4:
-                    col_widget.markdown(
-                        f'<div style="height:180px;display:flex;align-items:center;'
-                        f'justify-content:center;color:#9AAAC0;font-size:11px;'
-                        f'text-align:center">Insufficient<br>data</div>',
-                        unsafe_allow_html=True)
-                    continue
-
-                q25 = data.quantile(0.25 if not inv else 0.75)
-                q50 = data.median()
-                q75 = data.quantile(0.75 if not inv else 0.25)
-
-                if ref_chart == "Histogram":
-                    fig = go.Figure()
-                    fig.add_trace(go.Histogram(
-                        x=data, nbinsx=nbins,
-                        marker_color=grp_color,
-                        marker_line=dict(color="white", width=0.4),
-                        opacity=0.85,
-                    ))
-                    for q, lbl, dash, y_pos in [
-                        (q25, "p25", "dash",   0.99),
-                        (q50, "p50", "solid",  0.82),
-                        (q75, "p75", "dash",   0.65),
-                    ]:
-                        fig.add_vline(
-                            x=q, line_dash=dash,
-                            line_color=NAV, line_width=1.5,
-                            annotation=dict(
-                                text=f"<b>{lbl}</b> {q:.{digits}f}{suffix}",
-                                font=dict(color=NAV, size=8),
-                                bgcolor="rgba(255,255,255,0.85)",
-                                borderpad=2,
-                                yref="paper", y=y_pos,
-                                showarrow=False,
-                                xanchor="left",
-                            ),
-                        )
-                    fig.update_layout(
-                        height=200,
-                        margin=dict(l=20, r=8, t=30, b=30),
-                        paper_bgcolor="white", plot_bgcolor="white",
-                        font=dict(family="Arial", color=NAV, size=9),
-                        xaxis=dict(tickfont=dict(size=8), showgrid=True,
-                                   gridcolor=BORD, zeroline=False),
-                        yaxis=dict(tickfont=dict(size=8), showgrid=True,
-                                   gridcolor=BORD, title=""),
-                        showlegend=False, template="plotly_white",
-                    )
-                else:
-                    fig = go.Figure()
-                    fig.add_trace(go.Box(
-                        x=data, name="",
-                        marker_color=grp_color,
-                        line_color=NAV, line_width=1.5,
-                        fillcolor=f"rgba(17,34,90,0.08)",
-                        boxmean="sd",
-                        boxpoints="outliers",
-                        marker=dict(size=4, opacity=0.4, color=grp_color),
-                    ))
-                    fig.update_layout(
-                        height=200,
-                        margin=dict(l=20, r=8, t=30, b=30),
-                        paper_bgcolor="white", plot_bgcolor="white",
-                        font=dict(family="Arial", color=NAV, size=9),
-                        xaxis=dict(tickfont=dict(size=8), showgrid=True,
-                                   gridcolor=BORD,
-                                   autorange="reversed" if inv else True),
-                        yaxis=dict(showticklabels=False),
-                        showlegend=False, template="plotly_white",
-                    )
-
-                col_widget.plotly_chart(
-                    fig, use_container_width=True,
-                    key=f"ref_{section_name}_{metric_col}_{grp_label}")
-
-        st.markdown('<hr style="border-color:#E8ECF0;margin:8px 0">', unsafe_allow_html=True)
-
-# =============================================================================
-# TAB 4 — GUIDE
-# =============================================================================
-with tab_guide:
-    def gs(title, accent=RED):
-        st.markdown(
-            f'<h3 style="border-left:4px solid {accent};padding-left:12px;'
-            f'color:{NAV};margin:24px 0 10px 0">{title}</h3>',
-            unsafe_allow_html=True)
-
-    def score_block(name, formula, desc, accent=NAV):
-        st.markdown(f"""
-        <div style="padding:14px 16px;border-bottom:1px solid {BORD}">
-            <span style="font-family:'Playfair Display',serif;font-size:16px;font-weight:700;
-                color:{accent};margin-right:10px">{name}</span>
-            <span style="font-size:12px;color:#6b7fa3;background:{SURF};padding:2px 8px;
-                border-radius:4px;border:1px solid {BORD}">{formula}</span>
-            <p style="font-size:13px;line-height:1.7;color:#2a3a5a;margin:8px 0 0 0">{desc}</p>
-        </div>""", unsafe_allow_html=True)
-
-    def arch_block(name, color, desc):
-        st.markdown(f"""
-        <div style="padding:14px 16px;border-bottom:1px solid {BORD}">
-            <span style="background:{color};color:white;font-size:11px;font-weight:700;
-                padding:3px 12px;border-radius:20px;letter-spacing:0.04em">{name}</span>
-            <p style="font-size:13px;line-height:1.7;color:#2a3a5a;margin:8px 0 0 0">{desc}</p>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown(
-        f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
-        f'border-radius:10px;padding:20px 24px;margin-bottom:20px;'
-        f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
-        f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-        f'text-transform:uppercase;color:#6b7fa3;margin:0 0 6px 0">HOW TO READ THIS DASHBOARD</p>'
-        f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">Guide</h2>'
-        f'<p style="font-size:14px;color:#6b7fa3;margin:0">'
-        f'What the scores mean, how they\'re built, and what the archetypes tell you.</p></div>',
-        unsafe_allow_html=True)
-
-    gs("The Two Scores That Matter", RED)
-    st.markdown(
-        f'<p style="font-size:14px;line-height:1.75;color:#2a3a5a">'
-        f'Every athlete is evaluated on two headline numbers — <strong>Athleticism Score</strong> '
-        f'and <strong>Development Potential</strong>. Both are scaled 0–100 and shown prominently '
-        f'at the top of every scorecard. These are the numbers to focus on.</p>',
-        unsafe_allow_html=True)
-
-    score_block("Athleticism Score", "CI × 0.35 + Sprint × 0.30 + RSI × 0.15 + Peak Power × 0.20",
-        "How good an athlete they are right now, based on force plate and sprint performance. "
-        "Weights are adjustable in the sidebar. Players without sprint data use a separate CI/RSI/Peak Power formula.", accent=RED)
-    score_block("Development Potential", "Peak Power + Height + Leanness + School Type + Wingspan",
-        "How much room they have to grow. Rewards tall, lean high schoolers with long wingspans and high relative power output. "
-        "Weights are adjustable in the sidebar.", accent=NAV)
-    score_block("Position Group Quality", "Same formula as Athleticism Score, ranked within position group only",
-        "How the athlete compares to players at their position specifically — Pitchers vs Pitchers, Infielders vs Infielders, etc.")
-
-    gs("Athleticism Score — Component Metrics", RED)
-    for label, desc in [
-        ("Concentric Impulse (CI)", "Total force applied during the upward phase of the jump (N·s). The primary measure of lower body power output. Higher = better."),
-        ("30yd Sprint", "Time to cover 30 yards from a standing start (seconds). Lower = faster = better. 10yd and 20yd splits also recorded."),
-        ("RSI-modified", "Reactive Strength Index — jump height divided by ground contact time (m/s). Measures explosive efficiency. Higher = better."),
-        ("Peak Power / BM", "Peak power output during the jump normalized to body mass (W/kg). Higher = more powerful relative to size."),
-    ]:
-        st.markdown(f"""
-        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
-            <div style="font-size:13px;font-weight:600;color:{NAV};margin-bottom:3px">{label}</div>
-            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
-        </div>""", unsafe_allow_html=True)
-
-    gs("Development Potential — Component Factors", NAV)
-    for label, desc in [
-        ("Peak Power / BM", "Higher relative power = more athletic ceiling. Already used in quality score but a strong predictor of future output."),
-        ("Height", "Taller athletes have more projectability across all positions. No position adjustment — taller is always scored higher."),
-        ("Leanness (BW/Ht)", "Body weight divided by height. Lower ratio = leaner athlete = more room to add functional mass without losing athleticism."),
-        ("School Type", "High school athletes score highest — more developmental runway ahead. College athletes are more proven but less projectable."),
-        ("Wingspan Advantage", "Wingspan minus height. Positive = longer reach than height would predict. Particularly valuable for pitchers. Scaled as a percentile."),
-    ]:
-        st.markdown(f"""
-        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
-            <div style="font-size:13px;font-weight:600;color:{NAV};margin-bottom:3px">{label}</div>
-            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
-        </div>""", unsafe_allow_html=True)
-
-    gs("CMJ Archetypes", GOLD)
-    st.markdown(
-        f'<p style="font-size:13px;line-height:1.7;color:#2a3a5a;margin-bottom:10px">'
-        f'Archetypes describe <em>how</em> an athlete jumps, not how well. '
-        f'They are derived from six CMJ strategy features using robust z-scores and Mahalanobis distance.</p>',
-        unsafe_allow_html=True)
-    arch_block("Normal", "#4CAF82",
-        "All strategy features within 0.7 SD of pool median. Typical, unremarkable mechanics.")
-    arch_block("Long Loader", NAV,
-        "Unusually deep countermovement combined with a long eccentric phase. More time and displacement in the loading phase.")
-    arch_block("Front-Loaded Driver", RED,
-        "High CI-100ms and front-loaded CI ratio — disproportionate drive force in the first 100ms of the push-off.")
-    arch_block("Shallow Late-Driver", "#6b7fa3",
-        "Shallow countermovement depth combined with a back-loaded impulse ratio — force production ramps up later in the drive.")
-    arch_block("Unclassified", "#9AAAC0",
-        "Unusual strategy profile that doesn't fit a named pattern. Check the CMJ strategy bar chart for what's driving the flag.")
-
-    gs("CMJ Strategy Features", GOLD)
-    for feat, desc in [
-        ("Eccentric Duration",       "Time spent loading (moving downward). Longer = more deliberate, slower dip."),
-        ("Concentric Duration",      "Time spent driving upward. Shorter = more explosive push-off."),
-        ("Braking Phase Duration",   "Time between peak downward velocity and start of upward drive. Short = faster reversal."),
-        ("Countermovement Depth",    "How far the center of mass drops. Deeper = more elastic energy stored."),
-        ("Concentric Impulse–100ms", "Raw impulse in the first 100ms of upward drive. Proxy for early explosiveness."),
-        ("CI100 : Total CI Ratio",   "Share of total concentric impulse produced in first 100ms. High = front-loaded strategy."),
-    ]:
-        st.markdown(f"""
-        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
-            <div style="font-size:13px;font-weight:600;color:{NAV};margin-bottom:3px">{feat}</div>
-            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
-        </div>""", unsafe_allow_html=True)
-
-    gs("Position Groups", "#6b7fa3")
-    for grp, positions, desc in [
-        ("Pitchers",    "SP, RHP, LHP, RP, TWP", "Percentiles calculated within pitcher pool only. Wingspan included in potential weighting."),
-        ("Catchers",    "C",                      "Smallest group — percentiles less stable with fewer athletes."),
-        ("Infielders",  "SS, 3B, 2B, 1B",         "Largest position player group."),
-        ("Outfielders", "CF, LF, RF",              "Speed and power profile tends to skew higher than infielders."),
-    ]:
-        st.markdown(f"""
-        <div style="padding:10px 14px;border-bottom:1px solid {BORD}">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px">
-                <span style="font-size:13px;font-weight:600;color:{NAV}">{grp}</span>
-                <span style="font-size:11px;color:#9AAAC0;background:{SURF};padding:1px 8px;
-                    border-radius:10px;border:1px solid {BORD}">{positions}</span>
-            </div>
-            <div style="font-size:12px;color:#6b7fa3;line-height:1.5">{desc}</div>
-        </div>""", unsafe_allow_html=True)
-
-    gs("Metric Definitions", "#6b7fa3")
-
-    def metric_def(name, unit, desc, good=None, good_label="✓"):
-        good_html = f'<div style="font-size:11px;color:#4CAF82;margin-top:3px">{good_label} {good}</div>' if good else ""
-        st.markdown(f"""
-        <div style="padding:12px 16px;border-bottom:1px solid {BORD}">
-            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px">
-                <span style="font-size:13px;font-weight:700;color:{NAV}">{name}</span>
-                <span style="font-size:11px;color:#9AAAC0;background:{SURF};padding:1px 8px;
-                    border-radius:10px;border:1px solid {BORD}">{unit}</span>
-            </div>
-            <div style="font-size:12px;color:#2a3a5a;line-height:1.6">{desc}</div>
-            {good_html}
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown(f'<div style="border-left:4px solid {RED};padding-left:10px;margin:16px 0 6px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{RED}">Force Plate — Output</span></div>',
-                unsafe_allow_html=True)
-
-    metric_def("Concentric Impulse (CI)", "N·s",
-        "The total force applied to the ground during the upward (concentric) phase of the jump, multiplied by time. "
-        "Represents total lower-body power output in a single jump. The primary athleticism metric.",
-        "Elite amateur ≥ 300 N·s. Above average 260–300.")
-    metric_def("P1 Concentric Impulse", "N·s",
-        "Concentric impulse from the first phase of the push-off (before the athlete leaves the ground). "
-        "Captures early-phase force production. A supplementary power metric.")
-    metric_def("Concentric Impulse-100ms (CI-100ms)", "N·s",
-        "Force applied in the first 100 milliseconds of the concentric phase. "
-        "A proxy for early explosiveness — how quickly an athlete can generate force at the start of the drive.")
-    metric_def("Jump Height (Flight Time)", "inches",
-        "Vertical jump height estimated from the time the athlete is in the air (flight time method). "
-        "Expressed in inches. Correlates with overall power output but is influenced by body weight.")
-    metric_def("RSI-modified (mRSI)", "m/s",
-        "Reactive Strength Index — jump height divided by time on the ground. "
-        "Measures how efficiently an athlete converts ground contact into height. "
-        "Higher = more explosive relative to their contact time. Elite range: ≥ 0.80 m/s.",
-        "Elite ≥ 0.80. Above average 0.60–0.79.")
-    metric_def("Peak Power / Body Mass", "W/kg",
-        "Peak power output during the jump normalized to the athlete's body weight. "
-        "Removes the size advantage — a heavier athlete who jumps equally high produces more raw power, "
-        "but Peak Power/BM levels the field. Best measure of relative explosiveness.")
-
-    st.markdown(f'<div style="border-left:4px solid {GOLD};padding-left:10px;margin:20px 0 6px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{GOLD}">Force Plate — Strategy</span></div>',
-                unsafe_allow_html=True)
-
-    metric_def("Eccentric Duration", "seconds",
-        "Time spent in the downward (loading) phase of the jump. "
-        "Longer = more deliberate, slower dip. Shorter = quicker, bouncier approach. "
-        "Neither is inherently better — context is relative to peer norms.")
-    metric_def("Concentric Duration", "seconds",
-        "Time spent in the upward (push-off) phase. "
-        "Shorter = more explosive, faster drive off the ground. "
-        "Elite athletes tend to have short concentric durations relative to their impulse.")
-    metric_def("Braking Phase Duration", "seconds",
-        "Time between the athlete's peak downward velocity and the start of the upward drive. "
-        "A short braking phase = faster direction reversal = better stretch-shortening cycle efficiency.")
-    metric_def("Countermovement Depth", "cm (stored internally)",
-        "How far the athlete's center of mass drops during the dip. "
-        "Deeper = more elastic energy stored in tendons and muscles. "
-        "Shown as a negative value internally (downward displacement).")
-    metric_def("CI100ms : Total CI Ratio", "ratio (0–1)",
-        "The proportion of total concentric impulse produced in the first 100ms. "
-        "High ratio = front-loaded strategy (force comes early). "
-        "Low ratio = back-loaded (force ramps up later). "
-        "Used alongside CI-100ms to classify jump archetypes.")
-
-    st.markdown(f'<div style="border-left:4px solid {GREEN};padding-left:10px;margin:20px 0 6px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{GREEN}">Sprint</span></div>',
-                unsafe_allow_html=True)
-
-    metric_def("30yd Sprint", "seconds",
-        "Time to cover 30 yards from a standing start. The primary speed metric. "
-        "Lower = faster. Elite amateur range: sub-3.80s. Above average: 3.80–4.00s.",
-        good="Lower is better · Elite < 3.80s", good_label="✓")
-    metric_def("10yd Split", "seconds",
-        "Time to cover the first 10 yards — measures pure acceleration and first-step quickness. "
-        "Derived from the same timed run as the 30yd.",
-        good="Lower is better · Elite < 1.55s", good_label="✓")
-    metric_def("20yd Split", "seconds",
-        "Time to cover the first 20 yards — transition between acceleration and top speed. "
-        "Derived from the same timed run as the 30yd.",
-        good="Lower is better", good_label="✓")
-
-    st.markdown(f'<div style="border-left:4px solid {GREEN};padding-left:10px;margin:20px 0 6px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{GREEN}">In-House Programming Categories</span></div>',
-                unsafe_allow_html=True)
-
-    for cat, color, ci_crit, p1_crit, desc in [
-        ("High-High", "#4CAF82", "CI ≥ 285 N·s", "P1 CI ≥ 195 N·s",
-         "Athlete arrives with both a strong total impulse and strong early-phase force production. "
-         "Ready for the most advanced programming track from day one."),
-        ("High-Low",  "#E2C188", "CI ≥ 285 N·s", "P1 CI < 195 N·s",
-         "Strong total output but early-phase production needs development. "
-         "High base to work from — focus will be on building strength and the ability to overcome inertia."),
-        ("Low",       "#BA0C2F", "CI < 285 N·s", "—",
-         "Foundational program. Build total force production capacity before addressing strategy. "
-         "Most common entry point for high school athletes."),
-    ]:
-        st.markdown(f"""
-        <div style="padding:14px 16px;border-bottom:1px solid {BORD}">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-                <span style="background:{color};color:white;font-size:11px;font-weight:700;
-                    padding:3px 14px;border-radius:20px;letter-spacing:0.06em">⚙ {cat}</span>
-                <span style="font-size:11px;color:#9AAAC0">{ci_crit} · {p1_crit}</span>
-            </div>
-            <div style="font-size:13px;color:#2a3a5a;line-height:1.6">{desc}</div>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown(f'<div style="border-left:4px solid {NAV};padding-left:10px;margin:20px 0 6px 0">'
-                f'<span style="font-size:10px;font-weight:700;letter-spacing:0.12em;'
-                f'text-transform:uppercase;color:{NAV}">Anthropometrics</span></div>',
-                unsafe_allow_html=True)
-
-    metric_def("Height", "ft / in",
-        "Standing height without shoes. Measured at the time of testing. "
-        "Taller athletes score higher in the potential model — height is one of the strongest "
-        "predictors of projection across all positions.")
-    metric_def("Body Mass", "lbs",
-        "Body weight at the time of testing. Used in the leanness (BW/Ht) ratio "
-        "and normalized power metrics. Not scored directly.")
-    metric_def("Wingspan", "ft / in",
-        "Arm span measured fingertip to fingertip with arms extended horizontally. "
-        "Used to compute wingspan advantage. Particularly relevant for pitchers.")
-    metric_def("Wingspan Advantage", "inches",
-        "Wingspan minus height. A positive value means the athlete's reach exceeds their height — "
-        "longer levers than expected for their size. Elite pitching prospect marker. "
-        "Scored as a percentile in the potential model.",
-        'Positive = longer reach than height. Very positive (> 2") is notable for pitchers.')
-    metric_def("BW/Ht Ratio (Leanness)", "lbs / inch",
-        "Body weight divided by height in inches. A lower ratio means a leaner athlete — "
-        "less mass per unit of height. Leaner athletes have more room to add functional mass "
-        "without losing athleticism. Lower is better in the potential score.")
-
-
-    # =========================================================================
-    # REFERENCE TABLES (appended below distributions)
-    # =========================================================================
-    st.markdown("---")
-    st.markdown(
-        f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
-        f'border-radius:10px;padding:20px 24px;margin-bottom:20px;'
-        f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
-        f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-        f'text-transform:uppercase;color:#6b7fa3;margin:0 0 6px 0">POPULATION NORMS</p>'
-        f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">Reference Tables</h2>'
-        f'<p style="font-size:14px;color:#6b7fa3;margin:0">'
-        f'Mean ± 1 SD for each metric, broken out by position group and year.</p></div>',
-        unsafe_allow_html=True)
-
-    rr1, rr2 = st.columns([1, 1])
-    with rr1:
-        ref_yr_opts = ["All years"] + sorted(df["Year"].dropna().unique().astype(int).tolist(), reverse=True)
-        ref_yr_sel  = st.selectbox("Year", ref_yr_opts, key="ref_tbl_yr")
-    with rr2:
-        ref_pos_opts = ["All positions", "Pitcher", "Catcher", "Infielder", "Outfielder"]
-        ref_pos_sel  = st.selectbox("Position Group", ref_pos_opts, key="ref_tbl_pos")
-
-    ref_base = df.copy()
-    if ref_yr_sel != "All years":
-        ref_base = ref_base[ref_base["Year"] == int(ref_yr_sel)]
-    if ref_pos_sel != "All positions":
-        ref_base = ref_base[ref_base["pos_group"] == ref_pos_sel]
-
-    METRIC_GROUPS = {
-        "Athleticism": [
-            ("Concentric Impulse",                  "CI (N·s)",       1, ""),
-            ("RSI-modified",                        "RSI-modified",   3, ""),
-            ("Peak Power / BM",                     "Peak Pwr/BM",    1, ""),
-            ("30yd Split",                          "30yd (s)",       3, "s"),
-            ("10yd Split",                          "10yd (s)",       3, "s"),
-            ("Jump Height (Flight Time) in Inches", "Jump Ht (in)",   2, " in"),
-        ],
-        "Anthropometrics": [
-            ("Height",             "Height (ft''in)",   0, ""),
-            ("Mass",               "Mass (lbs)",        1, " lbs"),
-            ("Wingspan",           "Wingspan (ft''in)", 0, ""),
-            ("wingspan_advantage", "Wingspan Adv. (in)",1, "\""),
-        ],
-
-    }
-
-    for section, metrics in METRIC_GROUPS.items():
-        st.markdown(
-            f'<div style="border-left:4px solid {RED};padding-left:10px;margin:20px 0 10px 0">'
-            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-            f'text-transform:uppercase;color:{RED}">{section}</span></div>',
-            unsafe_allow_html=True)
-
-        rows = []
-        for col, label, digits, suffix in metrics:
-            if col not in ref_base.columns:
-                continue
-            data = ref_base[col].dropna()
-            if len(data) < 2:
-                continue
-            def fmtv(v):
-                if col == "Height":           return fmt_height(v)
-                if col == "Wingspan":         return fmt_height(v)
-                if col == "wingspan_advantage": return fmt_wingspan_adv(v)
-                if col == "Mass":             return fmt_mass(v)
-                return f"{v:.{digits}f}{suffix}"
-            rows.append({
-                "Metric":  label,
-                "N":       int(len(data)),
-                "Mean":    fmtv(data.mean()),
-                "SD":      fmtv(data.std(ddof=1)) if col != "Height" else "—",
-                "p10":     fmtv(data.quantile(0.10)),
-                "p25":     fmtv(data.quantile(0.25)),
-                "Median":  fmtv(data.median()),
-                "p75":     fmtv(data.quantile(0.75)),
-                "p90":     fmtv(data.quantile(0.90)),
+            pool_c = df["Concentric Impulse"].dropna()
+            if pd.isna(val) or len(pool_c)==0: return np.nan
+            return float((pool_c<val).mean()*100)
+
+        bwht_cur = sc_bwht(mass_kg, ht_cm)
+
+        rows_proj = []
+        for label, gain_lbs in [("Current",0),("+10 lbs",10),("+15 lbs",15)]:
+            new_kg   = mass_kg + gain_lbs/2.20462
+            ci_p     = ci_per_kg_new * new_kg if gain_lbs>0 else ci_val
+            bwht_v   = sc_bwht(new_kg, ht_cm)
+            bwht_p   = sc_bwht_pct(bwht_v)
+            ci_p_pct = sc_ci_pct(ci_p)
+            delta    = ci_p - ci_val
+            rows_proj.append({
+                "Scenario": label,
+                "CI (N·s)": f"{ci_p:.1f}" + (f"  ({'+' if delta>=0 else ''}{delta:.1f})" if gain_lbs>0 else ""),
+                "CI Pct":   pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
+                "Body Mass":f"{new_kg*2.20462:.1f} lbs",
+                "BW/Ht":    f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
+                "Leanness Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
             })
 
-        if rows:
-            st.dataframe(pd.DataFrame(rows), use_container_width=True,
-                         hide_index=True, key=f"ref_tbl_{section}")
-
-    # ── School level comparison ───────────────────────────────────────────────
-    st.markdown(
-        f'<div style="border-left:4px solid {NAV};padding-left:10px;margin:28px 0 10px 0">'
-        f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-        f'text-transform:uppercase;color:{NAV}">By School Level</span></div>',
-        unsafe_allow_html=True)
-
-    school_metrics = [
-        ("Concentric Impulse",                  "CI (N·s)",     1),
-        ("RSI-modified",                        "RSI-mod",      3),
-        ("Peak Power / BM",                     "Pk Pwr/BM",    1),
-        ("30yd Split",                          "30yd (s)",     3),
-        ("Jump Height (Flight Time) in Inches", "Jump Ht (in)", 2),
-        ("Height",                              "Height (ft''in)",  0),
-        ("Mass",                                "Mass (kg)",    1),
-        ("Wingspan",                            "Wingspan (ft''in)",0),
-        ("wingspan_advantage",                  "Wing Adv. (in)",1),
-    ]
-
-    base_yr = df.copy()
-    if ref_yr_sel != "All years":
-        base_yr = base_yr[base_yr["Year"] == int(ref_yr_sel)]
-
-    # Filter by position group if selected
-    if ref_pos_sel != "All positions":
-        base_yr = base_yr[base_yr["pos_group"] == ref_pos_sel]
-
-    school_levels = ["High School", "Junior College", "4-Year College"]
-    school_rows = []
-    for level in school_levels:
-        lvl_df = base_yr[base_yr["School Type"] == level]
-        if len(lvl_df) == 0:
-            continue
-        row = {"School Level": level, "N": len(lvl_df)}
-        for col, label, digits in school_metrics:
-            if col in lvl_df.columns:
-                data = lvl_df[col].dropna()
-                if len(data) > 0:
-                    def sfmt(v):
-                        if col == "Height": return fmt_height(v)
-                        if col == "Wingspan": return fmt_height(v)
-                        if col == "wingspan_advantage": return fmt_wingspan_adv(v)
-                        if col == "Mass": return fmt_mass(v)
-                        return f"{v:.{digits}f}"
-                    row[label] = sfmt(data.median())
-                    row[f"{label} (p25–p75)"] = f"{sfmt(data.quantile(0.25))} – {sfmt(data.quantile(0.75))}"
-                else:
-                    row[label] = "—"
-                    row[f"{label} (p25–p75)"] = "—"
-            else:
-                row[label] = "—"
-                row[f"{label} (p25–p75)"] = "—"
-        school_rows.append(row)
-
-    if school_rows:
-        # Show median table
-        median_cols = ["School Level", "N"] + [lbl for _, lbl, _ in school_metrics]
-        iqr_cols    = ["School Level", "N"] + [f"{lbl} (p25–p75)" for _, lbl, _ in school_metrics]
-        median_df   = pd.DataFrame(school_rows)[median_cols]
-        iqr_df      = pd.DataFrame(school_rows)[iqr_cols]
-
-        st.markdown('<p style="font-size:11px;font-weight:600;color:#6b7fa3;margin:8px 0 4px 0">Medians</p>',
-                    unsafe_allow_html=True)
-        st.dataframe(median_df, use_container_width=True, hide_index=True, key="ref_school_med")
-
-        st.markdown('<p style="font-size:11px;font-weight:600;color:#6b7fa3;margin:12px 0 4px 0">Interquartile Range (p25 – p75)</p>',
-                    unsafe_allow_html=True)
-        st.dataframe(iqr_df.rename(columns={f"{lbl} (p25–p75)": lbl for _, lbl, _ in school_metrics}),
-                     use_container_width=True, hide_index=True, key="ref_school_iqr")
-
-    st.caption("Values are medians / IQR within each school level for the selected filters.")
-
-# =============================================================================
-# TAB 6 — DEVELOPMENT PROJECTION
-# =============================================================================
-with tab_proj:
-
-    st.markdown(
-        f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {GREEN};'
-        f'border-radius:10px;padding:20px 24px;margin-bottom:20px;'
-        f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
-        f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-        f'text-transform:uppercase;color:{GREEN};margin:0 0 6px 0">DEVELOPMENT PROJECTION</p>'
-        f'<h2 style="margin:0 0 6px 0;font-family:\'Playfair Display\',serif">CI Projection with Weight Gain</h2>'
-        f'<p style="font-size:13px;color:#6b7fa3;margin:0">'
-        f'Projects Concentric Impulse if the athlete adds 10–15 lbs. '
-        f'Assumes relative CI per kg of bodyweight decreases by 3% with added mass. '
-        f'This penalty is applied to give a more reasonable projection, given that CI relative to bodyweight may not stay consistent as substantial size is added.</p></div>',
-        unsafe_allow_html=True)
-
-    # ── Athlete selector ──────────────────────────────────────────────────────
-    proj1, proj1b, proj2 = st.columns([1.5, 2, 1])
-    with proj1:
-        proj_search = st.text_input("Search athlete", placeholder="Type a name…", key="proj_search")
-    with proj1b:
-        proj_filtered = ([a for a in athletes if proj_search.lower() in a.lower()]
-                         if proj_search else athletes)
-        if not proj_filtered: proj_filtered = athletes
-        proj_ath = st.selectbox("Select athlete", proj_filtered, key="proj_ath")
-    with proj2:
-        proj_years = sorted(df[df["athleteName"] == proj_ath]["Year"]
-                            .dropna().unique().astype(int).tolist(), reverse=True)
-        proj_yr_opts = ["Most recent"] + [str(y) for y in proj_years]
-        proj_yr_str  = st.selectbox("Year", proj_yr_opts, key="proj_yr")
-
-    # Get athlete row
-    proj_all = df[df["athleteName"] == proj_ath].sort_values("Year")
-    if proj_yr_str == "Most recent":
-        proj_row = proj_all.iloc[-1] if not proj_all.empty else None
-    else:
-        sub = proj_all[proj_all["Year"] == int(proj_yr_str)]
-        proj_row = sub.iloc[0] if not sub.empty else None
-
-    if proj_row is None:
-        st.warning("No data found for this athlete.")
-        st.stop()
-
-    # ── Pull values ───────────────────────────────────────────────────────────
-    ci_cur     = safe_float(proj_row.get("Concentric Impulse"))
-    mass_kg    = safe_float(proj_row.get("Mass"))
-    height_cm  = safe_float(proj_row.get("Height"))
-    yr_display = int(proj_row["Year"]) if pd.notna(proj_row.get("Year")) else "—"
-
-    has_data = pd.notna(ci_cur) and pd.notna(mass_kg) and ci_cur > 0 and mass_kg > 0
-
-    if not has_data:
-        st.warning("This athlete is missing CI or body mass data — projection cannot be calculated.")
-        st.stop()
-
-    # ── Calculations ──────────────────────────────────────────────────────────
-    lbs_10 = 10 / 2.20462   # 10 lbs in kg
-    lbs_15 = 15 / 2.20462   # 15 lbs in kg
-
-    ci_per_kg     = ci_cur / mass_kg                   # current relative CI (N·s/kg)
-    ci_per_kg_new = ci_per_kg * 0.97                   # 3% decrease in relative CI
-
-    mass_10 = mass_kg + lbs_10
-    mass_15 = mass_kg + lbs_15
-
-    ci_proj_10 = ci_per_kg_new * mass_10               # projected CI at +10 lbs
-    ci_proj_15 = ci_per_kg_new * mass_15               # projected CI at +15 lbs
-
-    # BW/Ht ratio (lbs/inch) — current and projected
-    def bwht_lbs_in(kg, cm):
-        if pd.isna(kg) or pd.isna(cm) or cm == 0: return np.nan
-        return (kg * 2.20462) / (cm / 2.54)
-
-    bwht_cur  = bwht_lbs_in(mass_kg, height_cm)
-    bwht_10   = bwht_lbs_in(mass_10, height_cm)
-    bwht_15   = bwht_lbs_in(mass_15, height_cm)
-
-    # BW/Ht percentiles from pool (lower = better = leaner)
-    bwht_pool = df["bmi_raw"].dropna()
-    def bwht_pct(val):
-        if pd.isna(val) or len(bwht_pool) == 0: return np.nan
-        return float((bwht_pool < val).mean() * 100)
-
-    bwht_pct_cur = bwht_pct(bwht_cur)
-    bwht_pct_10  = bwht_pct(bwht_10)
-    bwht_pct_15  = bwht_pct(bwht_15)
-
-    # CI all-time percentile
-    ci_pool = df["Concentric Impulse"].dropna()
-    def ci_pct_fn(val):
-        if pd.isna(val) or len(ci_pool) == 0: return np.nan
-        return float((ci_pool < val).mean() * 100)
-
-    ci_pct_cur = ci_pct_fn(ci_cur)
-    ci_pct_10  = ci_pct_fn(ci_proj_10)
-    ci_pct_15  = ci_pct_fn(ci_proj_15)
-
-    # Pre-compute all display strings to avoid ternaries inside f-strings
-    bwht_cur_str     = f"{bwht_cur:.2f}"        if pd.notna(bwht_cur)     else "—"
-    bwht_pct_cur_str = f"{bwht_pct_cur:.0f}th"  if pd.notna(bwht_pct_cur) else "—"
-    bwht_10_str      = f"{bwht_10:.2f}"          if pd.notna(bwht_10)      else "—"
-    bwht_pct_10_str  = f"{bwht_pct_10:.0f}th"   if pd.notna(bwht_pct_10)  else "—"
-    bwht_15_str      = f"{bwht_15:.2f}"          if pd.notna(bwht_15)      else "—"
-    bwht_pct_15_str  = f"{bwht_pct_15:.0f}th"   if pd.notna(bwht_pct_15)  else "—"
-
-    # ── Current snapshot ──────────────────────────────────────────────────────
-    st.markdown(f"""
-    <div style="background:white;border:1px solid {BORD};border-radius:10px;
-        padding:16px 22px;margin-bottom:20px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-            <div>
-                <p style="font-size:9px;font-weight:700;letter-spacing:0.16em;
-                    text-transform:uppercase;color:#6b7fa3;margin:0 0 4px 0">CURRENT BASELINE · {yr_display}</p>
-                <h3 style="font-family:'Playfair Display',serif;margin:0;font-size:22px;color:{NAV}">{proj_ath}</h3>
-            </div>
-            <div style="display:flex;gap:24px;flex-wrap:wrap;margin-left:auto">
-                <div style="text-align:center">
-                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">CI</div>
-                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{RED}">{ci_cur:.1f}</div>
-                    <div style="font-size:10px;color:#9AAAC0">{ci_pct_cur:.0f}th pct</div>
-                </div>
-                <div style="text-align:center">
-                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">BODY MASS</div>
-                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{mass_kg*2.20462:.1f} lbs</div>
-                    <div style="font-size:10px;color:#9AAAC0">{mass_kg:.1f} kg</div>
-                </div>
-                <div style="text-align:center">
-                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">CI / KG</div>
-                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{ci_per_kg:.2f}</div>
-                    <div style="font-size:10px;color:#9AAAC0">N·s per kg</div>
-                </div>
-                <div style="text-align:center">
-                    <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3">BW/HT RATIO</div>
-                    <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:{NAV}">{bwht_cur_str}</div>
-                    <div style="font-size:10px;color:#9AAAC0">{bwht_pct_cur_str} pct (leanness)</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── Projection cards ──────────────────────────────────────────────────────
-    st.markdown('<p class="label" style="margin-bottom:8px">Projected outcomes</p>',
-                unsafe_allow_html=True)
-
-    card1, card2 = st.columns(2)
-
-    def proj_card(col_widget, lbs_gain, new_mass_kg, ci_proj, ci_pct_new,
-                  bwht_new, bwht_pct_new, accent):
-        delta_ci         = ci_proj - ci_cur
-        delta_bwht       = (bwht_new - bwht_cur) if (pd.notna(bwht_new) and pd.notna(bwht_cur)) else None
-
-        s_bwht           = f"{bwht_new:.2f}"        if pd.notna(bwht_new)     else "—"
-        s_bwht_pct       = f"{bwht_pct_new:.0f}th"  if pd.notna(bwht_pct_new) else "—"
-        s_delta_bwht     = f"+{delta_bwht:.2f}"      if delta_bwht is not None else "—"
-        s_delta_ci_color = "#4CAF82" if delta_ci >= 0 else RED
-        s_delta_ci_sign  = "+" if delta_ci >= 0 else ""
-        s_mass_lbs       = f"{new_mass_kg * 2.20462:.1f}"
-        s_mass_kg_str    = f"{new_mass_kg:.1f}"
-        s_ci             = f"{ci_proj:.1f}"
-        s_ci_pct         = f"{ci_pct_new:.0f}th percentile"
-        s_delta_ci       = f"{s_delta_ci_sign}{delta_ci:.1f} from current"
-        PF               = "Playfair Display"
-
-        parts = []
-        parts.append(f'<div style="background:white;border:1px solid {BORD};border-top:5px solid {accent};')
-        parts.append('border-radius:10px;padding:20px 22px;box-shadow:0 2px 12px rgba(17,34,90,0.08)">')
-        parts.append(f'<p style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:{accent};margin:0 0 12px 0">+{lbs_gain} LBS SCENARIO</p>')
-        parts.append('<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap">')
-        parts.append('<div style="flex:1;min-width:80px">')
-        parts.append('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3;text-transform:uppercase">Projected CI</div>')
-        parts.append(f'<div style="font-family:{PF},serif;font-size:40px;font-weight:900;color:{accent};line-height:1">{s_ci}</div>')
-        parts.append(f'<div style="font-size:12px;color:#6b7fa3">{s_ci_pct}</div>')
-        parts.append(f'<div style="font-size:12px;font-weight:700;color:{s_delta_ci_color};margin-top:2px">{s_delta_ci}</div>')
-        parts.append('</div>')
-        parts.append('<div style="flex:1;min-width:80px">')
-        parts.append('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3;text-transform:uppercase">New Body Mass</div>')
-        parts.append(f'<div style="font-family:{PF},serif;font-size:40px;font-weight:900;color:{NAV};line-height:1">{s_mass_lbs}</div>')
-        parts.append(f'<div style="font-size:12px;color:#6b7fa3">lbs ({s_mass_kg_str} kg)</div>')
-        parts.append('</div></div>')
-        parts.append(f'<div style="background:{SURF};border-radius:8px;padding:12px 14px;margin-bottom:12px">')
-        parts.append('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:#6b7fa3;text-transform:uppercase;margin-bottom:8px">BW/HT RATIO</div>')
-        parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;color:#6b7fa3">New ratio</span><span style="font-weight:700;color:{NAV}">{s_bwht}</span></div>')
-        parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:12px;color:#6b7fa3">Leanness percentile</span><span style="font-weight:700;color:{NAV}">{s_bwht_pct}</span></div>')
-        parts.append(f'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#6b7fa3">Change from current</span><span style="font-weight:700;color:{RED}">{s_delta_bwht}</span></div>')
-        parts.append('</div>')
-
-        parts.append('</div>')
-        st.markdown("".join(parts), unsafe_allow_html=True)
-    with card1:
-        proj_card(card1, 10, mass_10, ci_proj_10, ci_pct_10,
-                  bwht_10, bwht_pct_10, RED)
-    with card2:
-        proj_card(card2, 15, mass_15, ci_proj_15, ci_pct_15,
-                  bwht_15, bwht_pct_15, NAV)
-
-    # ── Visual CI comparison chart ────────────────────────────────────────────
-    st.markdown("<br>", unsafe_allow_html=True)
-    ci_med = float(ci_pool.median())
-    ci_p75 = float(ci_pool.quantile(0.75))
-    ci_p90 = float(ci_pool.quantile(0.90))
-
-    fig_proj = go.Figure()
-
-    # Subtle benchmark band background
-    fig_proj.add_hrect(y0=ci_p75, y1=ci_p90,
-                       fillcolor="rgba(226,193,136,0.12)", line_width=0,
-                       annotation_text="p75–p90 zone", annotation_position="right",
-                       annotation_font_size=9, annotation_font_color=GOLD)
-
-    scenarios  = ["Current", "+10 lbs", "+15 lbs"]
-    ci_vals    = [ci_cur, ci_proj_10, ci_proj_15]
-    bar_colors = [NAV, RED, GREEN]
-    deltas     = [0, ci_proj_10 - ci_cur, ci_proj_15 - ci_cur]
-
-    fig_proj.add_trace(go.Bar(
-        x=scenarios, y=ci_vals,
-        marker_color=bar_colors,
-        marker_line=dict(color="white", width=1.5),
-        width=0.5,
-        text=[f"{v:.1f}  ({('+' if d>0 else '')}{d:.1f})"
-              if d != 0 else f"{v:.1f}" for v, d in zip(ci_vals, deltas)],
-        textposition="inside",
-        textfont=dict(color="white", size=14, family="Arial"),
-        insidetextanchor="middle",
-    ))
-
-    for val, lbl, color, dash, width in [
-        (ci_med, f"Median  {ci_med:.0f}", "#9AAAC0", "dot",  1.5),
-        (ci_p75, f"p75  {ci_p75:.0f}",    GOLD,      "dash", 2),
-        (ci_p90, f"p90  {ci_p90:.0f}",    GREEN,     "dash", 2),
-    ]:
-        fig_proj.add_hline(y=val, line_dash=dash, line_color=color, line_width=width,
-                           annotation_text=lbl, annotation_font_color=color,
-                           annotation_font_size=10, annotation_position="right")
-
-    y_max = max(ci_proj_15, ci_p90) * 1.18
-    fig_proj.update_layout(**_layout(
-        title=dict(text="Projected CI vs Pool Benchmarks", font=dict(size=14, color=NAV), x=0),
-        height=400, margin=dict(l=40, r=110, t=50, b=40),
-        yaxis=dict(title="Concentric Impulse (N·s)", range=[0, y_max],
-                   gridcolor=BORD, tickfont=dict(size=10)),
-        xaxis=dict(tickfont=dict(size=13, color=NAV)),
-        showlegend=False,
-        plot_bgcolor="white",
-        bargap=0.35,
-    ))
-    st.plotly_chart(fig_proj, use_container_width=True, key="proj_ci_bar")
-
-    # ── Assumptions footnote ──────────────────────────────────────────────────
-    st.markdown(f"""
-    <div style="background:{SURF};border-radius:8px;padding:12px 16px;margin-top:8px;
-        border-left:3px solid #9AAAC0">
-        <p style="font-size:11px;color:#6b7fa3;margin:0;line-height:1.7">
-            <strong>Assumptions:</strong> Projected CI = (current CI/kg × adaptation factor) × new body mass.
-            The adaptation penalty accounts for the short-term cost of added mass on relative CI.
-            Internal data has shown a trend towards pitchers having smaller penalties (0–3%) than position players (3–5%).
-            BW/Ht leanness percentile is all-time.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── CI Calculator ──────────────────────────────────────────────────────────
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(
-        f'<div style="border-left:4px solid {GOLD};padding-left:12px;margin:0 0 16px 0">' +
-        f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:{GOLD}">CI Calculator</span>' +
-        f'<p style="font-size:12px;color:#6b7fa3;margin:4px 0 0 0">Explore custom weight gain scenarios. Switch between setting a weight gain directly or targeting a BW/Ht percentile.</p></div>',
-        unsafe_allow_html=True)
-
-    if not has_data:
-        st.info("Select an athlete with CI and body mass data to use the calculator.")
-    else:
-        # ── Mode toggle + adaptation penalty ─────────────────────────────────
-        mc1, mc2 = st.columns([2, 1])
-        with mc1:
-            calc_mode = st.radio("Input mode", ["Weight gain", "Target BW/Ht percentile", "Target BW/Ht ratio"],
-                                 horizontal=True, key="calc_mode")
-        with mc2:
-            adapt_pct = st.slider("Adaptation penalty (%)", 0, 15, 3, 1, key="calc_adapt") / 100
-
-        # ── Mode-specific input ───────────────────────────────────────────────
-        if calc_mode == "Weight gain":
-            calc_gain_lbs = st.slider("Weight gain (lbs)", 0, 40, 10, 1, key="calc_gain")
-            calc_new_mass_kg = mass_kg + (calc_gain_lbs / 2.20462)
-            gain_label       = f"+{calc_gain_lbs} lbs"
-
-        elif calc_mode == "Target BW/Ht percentile":
-            bwht_pool_calc = df["bmi_raw"].dropna().sort_values()
-            opts = list(range(1, 100))
-            cur_pct_approx = int(round(float((bwht_pool_calc < bwht_cur).mean() * 100))) if pd.notna(bwht_cur) else 50
-            default_pct = max(1, min(99, cur_pct_approx))
-            target_pct = st.select_slider(
-                "Target leanness percentile (higher = heavier relative to height)",
-                options=opts,
-                value=default_pct,
-                key="calc_ratio_pct")
-            target_ratio     = float(bwht_pool_calc.quantile(target_pct / 100))
-            height_in        = height_cm / 2.54 if pd.notna(height_cm) else None
-            implied_bw_lbs   = target_ratio * height_in if height_in else None
-            calc_new_mass_kg = implied_bw_lbs / 2.20462 if implied_bw_lbs else mass_kg
-            calc_gain_lbs    = (calc_new_mass_kg - mass_kg) * 2.20462
-            gain_label       = f"{calc_gain_lbs:+.1f} lbs to reach {target_pct}th pct ratio ({target_ratio:.2f})"
-
-        else:  # Direct ratio
-            height_in      = height_cm / 2.54 if pd.notna(height_cm) else None
-            default_ratio  = round(float(bwht_cur) + (10 / height_in), 2) if (pd.notna(bwht_cur) and height_in) else 2.5
-            target_ratio   = st.slider("Target BW/Ht ratio (lbs/in)", 1.5, 4.0,
-                                        min(max(float(bwht_cur or 2.4), 1.5), 4.0) if pd.notna(bwht_cur) else 2.5,
-                                        0.01, key="calc_ratio_val", format="%.2f")
-            implied_bw_lbs   = target_ratio * height_in if height_in else None
-            calc_new_mass_kg = implied_bw_lbs / 2.20462 if implied_bw_lbs else mass_kg
-            calc_gain_lbs    = (calc_new_mass_kg - mass_kg) * 2.20462
-            gain_label       = f"{calc_gain_lbs:+.1f} lbs to reach ratio {target_ratio:.2f}"
-
-        # ── Calculations ──────────────────────────────────────────────────────
-        calc_ci_per_kg_new = ci_per_kg * (1 - adapt_pct)
-        calc_ci_proj       = calc_ci_per_kg_new * calc_new_mass_kg
-        calc_ci_pct        = sc_ci_pct(calc_ci_proj)
-        calc_bwht          = sc_bwht(calc_new_mass_kg, height_cm)
-        calc_bwht_pct_val  = sc_bwht_pct(calc_bwht)
-        calc_delta_ci      = calc_ci_proj - ci_cur
-
-        s_calc_ci    = f"{calc_ci_proj:.1f}"
-        s_calc_delta = ("+" if calc_delta_ci >= 0 else "") + f"{calc_delta_ci:.1f}"
-        s_calc_pct   = f"{calc_ci_pct:.0f}th pct" if pd.notna(calc_ci_pct) else "—"
-        s_calc_mass  = f"{calc_new_mass_kg * 2.20462:.1f} lbs"
-        s_calc_bwht  = f"{calc_bwht:.2f}" if pd.notna(calc_bwht) else "—"
-        s_calc_bpct  = f"{calc_bwht_pct_val:.0f}th pct" if pd.notna(calc_bwht_pct_val) else "—"
-        PF           = "Playfair Display"
-
-        st.markdown("<br>", unsafe_allow_html=True)
-        r1, r2, r3, r4 = st.columns(4)
-
-        r1.markdown(
-            f'<div style="background:white;border:1px solid {BORD};border-top:3px solid {RED};border-radius:8px;padding:12px 14px;text-align:center">' +
-            f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#6b7fa3;margin-bottom:4px">Projected CI</div>' +
-            f'<div style="font-family:{PF},serif;font-size:28px;font-weight:700;color:{RED}">{s_calc_ci}</div>' +
-            f'<div style="font-size:11px;color:#6b7fa3">{s_calc_delta} · {s_calc_pct}</div></div>',
-            unsafe_allow_html=True)
-        r2.metric("Body Mass", s_calc_mass, f"{calc_gain_lbs:+.1f} lbs")
-        r3.metric("BW/Ht Ratio", s_calc_bwht, s_calc_bpct)
-        r4.metric("CI / kg", f"{calc_ci_per_kg_new:.2f}", f"-{adapt_pct*100:.0f}%")
-
-
+        proj_tbl = pd.DataFrame(rows_proj)
+        st.dataframe(proj_tbl, use_container_width=True, hide_index=True, key="sc_proj_tbl")
         st.markdown(
-            f'<p style="font-size:11px;color:#9AAAC0;margin-top:10px">{gain_label} · {adapt_pct*100:.0f}% adaptation penalty · current CI/kg: {ci_per_kg:.2f}<br>Internal data has shown a trend towards pitchers having smaller penalties (0–3%) than position players (3–5%).</p>',
-            unsafe_allow_html=True)
+            f'<p style="font-size:11px;color:#9AAAC0;margin-top:4px">'
+            f'Assumes 3% decrease in CI/kg with added mass. All-time percentiles. '
+            f'Internal data has shown a trend towards pitchers having smaller penalties (0–3%) '
+            f'than position players (3–5%).</p>', unsafe_allow_html=True)
