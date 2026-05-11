@@ -1093,6 +1093,21 @@ with tab_card:
 
     aq_pct_str = alltime_pct(aq_val, "athlete_quality_score")
 
+    # Wingspan flag
+    _wing_adv  = sf(row.get("wingspan_advantage"))
+    _wing_pool = df["wingspan_advantage"].dropna()
+    if pd.notna(_wing_adv) and len(_wing_pool) > 0:
+        _wing_p85 = float(_wing_pool.quantile(0.85))
+        _wing_p20 = float(_wing_pool.quantile(0.20))
+        if _wing_adv >= _wing_p85:
+            _wing_flag = f' <span style="color:#4CAF82;font-size:11px;font-weight:600">✓ Notable benefit</span>'
+        elif _wing_adv <= _wing_p20:
+            _wing_flag = f' <span style="color:#BA0C2F;font-size:11px;font-weight:600">⚠ Below average</span>'
+        else:
+            _wing_flag = ""
+    else:
+        _wing_flag = ""
+
     # CI pathway
     ci_val          = sf(row.get("Concentric Impulse"))
     mass_kg         = sf(row.get("Mass"))
@@ -1308,7 +1323,7 @@ with tab_card:
             <div class="stat-row"><span class="stat-label">Wingspan</span>
                 <span class="stat-val">{fmt_wingspan(sf(row.get("Wingspan")))}</span></div>
             <div class="stat-row"><span class="stat-label">Wingspan Adv.</span>
-                <span class="stat-val">{fmt_wingspan_adv(sf(row.get("wingspan_advantage")))}</span></div>
+                <span class="stat-val">{fmt_wingspan_adv(sf(row.get("wingspan_advantage")))}{_wing_flag}</span></div>
             <div class="stat-row"><span class="stat-label">BW/Ht Ratio</span>
                 <span class="stat-val">{fmt(sf(row.get("bmi_raw")),2)}</span></div>
         </div>
@@ -1379,7 +1394,7 @@ with tab_card:
                 "CI Pct":   pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
                 "Body Mass":f"{new_kg*2.20462:.1f} lbs",
                 "BW/Ht":    f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
-                "Leanness Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
+                "BW/Height Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
             })
 
         proj_tbl = pd.DataFrame(rows_proj)
