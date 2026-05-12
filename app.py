@@ -666,7 +666,7 @@ def make_gauge(value, title, color=RED):
                       paper_bgcolor="white", font=dict(family="Arial"))
     return fig
 
-def make_radar(row, label="Athlete"):
+def make_radar(row, label="Athlete", is_pitcher=False):
     def sp(row, key, default=50.0):
         v = row.get(key, default)
         try:
@@ -675,14 +675,17 @@ def make_radar(row, label="Athlete"):
 
     has_sprint = pd.notna(row.get("30yd Split")) if hasattr(row, "get") else False
     if has_sprint:
-        cats = ["CI", "Sprint", "RSI-mod", "Peak Pwr", "Height", "Wingspan"]
+        cats = ["CI", "Sprint", "RSI-mod", "Peak Pwr", "Height"]
         vals = [sp(row,"ci_pct_alltime"), sp(row,"sprint_pct_alltime"),
                 sp(row,"rsi_pct_alltime"), sp(row,"pp_pct_alltime"),
-                sp(row,"height_pct"), sp(row,"wingspan_pct")]
+                sp(row,"height_pct")]
     else:
-        cats = ["CI", "RSI-mod", "Peak Pwr", "Height", "Wingspan"]
+        cats = ["CI", "RSI-mod", "Peak Pwr", "Height"]
         vals = [sp(row,"ci_pct_alltime"), sp(row,"rsi_pct_alltime"),
-                sp(row,"pp_pct_alltime"), sp(row,"height_pct"), sp(row,"wingspan_pct")]
+                sp(row,"pp_pct_alltime"), sp(row,"height_pct")]
+    if is_pitcher:
+        cats.append("Wingspan")
+        vals.append(sp(row, "wingspan_pct"))
 
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
@@ -1201,164 +1204,206 @@ with tab_card:
     </div>
     """, unsafe_allow_html=True)
 
+    # ── Pitcher flag ─────────────────────────────────────────────────────────
+    is_pitcher = str(row.get("pos_group","")).strip() == "Pitcher"
+
     # ── Percentile cards ──────────────────────────────────────────────────────
     grp_key   = str(row.get("pos_group","")).lower()
     grp_label = str(row.get("pos_group",""))
     grp_label = grp_label if grp_label not in ("Unknown","nan","") else "Pos."
 
-    pc = st.columns(6)
-    pct_items = [
-        ("CI",           "ci_pct_alltime",     "ci_pct_yr",     False),
-        ("30yd Sprint",  "sprint_pct_alltime",  "sprint_pct_yr", True),
-        ("RSI-mod",      "rsi_pct_alltime",     "rsi_pct_yr",    False),
-        ("Pk Pwr/BM",    "pp_pct_alltime",      "pp_pct_yr",     False),
-        ("Height",       "height_pct",          None,            False),
-        ("Wingspan",     "wingspan_pct",        None,            False),
+    # Show wingspan card only for pitchers
+    base_pct_items = [
+        ("CI",          "ci_pct_alltime",    "ci_pct_yr",    False),
+        ("30yd Sprint", "sprint_pct_alltime", "sprint_pct_yr",True),
+        ("RSI-mod",     "rsi_pct_alltime",   "rsi_pct_yr",   False),
+        ("Pk Pwr/BM",   "pp_pct_alltime",    "pp_pct_yr",    False),
+        ("Height",      "height_pct",        None,           False),
     ]
+    if is_pitcher:
+        pct_items = base_pct_items + [("Wingspan", "wingspan_pct", None, False)]
+        pc = st.columns(6)
+    else:
+        pct_items = base_pct_items
+        pc = st.columns(5)
+
     pos_pct_map = {
-        "CI":          f"ci_pct_{grp_key}"     if grp_key else None,
+        "CI":          f"ci_pct_{grp_key}" if grp_key else None,
         "30yd Sprint": f"sprint_pct_{grp_key}" if grp_key else None,
-        "RSI-mod":     f"rsi_pct_{grp_key}"    if grp_key else None,
-        "Pk Pwr/BM":   f"pp_pct_{grp_key}"     if grp_key else None,
+        "RSI-mod":     f"rsi_pct_{grp_key}" if grp_key else None,
+        "Pk Pwr/BM":   f"pp_pct_{grp_key}" if grp_key else None,
         "Height":      None,
         "Wingspan":    None,
     }
     for i, (col_lbl, pa, py, inv) in enumerate(pct_items):
         p_all = sf(row.get(pa))
         p_yr  = sf(row.get(py)) if py else np.nan
-        p_pos = sf(row.get(pos_pct_map[col_lbl])) if pos_pct_map.get(col_lbl) else np.nan
-        is_wing = col_lbl == "Wingspan"
-        top_col = GOLD if is_wing else RED
+        p_pos = sf(row.get(pos_pct_map.get(col_lbl))) if pos_pct_map.get(col_lbl) else np.nan
+        is_wing_card = col_lbl == "Wingspan"
+        top_col = GOLD if is_wing_card else RED
         with pc[i]:
-            st.markdown(f"""
-            <div style="background:white;border:1px solid {BORD};border-top:4px solid {top_col};
-                border-radius:10px;padding:14px 10px;text-align:center;margin-bottom:16px;
-                box-shadow:0 2px 8px rgba(17,34,90,0.06)">
-                <div class="label">{col_lbl}</div>
-                <div style="font-family:'Playfair Display',serif;font-size:28px;font-weight:900;
-                    color:{top_col};line-height:1">{fmt(p_all,0) if pd.notna(p_all) else "—"}</div>
-                <div style="font-size:10px;color:#9AAAC0;margin-top:2px">All-time pct</div>
-                <div style="font-size:13px;font-weight:600;color:{NAV};margin-top:4px">
-                    {fmt(p_yr,0) if pd.notna(p_yr) else "—"}</div>
-                <div style="font-size:10px;color:#9AAAC0">{sel_yr_display} pct</div>
-                <div style="font-size:13px;font-weight:600;color:{SLATE};margin-top:4px">
-                    {fmt(p_pos,0) if pd.notna(p_pos) else "—"}</div>
-                <div style="font-size:10px;color:#9AAAC0">{grp_label} pct</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {top_col};'
+                f'border-radius:10px;padding:14px 10px;text-align:center;margin-bottom:16px;'
+                f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
+                f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+                f'color:{SLATE};margin-bottom:6px">{col_lbl}</div>'
+                f'<div style="font-family:\'Playfair Display\',serif;font-size:28px;font-weight:900;'
+                f'color:{top_col};line-height:1">{fmt(p_all,0) if pd.notna(p_all) else "—"}</div>'
+                f'<div style="font-size:10px;color:#9AAAC0;margin-top:2px">All-time pct</div>'
+                f'<div style="font-size:13px;font-weight:600;color:{NAV};margin-top:4px">'
+                f'{fmt(p_yr,0) if pd.notna(p_yr) else "—"}</div>'
+                f'<div style="font-size:10px;color:#9AAAC0">{sel_yr_display} pct</div>'
+                f'<div style="font-size:13px;font-weight:600;color:{SLATE};margin-top:4px">'
+                f'{fmt(p_pos,0) if pd.notna(p_pos) else "—"}</div>'
+                f'<div style="font-size:10px;color:#9AAAC0">{grp_label} pct</div>'
+                f'</div>',
+                unsafe_allow_html=True)
 
-    # ── Main body: metrics | charts | wingspan ────────────────────────────────
+    # ── Main body: metrics | charts | right panel ─────────────────────────────
     m1, m2, m3 = st.columns([1, 1.3, 1.3])
 
     with m1:
-        st.markdown(f"""
-        <div class="card card-navy">
-            <p class="label">Force Plate</p>
-            <div class="stat-row">
-                <span class="stat-label">Concentric Impulse</span>
-                <span class="stat-val">{fmt(sf(row.get("Concentric Impulse")),1)}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">P1 Conc. Impulse</span>
-                <span class="stat-val">{fmt(sf(row.get("P1 Concentric Impulse")),1)}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">CI-100ms</span>
-                <span class="stat-val">{fmt(sf(row.get("Concentric Impulse-100ms")),1)}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">RSI-modified</span>
-                <span class="stat-val">{fmt(sf(row.get("RSI-modified")),3)}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">Peak Power / BM</span>
-                <span class="stat-val">{fmt(sf(row.get("Peak Power / BM")),1)}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">Jump Height</span>
-                <span class="stat-val">{fmt(sf(row.get("Jump Height (Flight Time) in Inches")),2," in")}</span></div>
-            <p class="label" style="margin-top:12px">Sprint</p>
-            <div class="stat-row">
-                <span class="stat-label">30yd</span>
-                <span class="stat-val">{fmt(sf(row.get("30yd Split")),3,"s")}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">10yd</span>
-                <span class="stat-val">{fmt(sf(row.get("10yd Split")),3,"s")}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">20yd</span>
-                <span class="stat-val">{fmt(sf(row.get("20yd Split")),3,"s")}</span></div>
-            <p class="label" style="margin-top:12px">Anthropometrics</p>
-            <div class="stat-row">
-                <span class="stat-label">Height</span>
-                <span class="stat-val">{fmt_height(sf(row.get("Height")))}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">Mass</span>
-                <span class="stat-val">{fmt_mass(sf(row.get("Mass")))}</span></div>
-            <div class="stat-row">
-                <span class="stat-label">BW/Ht Ratio</span>
-                <span class="stat-val">{fmt(sf(row.get("bmi_raw")),2)}</span></div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Wingspan row in anthropometrics — always show raw numbers, but
+        # only add the advantage flag line for pitchers
+        wing_adv_row = ""
+        if is_pitcher:
+            adv_color = (GREEN if wing_tier_color == GREEN
+                         else RED if wing_tier_color == RED else GOLD)
+            wing_adv_row = (
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan Adv.</span>'
+                f'<span style="font-weight:600;color:{adv_color}">{wing_adv_in}</span>'
+                f'</div>'
+            )
+
+        st.markdown(
+            f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
+            f'border-radius:10px;padding:18px 22px;box-shadow:0 2px 8px rgba(17,34,90,0.06);margin-bottom:16px">'
+            f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+            f'color:{SLATE};margin-bottom:6px">Force Plate</div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Concentric Impulse</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse")),1)}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">P1 Conc. Impulse</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("P1 Concentric Impulse")),1)}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">CI-100ms</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse-100ms")),1)}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">RSI-modified</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("RSI-modified")),3)}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Peak Power / BM</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Peak Power / BM")),1)}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Jump Height</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Jump Height (Flight Time) in Inches")),2," in")}</span></div>'
+            f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+            f'color:{SLATE};margin:12px 0 6px 0">Sprint</div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">30yd</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("30yd Split")),3,"s")}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">10yd</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("10yd Split")),3,"s")}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">20yd</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("20yd Split")),3,"s")}</span></div>'
+            f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+            f'color:{SLATE};margin:12px 0 6px 0">Anthropometrics</div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Height</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt_height(sf(row.get("Height")))}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Mass</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt_mass(sf(row.get("Mass")))}</span></div>'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt_wingspan(wing_cm)}</span></div>'
+            f'{wing_adv_row}'
+            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">BW/Ht Ratio</span>'
+            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("bmi_raw")),2)}</span></div>'
+            f'</div>',
+            unsafe_allow_html=True)
 
     with m2:
-        st.plotly_chart(make_radar(row), use_container_width=True, key="g_radar")
-        st.plotly_chart(make_profile(row, strat_feats), use_container_width=True, key="g_profile")
+        st.plotly_chart(make_radar(row, is_pitcher=is_pitcher),
+                        use_container_width=True, key="g_radar")
+        st.plotly_chart(make_profile(row, strat_feats),
+                        use_container_width=True, key="g_profile")
 
     with m3:
-        # ── Wingspan Feature Panel ─────────────────────────────────────────────
-        wing_pct_bar = min(100, max(0, float(wing_pct or 0)))
+        if is_pitcher:
+            # ── Wingspan Feature Panel (pitchers only) ─────────────────────────
+            wing_pct_bar = min(100, max(0, float(wing_pct or 0)))
+            wing_icon = "✓" if wing_tier_color == GREEN else ("⚠" if wing_tier_color == RED else "~")
 
-        st.markdown(f"""
-        <div class="wing-panel">
-            <p style="font-size:10px;font-weight:700;letter-spacing:0.18em;
-                text-transform:uppercase;color:rgba(255,255,255,0.55);margin:0 0 14px 0">
-                ✦ WINGSPAN ANALYSIS</p>
+            st.markdown(
+                f'<div style="background:linear-gradient(135deg,{NAV} 0%,#1a3275 100%);'
+                f'border-radius:12px;padding:22px 24px;color:white;margin-bottom:16px;'
+                f'box-shadow:0 6px 24px rgba(17,34,90,0.20)">'
+                f'<p style="font-size:10px;font-weight:700;letter-spacing:0.18em;'
+                f'text-transform:uppercase;color:rgba(255,255,255,0.55);margin:0 0 14px 0">'
+                f'✦ WINGSPAN ANALYSIS</p>'
+                f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
+                f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
+                f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
+                f'color:white;line-height:1.1">{fmt_wingspan(wing_cm)}</div>'
+                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                f'color:rgba(255,255,255,0.55);margin-top:3px">Wingspan</div>'
+                f'</div>'
+                f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
+                f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
+                f'color:white;line-height:1.1">{fmt_height(sf(row.get("Height")))}</div>'
+                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                f'color:rgba(255,255,255,0.55);margin-top:3px">Height</div>'
+                f'</div>'
+                f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
+                f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
+                f'color:{wing_tier_color};line-height:1.1">{wing_adv_in}</div>'
+                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                f'color:rgba(255,255,255,0.55);margin-top:3px">Advantage</div>'
+                f'</div>'
+                f'</div>'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+                f'<span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.75)">Wingspan Percentile</span>'
+                f'<span style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:900;'
+                f'color:white">{wing_pct_str}</span>'
+                f'</div>'
+                f'<div style="background:rgba(255,255,255,0.15);border-radius:6px;height:10px;margin-bottom:14px">'
+                f'<div style="width:{wing_pct_bar:.0f}%;background:{wing_tier_color};'
+                f'border-radius:6px;height:10px"></div>'
+                f'</div>'
+                f'<span style="display:inline-block;background:{wing_tier_color};color:white;'
+                f'font-size:11px;font-weight:700;padding:4px 14px;border-radius:20px;'
+                f'letter-spacing:0.06em">{wing_icon} {wing_tier_label}</span>'
+                f'</div>',
+                unsafe_allow_html=True)
 
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-                <div class="wing-stat">
-                    <div class="wing-stat-val">{fmt_wingspan(wing_cm)}</div>
-                    <div class="wing-stat-lbl">Wingspan</div>
-                </div>
-                <div class="wing-stat">
-                    <div class="wing-stat-val">{fmt_height(sf(row.get("Height")))}</div>
-                    <div class="wing-stat-lbl">Height</div>
-                </div>
-                <div class="wing-stat">
-                    <div class="wing-stat-val {wing_adv_css}">{wing_adv_in}</div>
-                    <div class="wing-stat-lbl">Advantage</div>
-                </div>
-            </div>
-
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.75)">
-                    Wingspan Percentile
-                </span>
-                <span style="font-family:'Playfair Display',serif;font-size:20px;
-                    font-weight:900;color:white">{wing_pct_str}</span>
-            </div>
-            <div style="background:rgba(255,255,255,0.15);border-radius:6px;height:10px;margin-bottom:14px">
-                <div style="width:{wing_pct_bar:.0f}%;background:{wing_tier_color};
-                    border-radius:6px;height:10px"></div>
-            </div>
-
-            <span style="display:inline-block;background:{wing_tier_color};color:white;
-                font-size:11px;font-weight:700;padding:4px 14px;border-radius:20px;
-                letter-spacing:0.06em">{'✓' if wing_tier_color==GREEN else ('⚠' if wing_tier_color==RED else '~')} {wing_tier_label}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Wingspan distribution chart
-        fig_wing = make_wingspan_bar(row, df)
-        if fig_wing:
-            st.plotly_chart(fig_wing, use_container_width=True, key="g_wing_dist")
+            fig_wing = make_wingspan_bar(row, df)
+            if fig_wing:
+                st.plotly_chart(fig_wing, use_container_width=True, key="g_wing_dist")
 
         # Year-over-year trends
         multi = ath_all[ath_all["Year"].notna()]
         if len(multi) >= 2:
-            st.markdown(f'<p class="label" style="margin-top:8px">Year-over-year trends</p>',
-                        unsafe_allow_html=True)
-            for tcol, tlbl, tinv in [
-                ("Concentric Impulse",     "CI",                False),
-                ("RSI-modified",           "RSI-mod",           False),
-                ("30yd Split",             "30yd Sprint",       True),
-                ("athlete_quality_score",  "Athleticism Score", False),
-                ("wingspan_advantage",     "Wingspan Advantage",False),
-            ]:
+            st.markdown(
+                f'<p style="font-size:10px;font-weight:600;letter-spacing:0.12em;'
+                f'text-transform:uppercase;color:{SLATE};margin-top:8px;margin-bottom:6px">'
+                f'Year-over-year trends</p>',
+                unsafe_allow_html=True)
+            trend_cols = [
+                ("Concentric Impulse",    "CI",                False),
+                ("RSI-modified",          "RSI-mod",           False),
+                ("30yd Split",            "30yd Sprint",       True),
+                ("athlete_quality_score", "Athleticism Score", False),
+            ]
+            if is_pitcher:
+                trend_cols.append(("wingspan_advantage", "Wingspan Advantage", False))
+            for tcol, tlbl, tinv in trend_cols:
                 fig_t = make_trend(multi, tcol, tlbl, tinv)
                 if fig_t:
                     st.plotly_chart(fig_t, use_container_width=True,
