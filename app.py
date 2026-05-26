@@ -1,3 +1,4 @@
+# VERSION: no_jump_strategy_v22 -- jump strategy profile removed; development projection kept on right
 # VERSION: happy_medium_v21 -- development projection moved into right scorecard column
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
@@ -1903,8 +1904,8 @@ with tab_card:
             })
         proj_df = pd.DataFrame(rows_proj)
 
-    # ── Main body: metrics | strategy | right panel ───────────────────────────
-    m1, m2, m3 = st.columns([1.05, 1.35, 1.25])
+    # ── Main body: metrics | wingspan + development projection ───────────────
+    m1, m2 = st.columns([1.05, 1.95])
 
     with m1:
         # Wingspan row in anthropometrics — always show raw numbers, but
@@ -1973,10 +1974,6 @@ with tab_card:
             unsafe_allow_html=True)
 
     with m2:
-        st.plotly_chart(make_profile(row, strat_feats),
-                        use_container_width=True, key="g_profile")
-
-    with m3:
         if is_pitcher:
             # ── Wingspan Feature Panel (pitchers only) ─────────────────────────
             wing_pct_bar = min(100, max(0, float(wing_pct or 0)))
@@ -2037,6 +2034,6 @@ with tab_card:
                 unsafe_allow_html=True)
             st.dataframe(proj_df, use_container_width=True, hide_index=True, key="sc_proj_tbl_side")
 
-        # Year-over-year trends removed in v20 to reduce clutter while keeping scorecard detail.
+        # Year-over-year trends and jump strategy profile removed to reduce clutter.
 
-    # Development Projection now lives in the right-hand scorecard column to reduce white space.
+    # Development Projection lives in the right-hand scorecard column to reduce white space.
