@@ -3,7 +3,7 @@
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
-# VERSION: athlete_scorecard_pdf_portrait_fixed_v17 -- fixed missing make_wingspan_bar NameError
+# VERSION: athlete_scorecard_wingspan_tiers_v24 -- updated wingspan reach tier labels by percentile
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -1613,22 +1613,29 @@ with tab_card:
     wing_pct_str= pct_sfx(int(round(wing_pct))) if pd.notna(wing_pct) else "—"
     wing_adv_in = fmt_wingspan_adv(wing_adv_cm)
 
-    _wing_pool  = df["wingspan_advantage"].dropna()
-    if pd.notna(wing_adv_cm) and len(_wing_pool) > 0:
-        _p85 = float(_wing_pool.quantile(0.85))
-        _p20 = float(_wing_pool.quantile(0.20))
-        if wing_adv_cm >= _p85:
+    # Wingspan/reach tier is based on the athlete's wingspan-advantage percentile.
+    # This avoids broad labels like calling a 70th percentile reach "Average".
+    if pd.notna(wing_pct):
+        if wing_pct >= 85:
             wing_tier_label = "Notable Reach Advantage"
             wing_tier_color = GREEN
             wing_adv_css    = "wing-adv-pos"
-        elif wing_adv_cm <= _p20:
-            wing_tier_label = "Below-Average Reach"
-            wing_tier_color = RED
-            wing_adv_css    = "wing-adv-neg"
-        else:
+        elif wing_pct >= 60:
+            wing_tier_label = "Above-Average Reach"
+            wing_tier_color = GREEN
+            wing_adv_css    = "wing-adv-pos"
+        elif wing_pct >= 40:
             wing_tier_label = "Average Reach"
             wing_tier_color = GOLD
             wing_adv_css    = "wing-adv-neu"
+        elif wing_pct >= 20:
+            wing_tier_label = "Below-Average Reach"
+            wing_tier_color = GOLD
+            wing_adv_css    = "wing-adv-neu"
+        else:
+            wing_tier_label = "Limited Reach"
+            wing_tier_color = RED
+            wing_adv_css    = "wing-adv-neg"
     else:
         wing_tier_label = "No Data"
         wing_tier_color = "#9AAAC0"
