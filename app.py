@@ -2,6 +2,7 @@
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
+# VERSION: athlete_scorecard_pdf_portrait_fixed_v17 -- fixed missing make_wingspan_bar NameError
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -1981,10 +1982,6 @@ with tab_card:
                 f'letter-spacing:0.06em">{wing_icon} {wing_tier_label}</span>'
                 f'</div>',
                 unsafe_allow_html=True)
-
-            fig_wing = make_wingspan_bar(row, df)
-            if fig_wing:
-                st.plotly_chart(fig_wing, use_container_width=True, key="g_wing_dist")
 
         # Year-over-year trends
         multi = ath_all[ath_all["Year"].notna()]
