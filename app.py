@@ -649,36 +649,36 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
 .wing-adv-neu {{ color: {GOLD}; }}
 
 /* Compact leaderboard median rows */
-.median-row {
+.median-row {{
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
     gap: 8px;
     margin: 4px 0 14px 0;
-}
-.median-card {
+}}
+.median-card {{
     background: white;
     border: 1px solid #E8ECF0;
     border-radius: 8px;
     padding: 8px 10px;
     min-height: 58px;
     box-shadow: 0 1px 4px rgba(17,34,90,0.04);
-}
-.median-card-label {
+}}
+.median-card-label {{
     font-size: 10px;
     line-height: 1.1;
     color: #6b7fa3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-.median-card-value {
+}}
+.median-card-value {{
     font-family: 'Playfair Display', serif;
     font-size: 22px;
     font-weight: 800;
     line-height: 1.05;
     color: #11225A;
     margin-top: 6px;
-}
+}}
 
 </style>
 """
