@@ -1,4 +1,4 @@
-# VERSION: pdf_scorecard_better_layout_v14 -- improved one-page pure-python PDF export
+# VERSION: pdf_no_notes_no_cmj_v15 -- PDF export without scoring notes or CMJ strategy
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
@@ -1146,49 +1146,14 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     left_end = draw_bar_section(left_x, 210, col_w, "Force Plate", force_rows, row_h=28)
     right_end = draw_bar_section(right_x, 210, col_w, "Anthropometrics", anthro_rows, row_h=28)
 
-    # Bottom-left: sprint if available; otherwise a small notes block so the page still feels filled.
+    # Bottom section: sprint only if available. Scoring notes and CMJ strategy are intentionally removed.
     bottom_y = 440
     if sprint_rows:
-        draw_bar_section(left_x, bottom_y, col_w, "Sprint", sprint_rows, row_h=27)
-    else:
-        rect(left_x - 8, bottom_y - 12, col_w + 16, 92, fill="#FFFFFF", stroke="#E1E5EA", lw=0.7)
-        draw_section_header(left_x, bottom_y, col_w, "Scoring Notes")
-        text(left_x, bottom_y + 42, "Percentiles are all-time within the loaded draft dataset.", 8.5, MUTED)
-        text(left_x, bottom_y + 60, "Leaderboard sprint fields are excluded, but the scorecard can", 8.5, MUTED)
-        text(left_x, bottom_y + 76, "still display sprint data here when available.", 8.5, MUTED)
+        # Use a cleaner full-width sprint panel instead of leaving an unused right-side panel.
+        draw_bar_section(left_x, bottom_y, 724, "Sprint", sprint_rows, row_h=27)
 
-    # Bottom-right: CMJ strategy, wider and more intentional than v13.
-    y_strat = max(392, min(right_end + 8, 430))
-    rect(right_x - 8, y_strat - 12, col_w + 16, 154, fill="#FFFFFF", stroke="#E1E5EA", lw=0.7)
-    draw_section_header(right_x, y_strat, col_w, "CMJ Strategy")
-    dist = pct_from_col("strategy_distance_score")
-    text(right_x, y_strat + 40, f"Archetype: {archetype}", 8.3, MUTED)
-    text(right_x + 190, y_strat + 40, f"Distance pct: {'-' if pd.isna(dist) else int(round(dist))}", 8.3, MUTED)
-
-    label_w = 118
-    track_x = right_x + label_w
-    track_w = col_w - label_w - 56
-    yy = y_strat + 64
-    for f in strat_feats[:5]:
-        z = get_val(f"rz_{f}")
-        z = 0.0 if pd.isna(z) else float(z)
-        scaled = max(0.0, min(100.0, 50 + z * 18))
-        label = SHORT_NAMES.get(f, f)
-        text(right_x + label_w - 8, yy + 4, label, 7.7, INK, align="right")
-        rect(track_x, yy - 6, track_w, 15, fill=TRACK)
-        col = RED_MAIN if z >= 0 else NAV_MID
-        if scaled >= 50:
-            rect(track_x + track_w * 0.5, yy - 6, track_w * (scaled - 50) / 100.0, 15, fill=col)
-        else:
-            rect(track_x + track_w * scaled / 100.0, yy - 6, track_w * (50 - scaled) / 100.0, 15, fill=col)
-        line(track_x + track_w * 0.5, yy - 8, track_x + track_w * 0.5, yy + 11, color="#BFC5CE", lw=0.65)
-        text(right_x + col_w, yy + 4, f"{z:+.2f}", 7.7, NAV_DARK, align="right")
-        yy += 19
-
-    # Footer
+    # Footer: minimal divider only; no scoring notes.
     line(24, 575, 768, 575, color="#D7DCE4", lw=0.7)
-    text(28, 590, "Percentiles are all-time within the loaded draft dataset. One-page landscape summary.", 7.0, MUTED)
-    text(764, 590, "Generated from Streamlit Athlete Scorecard", 7.0, MUTED, align="right")
 
     # ---- write a minimal valid PDF ----------------------------------------
     stream = "\n".join(cmds).encode("latin-1", errors="replace")
