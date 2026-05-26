@@ -1,4 +1,4 @@
-# VERSION: pdf_scorecard_v11 -- one-page athlete scorecard PDF download added
+# VERSION: pdf_scorecard_v12 -- one-page PDF export uses matplotlib only; no reportlab dependency
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
@@ -887,17 +887,17 @@ def make_trend(player_df, col, label, invert=False):
 
 
 def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=False):
-    """Create a one-page PDF summary for the currently selected athlete."""
-    from reportlab.lib.pagesizes import letter, landscape
-    from reportlab.lib import colors
-    from reportlab.pdfgen import canvas
-    from reportlab.lib.utils import simpleSplit
+    """Create a one-page PDF summary without requiring reportlab.
+
+    Uses matplotlib, which is already available in Streamlit Cloud in most deployments.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle, Circle, FancyBboxPatch
 
     if hasattr(row, "to_dict"):
         row = row.to_dict()
-
-    def hex_color(h):
-        return colors.HexColor(h)
 
     def get_val(key):
         try:
@@ -906,12 +906,6 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
             return f if not np.isnan(f) else np.nan
         except Exception:
             return np.nan
-
-    def pct_val(key, default=np.nan):
-        v = get_val(key)
-        if pd.isna(v):
-            return default
-        return max(0.0, min(100.0, v))
 
     def clean_text(x):
         if x is None or str(x) in ("nan", "None", "<NA>"):
@@ -922,9 +916,21 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         v = get_val(key)
         return "—" if pd.isna(v) else f"{v:.{digits}f}{suffix}"
 
-    def pct_text(key):
-        v = pct_val(key)
-        return "—" if pd.isna(v) else f"{int(round(v))}"
+    def pct_from_col(pct_key):
+        v = get_val(pct_key)
+        if pd.isna(v):
+            return np.nan
+        return max(0.0, min(100.0, float(v)))
+
+    def pool_pct(value_key, inverse=False):
+        v = get_val(value_key)
+        if pd.isna(v) or value_key not in df_all.columns:
+            return np.nan
+        pool = pd.to_numeric(df_all[value_key], errors="coerce").dropna()
+        if len(pool) == 0:
+            return np.nan
+        pct = (pool < v).mean() * 100.0
+        return 100.0 - pct if inverse else pct
 
     def safe_file_name(name):
         return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name)).strip("_") or "athlete"
@@ -935,206 +941,148 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     prog = clean_text(row.get("programming_category", "—"))
     archetype = clean_text(row.get("archetype", "—"))
 
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=landscape(letter))
-    W, H = landscape(letter)
-
-    # Colors
-    nav = hex_color(NAV)
-    red = hex_color(RED)
-    gold = hex_color(GOLD)
-    green = hex_color(GREEN)
-    slate = hex_color(SLATE)
-    bord = hex_color(BORD)
-    surf = hex_color(SURF)
-    light = colors.HexColor("#F1F3F6")
-
-    margin = 30
-    c.setFillColor(colors.white)
-    c.rect(0, 0, W, H, fill=1, stroke=0)
-
-    # Header
-    c.setFillColor(red)
-    c.setFont("Helvetica-Bold", 7.5)
-    c.drawString(margin, H - 34, "WASHINGTON NATIONALS · DRAFT SCOUTING")
-    c.setFillColor(nav)
-    c.setFont("Helvetica-Bold", 22)
-    c.drawString(margin, H - 60, athlete)
-    c.setFont("Helvetica", 9.5)
-    c.setFillColor(slate)
-    c.drawString(margin, H - 78, f"{sel_yr_display} · {pos} · {school}")
-
-    # Top-right score
     aq = get_val("athlete_quality_score")
     pos_aq = get_val("aq_pos_score")
     pot = get_val("potential_score")
-    c.setFillColor(red)
-    c.setFont("Helvetica-Bold", 30)
-    c.drawRightString(W - margin, H - 54, "—" if pd.isna(aq) else f"{int(round(aq))}")
-    c.setFillColor(slate)
-    c.setFont("Helvetica-Bold", 8)
-    c.drawRightString(W - margin, H - 70, "ATHLETICISM SCORE")
+    ci = get_val("Concentric Impulse")
 
-    c.setStrokeColor(bord)
-    c.setLineWidth(1)
-    c.line(margin, H - 92, W - margin, H - 92)
+    fig = plt.figure(figsize=(11, 8.5))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
 
-    # Compact score cards
-    card_y = H - 150
-    card_h = 42
-    card_w = (W - 2 * margin - 28) / 5
+    # Header
+    ax.text(0.045, 0.955, "WASHINGTON NATIONALS · DRAFT SCOUTING", fontsize=8, fontweight="bold", color=RED, va="top")
+    ax.text(0.045, 0.914, athlete, fontsize=24, fontweight="bold", color=NAV, va="top")
+    ax.text(0.045, 0.875, f"{sel_yr_display} · {pos} · {school}", fontsize=9.5, color=SLATE, va="top")
+    ax.text(0.955, 0.920, "—" if pd.isna(aq) else f"{int(round(aq))}", fontsize=32, fontweight="bold", color=RED, ha="right", va="top")
+    ax.text(0.955, 0.876, "ATHLETICISM SCORE", fontsize=8, fontweight="bold", color=SLATE, ha="right", va="top")
+    ax.plot([0.045, 0.955], [0.845, 0.845], color=BORD, lw=1)
+
+    # Score cards
     cards = [
-        ("Athleticism", "—" if pd.isna(aq) else f"{aq:.0f}", red),
-        ("Pos. Athleticism", "—" if pd.isna(pos_aq) else f"{pos_aq:.0f}", nav),
-        ("Potential", "—" if pd.isna(pot) else f"{pot:.0f}", gold),
-        ("CI Tier", ci_tier_label(get_val("Concentric Impulse")), red),
-        ("Program", prog, green if prog == "High-High" else gold if prog == "High-Low" else red),
+        ("Athleticism", "—" if pd.isna(aq) else f"{aq:.0f}", RED),
+        ("Pos. Athleticism", "—" if pd.isna(pos_aq) else f"{pos_aq:.0f}", NAV),
+        ("Potential", "—" if pd.isna(pot) else f"{pot:.0f}", GOLD),
+        ("CI Tier", ci_tier_label(ci), RED),
+        ("Program", prog, GREEN if prog == "High-High" else GOLD if prog == "High-Low" else RED),
     ]
+    card_x0, card_y, card_w, card_h, gap = 0.045, 0.772, 0.171, 0.052, 0.012
     for i, (lbl, val, col) in enumerate(cards):
-        x = margin + i * (card_w + 7)
-        c.setFillColor(colors.white)
-        c.setStrokeColor(bord)
-        c.roundRect(x, card_y, card_w, card_h, 6, fill=1, stroke=1)
-        c.setFillColor(col)
-        c.rect(x, card_y + card_h - 3, card_w, 3, fill=1, stroke=0)
-        c.setFillColor(slate)
-        c.setFont("Helvetica-Bold", 6.7)
-        c.drawString(x + 8, card_y + card_h - 15, lbl.upper())
-        c.setFillColor(nav)
-        c.setFont("Helvetica-Bold", 13)
-        max_width = card_w - 16
-        text = str(val)
-        while c.stringWidth(text, "Helvetica-Bold", 13) > max_width and len(text) > 4:
-            text = text[:-2] + "…"
-        c.drawString(x + 8, card_y + 10, text)
+        x = card_x0 + i * (card_w + gap)
+        ax.add_patch(FancyBboxPatch((x, card_y), card_w, card_h, boxstyle="round,pad=0.004,rounding_size=0.008",
+                                    linewidth=0.8, edgecolor=BORD, facecolor="white"))
+        ax.add_patch(Rectangle((x, card_y + card_h - 0.006), card_w, 0.006, facecolor=col, edgecolor="none"))
+        ax.text(x + 0.010, card_y + card_h - 0.015, lbl.upper(), fontsize=6.5, fontweight="bold", color=SLATE, va="top")
+        display_val = str(val)
+        if len(display_val) > 18:
+            display_val = display_val[:16] + "…"
+        ax.text(x + 0.010, card_y + 0.012, display_val, fontsize=13, fontweight="bold", color=NAV, va="bottom")
 
-    def draw_bar_section(x, y, w, title, rows, row_h=24):
-        """Rows are (label, pct, raw_value). Returns next y."""
-        c.setFillColor(nav)
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(x, y, title)
-        c.setStrokeColor(bord)
-        c.line(x, y - 5, x + w, y - 5)
-        yy = y - 22
-        label_w = 92
-        value_w = 58
+    def bar_color(pct):
+        if pd.isna(pct):
+            return "#C9D1DC"
+        if pct >= 75:
+            return RED
+        if pct >= 45:
+            return "#B7C8CC"
+        return "#7892B7"
+
+    def draw_bar_section(x, y_top, w, title, rows, row_h=0.042):
+        ax.text(x, y_top, title, fontsize=13, fontweight="bold", color=NAV, va="top")
+        ax.plot([x, x + w], [y_top - 0.022, y_top - 0.022], color="#BFC5CE", lw=0.8)
+        label_w = 0.118
+        value_w = 0.070
         track_x = x + label_w
-        track_w = w - label_w - value_w - 8
+        track_w = w - label_w - value_w - 0.014
+        yy = y_top - 0.055
         for label, pct, raw in rows:
-            pct = 0 if pd.isna(pct) else max(0, min(100, float(pct)))
-            # row separator
-            c.setStrokeColor(colors.HexColor("#D8DDE5"))
-            c.setDash(4, 5)
-            c.line(x, yy - 4, x + w, yy - 4)
-            c.setDash()
-            c.setFillColor(colors.black)
-            c.setFont("Helvetica", 8.5)
-            c.drawRightString(x + label_w - 8, yy + 2, label)
-            c.setFillColor(light)
-            c.rect(track_x, yy - 2, track_w, 10, fill=1, stroke=0)
-            bar_col = red if pct >= 75 else (hex_color("#B7C8CC") if pct >= 45 else hex_color("#7892B7"))
-            c.setFillColor(bar_col)
-            c.rect(track_x, yy - 2, track_w * pct / 100.0, 10, fill=1, stroke=0)
-            # light gridlines
-            c.setStrokeColor(colors.HexColor("#C7CBD1"))
-            c.setLineWidth(0.4)
+            pct = np.nan if pd.isna(pct) else max(0.0, min(100.0, float(pct)))
+            shown_pct = 0.0 if pd.isna(pct) else pct
+            ax.plot([x, x + w], [yy - 0.021, yy - 0.021], color="#D9DDE3", lw=0.8, dashes=(5, 5))
+            ax.text(x + label_w - 0.014, yy, label, fontsize=9.5, color="#232832", ha="right", va="center")
+            ax.add_patch(Rectangle((track_x, yy - 0.014), track_w, 0.028, facecolor="#EEF0F3", edgecolor="none"))
+            col = bar_color(pct)
+            ax.add_patch(Rectangle((track_x, yy - 0.014), track_w * shown_pct / 100.0, 0.028, facecolor=col, edgecolor="none"))
             for g in (25, 50, 75, 100):
                 gx = track_x + track_w * g / 100.0
-                c.line(gx, yy - 4, gx, yy + 10)
-            # percentile bubble
-            bx = track_x + track_w * pct / 100.0
-            c.setFillColor(bar_col)
-            c.circle(bx, yy + 3, 9, fill=1, stroke=0)
-            c.setFillColor(colors.white)
-            c.setFont("Helvetica-Bold", 7.5)
-            c.drawCentredString(bx, yy + 0.5, f"{int(round(pct))}")
-            c.setFillColor(colors.black)
-            c.setFont("Helvetica", 8.5)
-            c.drawString(track_x + track_w + 10, yy + 1, str(raw))
+                ax.plot([gx, gx], [yy - 0.019, yy + 0.019], color="#C8CDD4", lw=0.6, dashes=(4, 4))
+            bx = track_x + track_w * shown_pct / 100.0
+            bx = max(track_x + 0.017, min(track_x + track_w - 0.017, bx))
+            ax.add_patch(Circle((bx, yy), 0.0185, facecolor=col, edgecolor="white", linewidth=1.5))
+            ax.text(bx, yy, "—" if pd.isna(pct) else f"{int(round(pct))}", fontsize=8.5, fontweight="bold", color="white", ha="center", va="center")
+            ax.text(track_x + track_w + 0.018, yy, str(raw), fontsize=9.5, color="#232832", va="center")
             yy -= row_h
         return yy
 
     force_rows = [
-        ("CI", pct_val("ci_pct_alltime"), raw_num("Concentric Impulse", 1)),
-        ("P1 CI", pct_val("p1_ci_pct_alltime"), raw_num("P1 Concentric Impulse", 1)),
-        ("CI-100ms", pct_val("ci100_pct_alltime"), raw_num("Concentric Impulse-100ms", 1)),
-        ("RSI-mod", pct_val("rsi_pct_alltime"), raw_num("RSI-modified", 3)),
-        ("Pk Pwr/BM", pct_val("pp_pct_alltime"), raw_num("Peak Power / BM", 1)),
-        ("Jump Ht", pct_val("jump_height_pct_alltime"), raw_num("Jump Height (Flight Time) in Inches", 2, " in")),
+        ("CI", pct_from_col("ci_pct_alltime"), raw_num("Concentric Impulse", 1)),
+        ("P1 CI", pct_from_col("p1_ci_pct_alltime"), raw_num("P1 Concentric Impulse", 1)),
+        ("CI-100ms", pct_from_col("ci100_pct_alltime"), raw_num("Concentric Impulse-100ms", 1)),
+        ("RSI-mod", pct_from_col("rsi_pct_alltime"), raw_num("RSI-modified", 3)),
+        ("Pk Pwr/BM", pct_from_col("pp_pct_alltime"), raw_num("Peak Power / BM", 1)),
+        ("Jump Ht", pct_from_col("jump_height_pct_alltime"), raw_num("Jump Height (Flight Time) in Inches", 2, " in")),
     ]
     anthro_rows = [
-        ("Height", pct_val("height_pct"), fmt_height(get_val("Height"))),
-        ("Mass", pct_val("bmi_pct", 50), fmt_mass(get_val("Mass"))),
-        ("Wingspan", pct_val("wingspan_pct"), fmt_wingspan(get_val("Wingspan"))),
-        ("Wing Adv.", pct_val("wingspan_pct"), fmt_wingspan_adv(get_val("wingspan_advantage"))),
-        ("BW/Ht", pct_val("bmi_pct"), pct_sfx(pct_val("bmi_pct")) if pd.notna(pct_val("bmi_pct")) else "—"),
+        ("Height", pct_from_col("height_pct"), fmt_height(get_val("Height"))),
+        ("Mass", pool_pct("Mass"), fmt_mass(get_val("Mass"))),
+        ("Wingspan", pool_pct("Wingspan"), fmt_wingspan(get_val("Wingspan"))),
+        ("Wing Adv.", pct_from_col("wingspan_pct"), fmt_wingspan_adv(get_val("wingspan_advantage"))),
+        ("BW/Ht", pct_from_col("bmi_pct"), pct_sfx(pct_from_col("bmi_pct")) if pd.notna(pct_from_col("bmi_pct")) else "—"),
     ]
     sprint_rows = []
     if pd.notna(get_val("30yd Split")):
-        sprint_rows.append(("30yd", pct_val("sprint_pct_alltime"), raw_num("30yd Split", 3, "s")))
+        sprint_rows.append(("30yd", pct_from_col("sprint_pct_alltime"), raw_num("30yd Split", 3, "s")))
     if pd.notna(get_val("10yd Split")):
-        sprint_rows.append(("10yd", 50, raw_num("10yd Split", 3, "s")))
+        sprint_rows.append(("10yd", pool_pct("10yd Split", inverse=True), raw_num("10yd Split", 3, "s")))
     if pd.notna(get_val("20yd Split")):
-        sprint_rows.append(("20yd", 50, raw_num("20yd Split", 3, "s")))
+        sprint_rows.append(("20yd", pool_pct("20yd Split", inverse=True), raw_num("20yd Split", 3, "s")))
 
-    left_x = margin
-    right_x = W / 2 + 8
-    col_w = W / 2 - margin - 18
-    start_y = card_y - 30
-    left_next = draw_bar_section(left_x, start_y, col_w, "Force Plate", force_rows, row_h=23)
-    right_next = draw_bar_section(right_x, start_y, col_w, "Anthropometrics", anthro_rows, row_h=23)
+    left_x, right_x = 0.045, 0.535
+    col_w = 0.420
+    start_y = 0.735
+    left_next = draw_bar_section(left_x, start_y, col_w, "Force Plate", force_rows, row_h=0.046)
+    right_next = draw_bar_section(right_x, start_y, col_w, "Anthropometrics", anthro_rows, row_h=0.046)
 
     if sprint_rows:
-        draw_bar_section(left_x, left_next - 14, col_w, "Sprint", sprint_rows, row_h=23)
+        draw_bar_section(left_x, left_next - 0.026, col_w, "Sprint", sprint_rows, row_h=0.046)
 
-    # Strategy block on right lower half
-    y_strat = right_next - 14
-    c.setFillColor(nav)
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(right_x, y_strat, "CMJ Strategy")
-    c.setStrokeColor(bord)
-    c.line(right_x, y_strat - 5, right_x + col_w, y_strat - 5)
-    c.setFont("Helvetica", 8.5)
-    c.setFillColor(slate)
-    c.drawString(right_x, y_strat - 20, f"Archetype: {archetype}")
-    c.drawString(right_x + 165, y_strat - 20, f"Distance pct: {pct_text('strategy_distance_score')}")
+    # Strategy section
+    y_strat = right_next - 0.026
+    ax.text(right_x, y_strat, "CMJ Strategy", fontsize=13, fontweight="bold", color=NAV, va="top")
+    ax.plot([right_x, right_x + col_w], [y_strat - 0.022, y_strat - 0.022], color="#BFC5CE", lw=0.8)
+    ax.text(right_x, y_strat - 0.048, f"Archetype: {archetype}", fontsize=9, color=SLATE, va="center")
+    dist = pct_from_col("strategy_distance_score")
+    ax.text(right_x + 0.220, y_strat - 0.048, f"Distance pct: {'—' if pd.isna(dist) else int(round(dist))}", fontsize=9, color=SLATE, va="center")
 
-    yy = y_strat - 42
-    label_w = 115
+    label_w = 0.130
     track_x = right_x + label_w
-    track_w = col_w - label_w - 20
+    track_w = col_w - label_w - 0.040
+    yy = y_strat - 0.085
     for f in strat_feats[:6]:
         z = get_val(f"rz_{f}")
-        if pd.isna(z): z = 0.0
+        if pd.isna(z):
+            z = 0.0
         scaled = max(0, min(100, 50 + z * 18))
         label = SHORT_NAMES.get(f, f)
-        c.setFillColor(colors.black)
-        c.setFont("Helvetica", 8)
-        c.drawRightString(right_x + label_w - 8, yy + 1, label)
-        c.setFillColor(light)
-        c.rect(track_x, yy - 2, track_w, 8, fill=1, stroke=0)
-        bar_col = red if z >= 0 else nav
-        c.setFillColor(bar_col)
+        ax.text(right_x + label_w - 0.012, yy, label, fontsize=8, color="#232832", ha="right", va="center")
+        ax.add_patch(Rectangle((track_x, yy - 0.010), track_w, 0.020, facecolor="#EEF0F3", edgecolor="none"))
+        col = RED if z >= 0 else NAV
         if scaled >= 50:
-            c.rect(track_x + track_w * 0.5, yy - 2, track_w * (scaled - 50) / 100.0, 8, fill=1, stroke=0)
+            ax.add_patch(Rectangle((track_x + track_w * 0.5, yy - 0.010), track_w * (scaled - 50) / 100.0, 0.020, facecolor=col, edgecolor="none"))
         else:
-            c.rect(track_x + track_w * scaled / 100.0, yy - 2, track_w * (50 - scaled) / 100.0, 8, fill=1, stroke=0)
-        c.setStrokeColor(colors.HexColor("#C7CBD1"))
-        c.line(track_x + track_w * 0.5, yy - 3, track_x + track_w * 0.5, yy + 7)
-        c.setFillColor(nav)
-        c.setFont("Helvetica", 7.5)
-        c.drawRightString(right_x + col_w, yy, f"{z:+.2f}")
-        yy -= 18
+            ax.add_patch(Rectangle((track_x + track_w * scaled / 100.0, yy - 0.010), track_w * (50 - scaled) / 100.0, 0.020, facecolor=col, edgecolor="none"))
+        ax.plot([track_x + track_w * 0.5, track_x + track_w * 0.5], [yy - 0.014, yy + 0.014], color="#C8CDD4", lw=0.7)
+        ax.text(right_x + col_w, yy, f"{z:+.2f}", fontsize=8, color=NAV, ha="right", va="center")
+        yy -= 0.031
 
-    # Footer
-    c.setFillColor(slate)
-    c.setFont("Helvetica", 7)
-    footer = "Percentiles are all-time within the loaded draft dataset. PDF is designed as a one-page summary of the selected athlete scorecard."
-    c.drawString(margin, 18, footer)
-    c.drawRightString(W - margin, 18, "Generated from Streamlit Athlete Scorecard")
+    ax.text(0.045, 0.028, "Percentiles are all-time within the loaded draft dataset. One-page landscape summary.", fontsize=7.5, color=SLATE, va="bottom")
+    ax.text(0.955, 0.028, "Generated from Streamlit Athlete Scorecard", fontsize=7.5, color=SLATE, ha="right", va="bottom")
 
-    c.showPage()
-    c.save()
+    buf = BytesIO()
+    fig.savefig(buf, format="pdf", bbox_inches="tight", pad_inches=0.15)
+    plt.close(fig)
     buf.seek(0)
     return buf.getvalue(), safe_file_name(athlete)
 
