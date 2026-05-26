@@ -1579,7 +1579,9 @@ with tab_card:
     with sc3:
         ath_years = sorted(df[df["athleteName"]==sel_ath]["Year"].dropna().unique().astype(int).tolist(),
                            reverse=True)
-        yr_opts2   = ["All years"] + [str(y) for y in ath_years]
+        # Default to the most recent year instead of an all-years average.
+        # This keeps the dashboard/PDF from showing ranges like "2021–2024" unless intentionally selected.
+        yr_opts2   = [str(y) for y in ath_years] + (["All years"] if len(ath_years) > 1 else [])
         sel_yr_str = st.selectbox("Year", yr_opts2, key="sc_yr")
         sel_yr     = None if sel_yr_str == "All years" else int(sel_yr_str)
 
@@ -1590,7 +1592,7 @@ with tab_card:
         for c in ath_all.columns:
             if c not in row_data.index: row_data[c] = latest[c]
         row            = row_data
-        sel_yr_display = f"{ath_years[-1]}–{ath_years[0]}" if len(ath_years)>1 else str(ath_years[0])
+        sel_yr_display = f"All years ({ath_years[-1]}–{ath_years[0]})" if len(ath_years)>1 else str(ath_years[0])
     else:
         sub = ath_all[ath_all["Year"]==sel_yr]
         if sub.empty: st.warning("No data for this year."); st.stop()
