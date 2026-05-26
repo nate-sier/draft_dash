@@ -1,4 +1,4 @@
-# VERSION: pdf_no_notes_no_cmj_v15 -- PDF export without scoring notes or CMJ strategy
+# VERSION: pdf_portrait_v16 -- vertical PDF export; no scoring notes or CMJ strategy
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
@@ -888,10 +888,9 @@ def make_trend(player_df, col, label, invert=False):
 
 
 def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=False):
-    """Create a nicer one-page landscape PDF scorecard with no external PDF packages.
+    """Create a one-page PORTRAIT PDF scorecard with no external PDF packages.
 
-    This intentionally uses only the Python standard library PDF writer so it works
-    in stripped-down Streamlit Cloud environments without reportlab/matplotlib.
+    Pure Python PDF writer: no reportlab, no matplotlib.  Letter portrait layout.
     """
     if hasattr(row, "to_dict"):
         row = row.to_dict()
@@ -909,7 +908,6 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         if x is None or str(x) in ("nan", "None", "<NA>"):
             return "-"
         s = str(x)
-        # Keep to PDF core-font friendly characters.
         return (s.replace("—", "-").replace("–", "-").replace("·", "-")
                  .replace("≥", ">=").replace("≤", "<=").replace("…", "...")
                  .replace("⚙", "").replace("’", "'").replace("“", '"').replace("”", '"'))
@@ -964,7 +962,6 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     pos = clean_text(row.get("Position", "-"))
     school = clean_text(row.get("School Type", "-"))
     prog = clean_text(row.get("programming_category", "-"))
-    archetype = clean_text(row.get("archetype", "-"))
 
     aq = get_val("athlete_quality_score")
     pos_aq = get_val("aq_pos_score")
@@ -972,12 +969,11 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     ci = get_val("Concentric Impulse")
 
     # ---- page / drawing API ------------------------------------------------
-    W, H = 792.0, 612.0  # letter landscape
+    W, H = 612.0, 792.0  # letter portrait
     cmds = []
 
     NAV_DARK = "#0B1B4D"
     NAV_MID = "#11225A"
-    RED_DARK = "#A6082A"
     RED_MAIN = RED
     GOLD_MAIN = GOLD
     INK = "#232832"
@@ -985,6 +981,7 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     GRID = "#D3D8DF"
     TRACK = "#ECEFF3"
     PALE = "#F7F8FA"
+    GREEN_MAIN = GREEN
 
     def ytop(y):
         return H - y
@@ -1013,7 +1010,6 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         s_clean = clean_text(s)
         s_esc = esc(s_clean)
         font = "/F2" if bold else "/F1"
-        # approximate width for simple alignment with core fonts
         approx_w = len(s_clean) * size * (0.56 if not bold else 0.60)
         xx = x
         if align == "right":
@@ -1049,27 +1045,25 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         rect(x, y, w, 5, fill=top_color)
         label_col = "#DDE5F1" if dark else MUTED
         val_col = "#FFFFFF" if dark else NAV_DARK
-        text(x + 8, y + 19, label.upper(), 6.2, label_col, bold=True)
-        text(x + 8, y + h - 12, short_value(value, 16), 14, val_col, bold=True)
+        text(x + 8, y + 18, label.upper(), 6.2, label_col, bold=True)
+        text(x + 8, y + h - 12, short_value(value, 16), 13.0, val_col, bold=True)
 
     def draw_section_header(x, y, w, title):
-        text(x, y, title, 14, NAV_DARK, bold=True)
-        rect(x, y + 10, 38, 3, fill=RED_MAIN)
-        line(x + 42, y + 12, x + w, y + 12, color="#C7CDD6", lw=0.8)
+        text(x, y, title, 15, NAV_DARK, bold=True)
+        rect(x, y + 11, 42, 3.2, fill=RED_MAIN)
+        line(x + 48, y + 13, x + w, y + 13, color="#C7CDD6", lw=0.8)
 
-    def draw_bar_section(x, y_top, w, title, rows, row_h=29):
-        # white card background uses the exact row height so the block feels intentional
-        total_h = 32 + row_h * len(rows)
-        rect(x - 8, y_top - 12, w + 16, total_h + 10, fill="#FFFFFF", stroke="#E1E5EA", lw=0.7)
+    def draw_bar_section(x, y_top, w, title, rows, row_h=32):
+        total_h = 33 + row_h * len(rows)
+        rect(x - 8, y_top - 12, w + 16, total_h + 12, fill="#FFFFFF", stroke="#E1E5EA", lw=0.7)
         draw_section_header(x, y_top, w, title)
 
-        label_w = 86
-        value_w = 58
+        label_w = 92
+        value_w = 75
         track_x = x + label_w
-        track_w = w - label_w - value_w - 16
-        yy = y_top + 35
+        track_w = w - label_w - value_w - 20
+        yy = y_top + 36
 
-        # section-level grid behind all bars
         for g in (25, 50, 75, 100):
             gx = track_x + track_w * g / 100.0
             line(gx, yy - 15, gx, yy - 15 + row_h * len(rows) - 3, color="#C9CED6", lw=0.45, dash="3 4")
@@ -1077,47 +1071,49 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         for label, pct, raw in rows:
             pct = np.nan if pd.isna(pct) else max(0.0, min(100.0, float(pct)))
             shown = 0.0 if pd.isna(pct) else pct
-            # row divider
-            line(x, yy + 16, x + w, yy + 16, color="#E2E5EA", lw=0.55, dash="5 5")
-            text(x + label_w - 10, yy + 4, label, 8.3, INK, align="right")
-            rect(track_x, yy - 9, track_w, 19, fill=TRACK)
+            line(x, yy + 18, x + w, yy + 18, color="#E2E5EA", lw=0.55, dash="5 5")
+            text(x + label_w - 10, yy + 5, label, 8.4, INK, align="right")
+            rect(track_x, yy - 10, track_w, 21, fill=TRACK)
             col = bar_color(pct)
-            rect(track_x, yy - 9, track_w * shown / 100.0, 19, fill=col)
-
-            # tighter percentile badge, clamped away from raw value column
+            rect(track_x, yy - 10, track_w * shown / 100.0, 21, fill=col)
             bx = track_x + track_w * shown / 100.0
             bx = max(track_x + 15, min(track_x + track_w - 15, bx))
-            rect(bx - 12, yy - 13, 24, 24, fill=col, stroke="#FFFFFF", lw=1.1)
-            text(bx, yy + 4, "-" if pd.isna(pct) else f"{int(round(pct))}", 7.7, "#FFFFFF", bold=True, align="center")
-            text(track_x + track_w + 14, yy + 4, raw, 8.3, INK)
+            rect(bx - 13, yy - 14, 26, 26, fill=col, stroke="#FFFFFF", lw=1.1)
+            text(bx, yy + 5, "-" if pd.isna(pct) else f"{int(round(pct))}", 8.0, "#FFFFFF", bold=True, align="center")
+            text(track_x + track_w + 15, yy + 5, raw, 8.5, INK)
             yy += row_h
         return y_top + total_h
 
     # ---- content -----------------------------------------------------------
-    # Page background and top identity band
     rect(0, 0, W, H, fill=PALE)
-    rect(24, 22, 744, 92, fill=NAV_DARK)
-    rect(24, 22, 744, 5, fill=RED_MAIN)
-    text(42, 45, "WASHINGTON NATIONALS - DRAFT SCOUTING", 7.5, "#E9EEF7", bold=True)
-    text(42, 75, athlete, 26, "#FFFFFF", bold=True)
-    text(42, 100, f"{sel_yr_display} - {pos} - {school}", 9.5, "#C7D0E3")
 
-    # Hero score block
-    rect(640, 38, 96, 58, fill="#FFFFFF")
-    text(688, 70, "-" if pd.isna(aq) else f"{int(round(aq))}", 27, RED_MAIN, bold=True, align="center")
-    text(688, 91, "ATHLETICISM", 6.8, MUTED, bold=True, align="center")
+    # Top identity band
+    rect(28, 24, 556, 96, fill=NAV_DARK)
+    rect(28, 24, 556, 5, fill=RED_MAIN)
+    text(44, 47, "WASHINGTON NATIONALS - DRAFT SCOUTING", 7.6, "#E9EEF7", bold=True)
+    text(44, 79, athlete, 25, "#FFFFFF", bold=True)
+    text(44, 104, f"{sel_yr_display} - {pos} - {school}", 9.2, "#C7D0E3")
 
-    # Summary cards fill the page width
+    rect(478, 42, 78, 62, fill="#FFFFFF")
+    text(517, 75, "-" if pd.isna(aq) else f"{int(round(aq))}", 27, RED_MAIN, bold=True, align="center")
+    text(517, 96, "ATHLETICISM", 6.2, MUTED, bold=True, align="center")
+
+    # Score cards in a compact 2-row grid
     cards = [
         ("Athleticism", "-" if pd.isna(aq) else f"{aq:.0f}", RED_MAIN, True),
         ("Pos. Athleticism", "-" if pd.isna(pos_aq) else f"{pos_aq:.0f}", NAV_MID, False),
         ("Potential", "-" if pd.isna(pot) else f"{pot:.0f}", GOLD_MAIN, False),
         ("CI Tier", ci_tier_label(ci), RED_MAIN, False),
-        ("Program", prog, GREEN if prog == "High-High" else GOLD_MAIN if prog == "High-Low" else RED_MAIN, False),
+        ("Program", prog, GREEN_MAIN if prog == "High-High" else GOLD_MAIN if prog == "High-Low" else RED_MAIN, False),
     ]
-    card_x, card_y, card_w, card_h, gap = 24, 128, 140, 54, 11
+    card_x, card_y, card_w, card_h = 28, 137, 174, 50
+    gap_x, gap_y = 13, 10
     for i, (lbl, val, col, dark) in enumerate(cards):
-        draw_metric_card(card_x + i * (card_w + gap), card_y, card_w, card_h, lbl, val, col, dark=dark)
+        row_i = i // 3
+        col_i = i % 3
+        # center the last row of two cards a bit
+        x_shift = 93 if row_i == 1 else 0
+        draw_metric_card(card_x + x_shift + col_i * (card_w + gap_x), card_y + row_i * (card_h + gap_y), card_w, card_h, lbl, val, col, dark=dark)
 
     force_rows = [
         ("CI", pct_from_col("ci_pct_alltime"), raw_num("Concentric Impulse", 1)),
@@ -1142,25 +1138,21 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     if pd.notna(get_val("20yd Split")):
         sprint_rows.append(("20yd", pool_pct("20yd Split", inverse=True), raw_num("20yd Split", 3, "s")))
 
-    left_x, right_x, col_w = 34, 416, 342
-    left_end = draw_bar_section(left_x, 210, col_w, "Force Plate", force_rows, row_h=28)
-    right_end = draw_bar_section(right_x, 210, col_w, "Anthropometrics", anthro_rows, row_h=28)
-
-    # Bottom section: sprint only if available. Scoring notes and CMJ strategy are intentionally removed.
-    bottom_y = 440
+    x, w = 42, 528
+    next_y = draw_bar_section(x, 278, w, "Force Plate", force_rows, row_h=31)
+    next_y = draw_bar_section(x, next_y + 28, w, "Anthropometrics", anthro_rows, row_h=31)
     if sprint_rows:
-        # Use a cleaner full-width sprint panel instead of leaving an unused right-side panel.
-        draw_bar_section(left_x, bottom_y, 724, "Sprint", sprint_rows, row_h=27)
+        draw_bar_section(x, next_y + 28, w, "Sprint", sprint_rows, row_h=30)
 
-    # Footer: minimal divider only; no scoring notes.
-    line(24, 575, 768, 575, color="#D7DCE4", lw=0.7)
+    # Footer divider only; no notes / no CMJ strategy.
+    line(28, 760, 584, 760, color="#D7DCE4", lw=0.7)
 
     # ---- write a minimal valid PDF ----------------------------------------
     stream = "\n".join(cmds).encode("latin-1", errors="replace")
     objects = []
     objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
     objects.append(b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-    page = (b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] "
+    page = (b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
             b"/Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>")
     objects.append(page)
     objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
@@ -1184,57 +1176,6 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
                f"startxref\n{xref}\n%%EOF\n").encode("ascii"))
     return out.getvalue(), safe_file_name(athlete)
 
-def make_wingspan_bar(row, df_all):
-    """Horizontal bar showing athlete wingspan vs pool distribution."""
-    pool = df_all["wingspan_advantage"].dropna()
-    if pd.isna(row.get("wingspan_advantage")) or len(pool) == 0:
-        return None
-    val = float(row["wingspan_advantage"])
-    p10 = float(pool.quantile(0.10))
-    p25 = float(pool.quantile(0.25))
-    p50 = float(pool.quantile(0.50))
-    p75 = float(pool.quantile(0.75))
-    p90 = float(pool.quantile(0.90))
-    lo  = float(pool.min()) - 1
-    hi  = float(pool.max()) + 1
-
-    fig = go.Figure()
-    # Background zone fills
-    for zone_lo, zone_hi, zone_col, zone_lbl in [
-        (lo,  p25,  "rgba(186,12,47,0.08)",    "Bottom 25%"),
-        (p25, p75,  "rgba(226,193,136,0.12)",   "Middle 50%"),
-        (p75, hi,   "rgba(76,175,130,0.12)",    "Top 25%"),
-    ]:
-        fig.add_shape(type="rect", x0=zone_lo, x1=zone_hi, y0=-0.5, y1=0.5,
-                      fillcolor=zone_col, line_width=0, layer="below")
-    # Percentile lines
-    for pval, plbl, pcol in [
-        (p25,"25th","#E2C188"),(p50,"50th","#9AAAC0"),(p75,"75th","#4CAF82")
-    ]:
-        fig.add_vline(x=pval, line_width=1.5, line_dash="dot", line_color=pcol,
-                      annotation_text=plbl, annotation_position="top",
-                      annotation_font=dict(size=9, color=pcol))
-    # Athlete marker
-    fig.add_trace(go.Scatter(
-        x=[val], y=[0], mode="markers+text",
-        marker=dict(size=18, color=RED, symbol="diamond",
-                    line=dict(width=2, color="white")),
-        text=[f"{val/2.54:+.1f}\""], textposition="top center",
-        textfont=dict(size=11, color=RED, family="Playfair Display"),
-        showlegend=False,
-    ))
-    fig.update_layout(**_layout(
-        height=130,
-        margin=dict(l=20, r=20, t=30, b=20),
-        xaxis=dict(range=[lo, hi], showgrid=False, zeroline=False,
-                   tickvals=[p10,p25,p50,p75,p90],
-                   ticktext=[f"{v/2.54:+.1f}\"" for v in [p10,p25,p50,p75,p90]],
-                   tickfont=dict(size=9)),
-        yaxis=dict(visible=False),
-        plot_bgcolor="white", paper_bgcolor="white",
-        title=dict(text="Wingspan Advantage vs Pool", font=dict(size=12, color=NAV), x=0),
-    ))
-    return fig
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 def check_password():
