@@ -833,31 +833,21 @@ if not check_password(): st.stop()
 st.markdown(CSS, unsafe_allow_html=True)
 st.markdown('<div class="grad-bar"></div>', unsafe_allow_html=True)
 
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
+# ─── Fixed weights / refresh ──────────────────────────────────────────────────
+# Sidebar sliders removed. These keep the original default weights.
+w_ci     = 0.35
+w_sprint = 0.30
+w_rsi    = 0.15
+w_pp     = 0.20
+
+w_ci_ns  = 0.45
+w_rsi_ns = 0.20
+w_pp_ns  = 0.35
+
 with st.sidebar:
     st.markdown(f'<p class="label">Data</p>', unsafe_allow_html=True)
     if st.button("↻ Refresh Data", use_container_width=True):
         st.cache_data.clear(); st.rerun()
-
-    st.markdown("---")
-    st.markdown(f'<p class="label">Quality Weights (With Sprint)</p>', unsafe_allow_html=True)
-    w_ci     = st.slider("Concentric Impulse",  0, 100, 35, 5, key="w_ci")  / 100
-    w_sprint = st.slider("30yd Sprint",          0, 100, 30, 5, key="w_sprint") / 100
-    w_rsi    = st.slider("RSI-modified",         0, 100, 15, 5, key="w_rsi")  / 100
-    w_pp     = st.slider("Peak Power / BM",      0, 100, 20, 5, key="w_pp")   / 100
-    total_aq = w_ci + w_sprint + w_rsi + w_pp
-    if not (0.99 < total_aq < 1.01):
-        st.warning(f"Weights sum to {total_aq*100:.0f}% — should be 100%")
-
-    st.markdown("---")
-    st.markdown(f'<p class="label">Quality Weights (No Sprint)</p>', unsafe_allow_html=True)
-    st.caption("Applied when a player has no sprint data")
-    w_ci_ns  = st.slider("CI (no sprint)",     0, 100, 45, 5, key="w_ci_ns")  / 100
-    w_rsi_ns = st.slider("RSI (no sprint)",    0, 100, 20, 5, key="w_rsi_ns") / 100
-    w_pp_ns  = st.slider("PkPwr (no sprint)",  0, 100, 35, 5, key="w_pp_ns")  / 100
-    total_ns = w_ci_ns + w_rsi_ns + w_pp_ns
-    if not (0.99 < total_ns < 1.01):
-        st.warning(f"No-sprint weights sum to {total_ns*100:.0f}% — should be 100%")
 
 wp_pp = 0.25; wp_ht = 0.25; wp_bmi = 0.20; wp_school = 0.15; wp_wings = 0.15
 
@@ -904,74 +894,109 @@ tab_board, tab_card = st.tabs(["Leaderboard", "Athlete Scorecard"])
 # =============================================================================
 with tab_board:
 
-    f1, f2, f3, f4, f5 = st.columns([2.5,1,1.2,1.2,1.2])
-    with f1: search = st.text_input("Search", placeholder="Name…", key="lb_search")
+    FORCE_PLATE_METRICS = [
+        ("Concentric Impulse", "CI", 1),
+        ("P1 Concentric Impulse", "P1 Conc. Impulse", 1),
+        ("Concentric Impulse-100ms", "CI-100ms", 1),
+        ("RSI-modified", "RSI-modified", 3),
+        ("Peak Power / BM", "Peak Power / BM", 1),
+        ("Jump Height (Flight Time) in Inches", "Jump Height", 2),
+    ]
+
+    f1, f2, f3, f4 = st.columns([2.8, 1, 1.3, 1.5])
+    with f1:
+        search = st.text_input("Search", placeholder="Name…", key="lb_search")
     with f2:
         yr_opts = ["All"] + sorted(df["Year"].dropna().unique().astype(int).tolist(), reverse=True)
         yr_sel  = st.selectbox("Year", yr_opts, key="lb_year")
     with f3:
-        pos_grp_sel = st.selectbox("Position Group",
-                        ["All","Pitcher","Catcher","Infielder","Outfielder"], key="lb_pos")
+        pos_grp_sel = st.selectbox(
+            "Position Group",
+            ["All", "Pitcher", "Catcher", "Infielder", "Outfielder"],
+            key="lb_pos"
+        )
     with f4:
-        st_sel = st.selectbox("School Type",
-                    ["All"] + sorted(df["School Type"].dropna().unique()), key="lb_st")
-    with f5:
-        sort_by = st.selectbox("Sort by",
-                    ["Athleticism Score","Pos. Athleticism","CI","30yd Sprint"], key="lb_sort")
+        sort_options = [
+            "Athleticism Score", "Pos. Athleticism",
+            "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
+            "RSI-modified", "Peak Power / BM", "Jump Height"
+        ]
+        sort_by = st.selectbox("Sort by", sort_options, key="lb_sort")
 
     dff = df.copy()
-    if search:               dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
-    if yr_sel != "All":      dff = dff[dff["Year"] == int(yr_sel)]
-    if pos_grp_sel != "All": dff = dff[dff["pos_group"] == pos_grp_sel]
-    if st_sel != "All":      dff = dff[dff["School Type"] == st_sel]
+    if search:
+        dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
+    if yr_sel != "All":
+        dff = dff[dff["Year"] == int(yr_sel)]
+    if pos_grp_sel != "All":
+        dff = dff[dff["pos_group"] == pos_grp_sel]
 
-    sort_col = {"Athleticism Score": "athlete_quality_score",
-                "Pos. Athleticism":  "aq_pos_score",
-                "CI":                "Concentric Impulse",
-                "30yd Sprint":       "30yd Split"}[sort_by]
-    dff = dff.sort_values(sort_col, ascending=(sort_by=="30yd Sprint"),
-                          na_position="last").reset_index(drop=True)
+    sort_map = {
+        "Athleticism Score": "athlete_quality_score",
+        "Pos. Athleticism": "aq_pos_score",
+        "Concentric Impulse": "Concentric Impulse",
+        "P1 Concentric Impulse": "P1 Concentric Impulse",
+        "Concentric Impulse-100ms": "Concentric Impulse-100ms",
+        "RSI-modified": "RSI-modified",
+        "Peak Power / BM": "Peak Power / BM",
+        "Jump Height": "Jump Height (Flight Time) in Inches",
+    }
+    sort_col = sort_map[sort_by]
+    dff = dff.sort_values(sort_col, ascending=False, na_position="last").reset_index(drop=True)
 
-    k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Athletes",        str(len(dff)))
-    k2.metric("Median CI",       fmt(dff["Concentric Impulse"].median(), 1))
-    k3.metric("Median RSI",      fmt(dff["RSI-modified"].median(), 3))
-    k4.metric("Median PkPwr/BM", fmt(dff["Peak Power / BM"].median(), 1))
-    k5.metric("Median 30yd",
-              fmt(dff["30yd Split"].median(), 3, "s") if dff["30yd Split"].notna().any() else "—")
+    if dff.empty:
+        st.warning("No athletes match the selected filters.")
+        default_ath = df.sort_values("athleteName").iloc[0]["athleteName"]
+    else:
+        mcols = st.columns(7)
+        mcols[0].metric("Athletes", str(len(dff)))
+        for i, (col, label, digits) in enumerate(FORCE_PLATE_METRICS, start=1):
+            med = dff[col].median() if col in dff.columns else np.nan
+            suffix = " in" if label == "Jump Height" else ""
+            mcols[i].metric(f"Median {label}", fmt(med, digits, suffix))
 
-    tbl = dff[["athleteName","Year","Position",
-               "athlete_quality_score",
-               "ci_tier","weight_class_next","lbs_to_next_tier",
-               "weight_class_315","lbs_to_315",
-               "wingspan_advantage","wingspan_pct"]].copy()
+        tbl_cols = [
+            "athleteName", "Position",
+            "athlete_quality_score", "aq_pos_score",
+            "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
+            "RSI-modified", "Peak Power / BM", "Jump Height (Flight Time) in Inches"
+        ]
+        tbl = dff[tbl_cols].copy()
 
-    tbl["lbs_to_next_tier"] = tbl["lbs_to_next_tier"].apply(
-        lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x>0 else ("Top tier" if x==0 else "—"))
-    tbl["lbs_to_315"] = tbl["lbs_to_315"].apply(
-        lambda x: f"+{x:.1f} lbs" if pd.notna(x) and x>0 else ("✓" if x==0 else "—"))
-    tbl["wingspan_advantage"] = tbl["wingspan_advantage"].apply(
-        lambda x: fmt_wingspan_adv(x) if pd.notna(x) else "—")
-    tbl["wingspan_pct"] = tbl["wingspan_pct"].apply(
-        lambda x: pct_sfx(int(round(x))) if pd.notna(x) else "—")
+        tbl = tbl.rename(columns={
+            "athleteName": "Athlete",
+            "athlete_quality_score": "Athleticism",
+            "aq_pos_score": "Pos. Athleticism",
+            "Concentric Impulse": "CI",
+            "P1 Concentric Impulse": "P1 Conc. Impulse",
+            "Concentric Impulse-100ms": "CI-100ms",
+            "Jump Height (Flight Time) in Inches": "Jump Height",
+        })
 
-    tbl = tbl.rename(columns={
-        "athleteName":       "Athlete",
-        "athlete_quality_score": "Athleticism",
-        "ci_tier":           "CI Tier",
-        "weight_class_next": "To Next Tier",
-        "lbs_to_next_tier":  "Lbs to Next Tier",
-        "weight_class_315":  "To 315",
-        "lbs_to_315":        "Lbs to 315",
-        "wingspan_advantage":"Wing Adv.",
-        "wingspan_pct":      "Wing Pct.",
-    })
-    tbl["Athleticism"] = tbl["Athleticism"].round(1)
+        round_map = {
+            "Athleticism": 1,
+            "Pos. Athleticism": 1,
+            "CI": 1,
+            "P1 Conc. Impulse": 1,
+            "CI-100ms": 1,
+            "RSI-modified": 3,
+            "Peak Power / BM": 1,
+            "Jump Height": 2,
+        }
+        for col, digits in round_map.items():
+            if col in tbl.columns:
+                tbl[col] = pd.to_numeric(tbl[col], errors="coerce").round(digits)
 
-    sel = st.dataframe(tbl, use_container_width=True, hide_index=True,
-                       on_select="rerun", selection_mode="single-row", key="lb_tbl")
-    sel_rows = sel.selection.rows if sel.selection else []
-    default_ath = dff.iloc[sel_rows[0]]["athleteName"] if sel_rows else dff.iloc[0]["athleteName"]
+        sel = st.dataframe(
+            tbl,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="lb_tbl"
+        )
+        sel_rows = sel.selection.rows if sel.selection else []
+        default_ath = dff.iloc[sel_rows[0]]["athleteName"] if sel_rows else dff.iloc[0]["athleteName"]
 
 # =============================================================================
 # TAB 2 — ATHLETE SCORECARD
