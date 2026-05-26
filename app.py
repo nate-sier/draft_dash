@@ -1,4 +1,4 @@
-# VERSION: happy_medium_v20 -- keeps scorecard detail, removes only year-over-year trend charts, keeps potential score update
+# VERSION: happy_medium_v21 -- development projection moved into right scorecard column
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
@@ -1865,6 +1865,44 @@ with tab_card:
     st.plotly_chart(make_radar(row, is_pitcher=is_pitcher),
                     use_container_width=True, key="g_profile_bars_full")
 
+    # ── Development Projection table data ─────────────────────────────────────
+    proj_df = pd.DataFrame()
+    if pd.notna(ci_val) and pd.notna(mass_kg) and ci_val > 0 and mass_kg > 0:
+        ci_per_kg     = ci_val / mass_kg
+        ci_per_kg_new = ci_per_kg * 0.97
+
+        def sc_bwht(kg, cm):
+            if pd.isna(kg) or pd.isna(cm) or cm==0: return np.nan
+            return (kg*2.20462)/(cm/2.54)
+
+        def sc_bwht_pct(val):
+            pool_r = df["bmi_raw"].dropna()
+            if pd.isna(val) or len(pool_r)==0: return np.nan
+            return float((pool_r < val).mean()*100)
+
+        def sc_ci_pct(val):
+            pool_c = df["Concentric Impulse"].dropna()
+            if pd.isna(val) or len(pool_c)==0: return np.nan
+            return float((pool_c < val).mean()*100)
+
+        rows_proj = []
+        for label, gain_lbs in [("Current",0),("+10 lbs",10),("+15 lbs",15)]:
+            new_kg   = mass_kg + gain_lbs/2.20462
+            ci_p     = ci_per_kg_new * new_kg if gain_lbs > 0 else ci_val
+            bwht_v   = sc_bwht(new_kg, ht_cm)
+            bwht_p   = sc_bwht_pct(bwht_v)
+            ci_p_pct = sc_ci_pct(ci_p)
+            delta    = ci_p - ci_val
+            rows_proj.append({
+                "Scenario":  label,
+                "CI":  f"{ci_p:.1f}" + (f" ({'+' if delta>=0 else ''}{delta:.1f})" if gain_lbs>0 else ""),
+                "CI Pct":    pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
+                "Mass": f"{new_kg*2.20462:.1f}",
+                "BW/Ht":     f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
+                "BW/Ht Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
+            })
+        proj_df = pd.DataFrame(rows_proj)
+
     # ── Main body: metrics | strategy | right panel ───────────────────────────
     m1, m2, m3 = st.columns([1.05, 1.35, 1.25])
 
@@ -1986,56 +2024,19 @@ with tab_card:
                 f'</div>',
                 unsafe_allow_html=True)
 
+        if not proj_df.empty:
+            st.markdown(
+                f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {GREEN};'
+                f'border-radius:10px;padding:14px 16px;margin-top:12px;'
+                f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
+                f'<div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                f'color:{GREEN};margin-bottom:4px">Development Projection</div>'
+                f'<div style="font-size:11px;color:{SLATE};margin-bottom:8px">'
+                f'Added-mass scenarios with 3% CI/kg penalty.</div>'
+                f'</div>',
+                unsafe_allow_html=True)
+            st.dataframe(proj_df, use_container_width=True, hide_index=True, key="sc_proj_tbl_side")
+
         # Year-over-year trends removed in v20 to reduce clutter while keeping scorecard detail.
 
-    # ── Development Projection ────────────────────────────────────────────────
-    if pd.notna(ci_val) and pd.notna(mass_kg) and ci_val > 0 and mass_kg > 0:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(
-            f'<div style="border-left:4px solid {GREEN};padding-left:12px;margin:0 0 14px 0">'
-            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-            f'text-transform:uppercase;color:{GREEN}">Development Projection</span></div>',
-            unsafe_allow_html=True)
-
-        ci_per_kg     = ci_val / mass_kg
-        ci_per_kg_new = ci_per_kg * 0.97
-
-        def sc_bwht(kg, cm):
-            if pd.isna(kg) or pd.isna(cm) or cm==0: return np.nan
-            return (kg*2.20462)/(cm/2.54)
-
-        def sc_bwht_pct(val):
-            pool_r = df["bmi_raw"].dropna()
-            if pd.isna(val) or len(pool_r)==0: return np.nan
-            return float((pool_r < val).mean()*100)
-
-        def sc_ci_pct(val):
-            pool_c = df["Concentric Impulse"].dropna()
-            if pd.isna(val) or len(pool_c)==0: return np.nan
-            return float((pool_c < val).mean()*100)
-
-        rows_proj = []
-        for label, gain_lbs in [("Current",0),("+10 lbs",10),("+15 lbs",15)]:
-            new_kg   = mass_kg + gain_lbs/2.20462
-            ci_p     = ci_per_kg_new * new_kg if gain_lbs > 0 else ci_val
-            bwht_v   = sc_bwht(new_kg, ht_cm)
-            bwht_p   = sc_bwht_pct(bwht_v)
-            ci_p_pct = sc_ci_pct(ci_p)
-            delta    = ci_p - ci_val
-            rows_proj.append({
-                "Scenario":  label,
-                "CI (N·s)":  f"{ci_p:.1f}" + (f"  ({'+' if delta>=0 else ''}{delta:.1f})" if gain_lbs>0 else ""),
-                "CI Pct":    pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
-                "Body Mass": f"{new_kg*2.20462:.1f} lbs",
-                "BW/Ht":     f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
-                "BW/Ht Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
-            })
-
-        st.dataframe(pd.DataFrame(rows_proj), use_container_width=True,
-                     hide_index=True, key="sc_proj_tbl")
-        st.markdown(
-            f'<p style="font-size:11px;color:#9AAAC0;margin-top:4px">'
-            f'Assumes 3% decrease in CI/kg with added mass. All-time percentiles. '
-            f'Internal data has shown a trend towards pitchers having smaller penalties (0–3%) '
-            f'than position players (3–5%).</p>',
-            unsafe_allow_html=True)
+    # Development Projection now lives in the right-hand scorecard column to reduce white space.
