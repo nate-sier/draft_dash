@@ -1,4 +1,4 @@
-# VERSION: athlete_scorecard_profile_bars_v7 -- radar replaced with horizontal percentile profile bars
+# VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
 import warnings
 warnings.filterwarnings("ignore")
@@ -765,15 +765,15 @@ def make_radar(row, label="Athlete", is_pitcher=False):
     ))
     fig.add_trace(go.Scatter(
         x=vals, y=y, mode="markers+text",
-        marker=dict(size=34, color=bar_colors, line=dict(color="white", width=2)),
+        marker=dict(size=28, color=bar_colors, line=dict(color="white", width=2)),
         text=["—" if pd.isna(v) else f"{int(round(v))}" for v in vals],
-        textfont=dict(color="white", size=13, family="Arial Black"),
+        textfont=dict(color="white", size=11, family="Arial Black"),
         textposition="middle center", hoverinfo="skip", showlegend=False,
     ))
 
     # Dashed row separators.
     for yy in y:
-        fig.add_shape(type="line", x0=-25, x1=118, y0=yy - 0.5, y1=yy - 0.5,
+        fig.add_shape(type="line", x0=-42, x1=132, y0=yy - 0.5, y1=yy - 0.5,
                       line=dict(color="rgba(150,150,150,0.35)", width=1, dash="dash"), layer="below")
 
     # Vertical percentile guide lines.
@@ -783,26 +783,26 @@ def make_radar(row, label="Athlete", is_pitcher=False):
 
     # Metric labels and raw values.
     for lab, yy, rv in zip(labels, y, raw_vals):
-        fig.add_annotation(x=-4, y=yy, text=lab, showarrow=False, xanchor="right",
-                           font=dict(size=12, color="#20232A"))
-        fig.add_annotation(x=110, y=yy, text=rv, showarrow=False, xanchor="center",
-                           font=dict(size=12, color="#20232A"))
+        fig.add_annotation(x=-10, y=yy, text=lab, showarrow=False, xanchor="right",
+                           font=dict(size=13, color="#20232A"))
+        fig.add_annotation(x=124, y=yy, text=rv, showarrow=False, xanchor="center",
+                           font=dict(size=13, color="#20232A"))
 
     # Section titles.
     for section, yy in section_title_y:
-        fig.add_annotation(x=-25, y=yy, text=f"<b>{section}</b>", showarrow=False,
-                           xanchor="left", font=dict(size=16, color="#20232A"))
-        fig.add_shape(type="line", x0=-25, x1=118, y0=yy - 0.35, y1=yy - 0.35,
+        fig.add_annotation(x=-42, y=yy, text=f"<b>{section}</b>", showarrow=False,
+                           xanchor="left", font=dict(size=18, color="#20232A"))
+        fig.add_shape(type="line", x0=-42, x1=132, y0=yy - 0.35, y1=yy - 0.35,
                       line=dict(color="rgba(120,120,120,0.45)", width=1), layer="below")
 
     fig.update_layout(
         barmode="overlay",
-        height=max(440, 62 * len(y) + 70 * len(sections)),
-        margin=dict(l=10, r=10, t=8, b=30),
+        height=max(520, 70 * len(y) + 85 * len(sections)),
+        margin=dict(l=20, r=20, t=16, b=35),
         paper_bgcolor="white",
         plot_bgcolor="white",
         font=dict(family="Source Sans 3, Arial, sans-serif", color=NAV),
-        xaxis=dict(range=[-26, 122], tickmode="array", tickvals=[0,25,50,75,100],
+        xaxis=dict(range=[-44, 136], tickmode="array", tickvals=[0,25,50,75,100],
                    tickfont=dict(size=10, color="#555"), showgrid=False, zeroline=False),
         yaxis=dict(visible=False, range=[min(y)-0.7, max(t for _, t in section_title_y)+0.5]),
         showlegend=False,
@@ -1549,8 +1549,12 @@ with tab_card:
                 f'</div>',
                 unsafe_allow_html=True)
 
-    # ── Main body: metrics | charts | right panel ─────────────────────────────
-    m1, m2, m3 = st.columns([1, 1.3, 1.3])
+    # ── Full-width percentile profile ─────────────────────────────────────────
+    st.plotly_chart(make_radar(row, is_pitcher=is_pitcher),
+                    use_container_width=True, key="g_profile_bars_full")
+
+    # ── Main body: metrics | strategy | right panel ───────────────────────────
+    m1, m2, m3 = st.columns([1.05, 1.35, 1.25])
 
     with m1:
         # Wingspan row in anthropometrics — always show raw numbers, but
@@ -1619,8 +1623,6 @@ with tab_card:
             unsafe_allow_html=True)
 
     with m2:
-        st.plotly_chart(make_radar(row, is_pitcher=is_pitcher),
-                        use_container_width=True, key="g_radar")
         st.plotly_chart(make_profile(row, strat_feats),
                         use_container_width=True, key="g_profile")
 
