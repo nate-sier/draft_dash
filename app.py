@@ -1,3 +1,4 @@
+# VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
 import warnings
@@ -646,6 +647,39 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
 .wing-adv-pos {{ color: #4CEFA0; }}
 .wing-adv-neg {{ color: #FF6B6B; }}
 .wing-adv-neu {{ color: {GOLD}; }}
+
+/* Compact leaderboard median rows */
+.median-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+    gap: 8px;
+    margin: 4px 0 14px 0;
+}
+.median-card {
+    background: white;
+    border: 1px solid #E8ECF0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-height: 58px;
+    box-shadow: 0 1px 4px rgba(17,34,90,0.04);
+}
+.median-card-label {
+    font-size: 10px;
+    line-height: 1.1;
+    color: #6b7fa3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.median-card-value {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1.05;
+    color: #11225A;
+    margin-top: 6px;
+}
+
 </style>
 """
 
@@ -1183,23 +1217,40 @@ with tab_board:
         # -----------------------------------------------------------------
         st.markdown(f'<p class="label">Force Plate Medians</p>', unsafe_allow_html=True)
         fp_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Force Plate"]
-        fp_cols = st.columns(len(fp_metrics) + 1)
-        fp_cols[0].metric("Athletes", str(len(dff)))
-        for i, (col, label, digits, suffix, _) in enumerate(fp_metrics, start=1):
-            fp_cols[i].metric(
+        fp_cards = [
+            ("Athletes", str(len(dff)))
+        ]
+        for col, label, digits, suffix, _ in fp_metrics:
+            fp_cards.append((
                 f"Median {label}",
                 fmt(pd.to_numeric(dff[col], errors="coerce").median(), digits, suffix),
-            )
+            ))
+        st.markdown(
+            '<div class="median-row">' + ''.join(
+                f'<div class="median-card"><div class="median-card-label">{label}</div>'
+                f'<div class="median-card-value">{value}</div></div>'
+                for label, value in fp_cards
+            ) + '</div>',
+            unsafe_allow_html=True,
+        )
 
         st.markdown(f'<p class="label">Anthropometric Medians</p>', unsafe_allow_html=True)
-        anthro_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Anthropometrics"]
-        an_cols = st.columns(len(anthro_metrics))
-        for i, (col, label, digits, suffix, _) in enumerate(anthro_metrics):
+        anthro_metrics = [
+            m for m in LEADERBOARD_METRICS
+            if m[4] == "Anthropometrics" and m[0] != "BW_Ht_Pct"
+        ]
+        anthro_cards = []
+        for col, label, digits, suffix, _ in anthro_metrics:
             med_val = pd.to_numeric(dff[col], errors="coerce").median()
-            if col == "BW_Ht_Pct":
-                an_cols[i].metric("Median BW/Ht Pct", pct_sfx(med_val))
-            else:
-                an_cols[i].metric(f"Median {label}", fmt(med_val, digits, suffix))
+            anthro_cards.append((f"Median {label}", fmt(med_val, digits, suffix)))
+        st.markdown(
+            '<div class="median-row">' + ''.join(
+                f'<div class="median-card"><div class="median-card-label">{label}</div>'
+                f'<div class="median-card-value">{value}</div></div>'
+                for label, value in anthro_cards
+            ) + '</div>',
+            unsafe_allow_html=True,
+        )
 
         # -----------------------------------------------------------------
         # Leaderboard table: only text columns are Athlete and Position.
@@ -1249,7 +1300,7 @@ with tab_board:
 
         st.caption(
             "Units: Height, Wingspan, and Wingspan Adv. are inches; "
-            "Mass is pounds; BW/Ht Pct is the percentile rank of pounds per inch."
+            "Mass is pounds; BW/Ht Pct in the table is the percentile rank of pounds per inch."
         )
         sel = st.dataframe(
             tbl,
