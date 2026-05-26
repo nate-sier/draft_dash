@@ -1,4 +1,4 @@
-# VERSION: no_jump_strategy_v22 -- jump strategy profile removed; development projection kept on right
+# VERSION: capacity_labels_v25 -- Capacity labels changed to Capacity
 # VERSION: happy_medium_v21 -- development projection moved into right scorecard column
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
@@ -1101,12 +1101,12 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
 
     rect(478, 42, 78, 62, fill="#FFFFFF")
     text(517, 75, "-" if pd.isna(aq) else f"{int(round(aq))}", 27, RED_MAIN, bold=True, align="center")
-    text(517, 96, "ATHLETICISM", 6.2, MUTED, bold=True, align="center")
+    text(517, 96, "CAPACITY", 6.2, MUTED, bold=True, align="center")
 
     # Score cards in a compact 2-row grid
     cards = [
-        ("Athleticism", "-" if pd.isna(aq) else f"{aq:.0f}", RED_MAIN, True),
-        ("Pos. Athleticism", "-" if pd.isna(pos_aq) else f"{pos_aq:.0f}", NAV_MID, False),
+        ("Capacity", "-" if pd.isna(aq) else f"{aq:.0f}", RED_MAIN, True),
+        ("Pos. Capacity", "-" if pd.isna(pos_aq) else f"{pos_aq:.0f}", NAV_MID, False),
         ("Potential", "-" if pd.isna(pot) else f"{pot:.0f}", GOLD_MAIN, False),
         ("CI Tier", ci_tier_label(ci), RED_MAIN, False),
         ("Program", prog, GREEN_MAIN if prog == "High-High" else GOLD_MAIN if prog == "High-Low" else RED_MAIN, False),
@@ -1346,7 +1346,7 @@ with tab_board:
         )
 
         sort_options = [
-            "Athleticism Score", "Pos. Athleticism",
+            "Capacity Score", "Pos. Capacity",
             "CI", "P1 Conc. Impulse", "CI-100ms", "RSI-modified", "Peak Power / BM",
             "Jump Height",
             "Height", "Mass", "Wingspan", "Wingspan Adv.", "BW/Ht Pct",
@@ -1439,8 +1439,8 @@ with tab_board:
     # Sort
     # ---------------------------------------------------------------------
     sort_map = {
-        "Athleticism Score": "athlete_quality_score",
-        "Pos. Athleticism": "aq_pos_score",
+        "Capacity Score": "athlete_quality_score",
+        "Pos. Capacity": "aq_pos_score",
         "CI": "Concentric Impulse",
         "P1 Conc. Impulse": "P1 Concentric Impulse",
         "CI-100ms": "Concentric Impulse-100ms",
@@ -1514,8 +1514,8 @@ with tab_board:
         tbl = dff[tbl_cols].copy()
         tbl = tbl.rename(columns={
             "athleteName": "Athlete",
-            "athlete_quality_score": "Athleticism",
-            "aq_pos_score": "Pos. Athleticism",
+            "athlete_quality_score": "Capacity",
+            "aq_pos_score": "Pos. Capacity",
             "Concentric Impulse": "CI",
             "P1 Concentric Impulse": "P1 Conc. Impulse",
             "Concentric Impulse-100ms": "CI-100ms",
@@ -1528,8 +1528,8 @@ with tab_board:
         })
 
         round_map = {
-            "Athleticism": 1,
-            "Pos. Athleticism": 1,
+            "Capacity": 1,
+            "Pos. Capacity": 1,
             "CI": 1,
             "P1 Conc. Impulse": 1,
             "CI-100ms": 1,
@@ -1711,7 +1711,7 @@ with tab_card:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Hero row: Athleticism | Pos. gauge | CI Tier ──────────────────────────
+    # ── Hero row: Capacity | Pos. gauge | CI Tier ──────────────────────────
     h1, h2, h3 = st.columns([1,1,1.3])
 
     with h1:
@@ -1722,7 +1722,7 @@ with tab_card:
             border-radius:12px;padding:24px 20px;text-align:center;
             box-shadow:0 4px 16px rgba(186,12,47,0.12)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
-                text-transform:uppercase;color:{RED};margin-bottom:8px">★ ATHLETICISM SCORE</div>
+                text-transform:uppercase;color:{RED};margin-bottom:8px">★ CAPACITY SCORE</div>
             <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{RED};line-height:1">
                 {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
@@ -1738,9 +1738,9 @@ with tab_card:
         _pg  = str(row.get("pos_group",""))
         _pos = str(row.get("Position",""))
         if _pg and _pg not in ("Unknown","nan",""):
-            pos_lbl = f"Athleticism vs {_pg}s"
+            pos_lbl = f"Capacity vs {_pg}s"
         elif _pos and _pos not in ("nan","None",""):
-            pos_lbl = f"Athleticism vs {_pos}s"
+            pos_lbl = f"Capacity vs {_pos}s"
         else:
             pos_lbl = "Position Data Unavailable"
         st.plotly_chart(
