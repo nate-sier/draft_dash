@@ -327,8 +327,8 @@ def load_data(_v=3):
 def build_scores(_df,
                  w_ci=0.35, w_sprint=0.30, w_rsi=0.15, w_pp=0.20,
                  w_ci_ns=0.45, w_rsi_ns=0.20, w_pp_ns=0.35,
-                 wp_peakpow=0.25, wp_height=0.25, wp_bmi=0.20,
-                 wp_school=0.15, wp_wingspan=0.15):
+                 wp_peakpow=0.20, wp_height=0.25, wp_bmi=0.30,
+                 wp_school=0.15, wp_wingspan=0.10):
     df = _df.copy()
 
     BOUNDS = {
@@ -480,7 +480,10 @@ def build_scores(_df,
     df["height_pct"]  = pct_rank(df["Height"])
     df["bmi_raw"]     = safe_div(df["Mass"] * 2.20462, df["Height"] / 2.54)
     df["bmi_pct"]     = pct_rank(df["bmi_raw"])
-    school_score_map  = {"High School": 100, "4-Year College": 60, "Junior College": 40}
+    # For potential, lower BW/Ht percentile = more projectable frame.
+    # Keep bmi_pct as the displayed BW/Ht percentile, but invert it for Potential Score only.
+    df["bwht_potential_pct"] = 100 - df["bmi_pct"]
+    school_score_map  = {"High School": 100, "Junior College": 75, "4-Year College": 60}
     df["school_score"] = df["School Type"].map(school_score_map).fillna(50)
     df["wingspan_advantage"] = df["Wingspan"] - df["Height"]
     df["wingspan_pct"]       = pct_rank(df["wingspan_advantage"])
@@ -495,7 +498,7 @@ def build_scores(_df,
         components = {
             "pp_pct":       (sv("pp_pct"),       wp_peakpow),
             "height_pct":   (sv("height_pct"),   wp_height),
-            "bmi_pct":      (sv("bmi_pct"),      wp_bmi),
+            "bwht_potential_pct": (sv("bwht_potential_pct"), wp_bmi),
             "school_score": (sv("school_score"), wp_school),
             "wingspan_pct": (sv("wingspan_pct"), wp_wingspan),
         }
@@ -1229,7 +1232,7 @@ with st.sidebar:
     if st.button("↻ Refresh Data", use_container_width=True):
         st.cache_data.clear(); st.rerun()
 
-wp_pp = 0.25; wp_ht = 0.25; wp_bmi = 0.20; wp_school = 0.15; wp_wings = 0.15
+wp_pp = 0.20; wp_ht = 0.25; wp_bmi = 0.30; wp_school = 0.15; wp_wings = 0.10
 
 # ─── Load & score ─────────────────────────────────────────────────────────────
 try:
