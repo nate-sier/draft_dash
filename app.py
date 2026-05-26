@@ -1,3 +1,4 @@
+# VERSION: athlete_scorecard_profile_bars_v7 -- radar replaced with horizontal percentile profile bars
 # VERSION: sidebar_compact_filters_v6 -- leaderboard filters moved to sidebar; compact min/max inputs; seated height removed
 import warnings
 warnings.filterwarnings("ignore")
@@ -384,8 +385,11 @@ def build_scores(_df,
 
     # ── Percentiles ───────────────────────────────────────────────────────────
     df["ci_pct_alltime"]  = pct_rank(df["Concentric Impulse"])
+    df["p1_ci_pct_alltime"] = pct_rank(df["P1 Concentric Impulse"])
+    df["ci100_pct_alltime"] = pct_rank(df["Concentric Impulse-100ms"])
     df["rsi_pct_alltime"] = pct_rank(df["RSI-modified"])
     df["pp_pct_alltime"]  = pct_rank(df["Peak Power / BM"])
+    df["jump_height_pct_alltime"] = pct_rank(df["Jump Height (Flight Time) in Inches"])
     sprint_mask = df["30yd Split"].notna()
     df["sprint_pct_alltime"] = np.nan
     if sprint_mask.any():
@@ -668,43 +672,140 @@ def make_gauge(value, title, color=RED):
     return fig
 
 def make_radar(row, label="Athlete", is_pitcher=False):
-    def sp(row, key, default=50.0):
-        v = row.get(key, default)
-        try:
-            return float(v) if v is not None and str(v) != "<NA>" else default
-        except: return default
+    """Horizontal percentile profile used in place of the old radar chart."""
+    if hasattr(row, "to_dict"):
+        row = row.to_dict()
 
-    has_sprint = pd.notna(row.get("30yd Split")) if hasattr(row, "get") else False
-    if has_sprint:
-        cats = ["CI", "Sprint", "RSI-mod", "Peak Pwr", "Height"]
-        vals = [sp(row,"ci_pct_alltime"), sp(row,"sprint_pct_alltime"),
-                sp(row,"rsi_pct_alltime"), sp(row,"pp_pct_alltime"),
-                sp(row,"height_pct")]
-    else:
-        cats = ["CI", "RSI-mod", "Peak Pwr", "Height"]
-        vals = [sp(row,"ci_pct_alltime"), sp(row,"rsi_pct_alltime"),
-                sp(row,"pp_pct_alltime"), sp(row,"height_pct")]
+    def val(key):
+        try:
+            v = row.get(key, np.nan)
+            f = float(v)
+            return f if not np.isnan(f) else np.nan
+        except Exception:
+            return np.nan
+
+    def pct(key, default=np.nan):
+        v = val(key)
+        if pd.isna(v):
+            return default
+        return max(0.0, min(100.0, v))
+
+    def raw_fmt(key, digits=1, suffix=""):
+        v = val(key)
+        return "—" if pd.isna(v) else f"{v:.{digits}f}{suffix}"
+
+    sections = []
+    sections.append(("Force Plate", [
+        ("CI", pct("ci_pct_alltime"), raw_fmt("Concentric Impulse", 1)),
+        ("P1 Conc. Impulse", pct("p1_ci_pct_alltime"), raw_fmt("P1 Concentric Impulse", 1)),
+        ("CI-100ms", pct("ci100_pct_alltime"), raw_fmt("Concentric Impulse-100ms", 1)),
+        ("RSI-modified", pct("rsi_pct_alltime"), raw_fmt("RSI-modified", 3)),
+        ("Peak Power / BM", pct("pp_pct_alltime"), raw_fmt("Peak Power / BM", 1)),
+        ("Jump Height", pct("jump_height_pct_alltime"), raw_fmt("Jump Height (Flight Time) in Inches", 2, " in")),
+    ]))
+
+    sprint_rows = []
+    if pd.notna(val("30yd Split")):
+        sprint_rows.append(("30yd Sprint", pct("sprint_pct_alltime"), raw_fmt("30yd Split", 3, "s")))
+    # 10yd and 20yd splits are shown as raw context if present, but not percentiled unless columns exist later.
+    if pd.notna(val("10yd Split")):
+        sprint_rows.append(("10yd Split", pct("ten_yd_pct_alltime", 50), raw_fmt("10yd Split", 3, "s")))
+    if pd.notna(val("20yd Split")):
+        sprint_rows.append(("20yd Split", pct("twenty_yd_pct_alltime", 50), raw_fmt("20yd Split", 3, "s")))
+    if sprint_rows:
+        sections.append(("Sprint", sprint_rows))
+
+    anthro_rows = [
+        ("Height", pct("height_pct"), fmt_height(val("Height"))),
+        ("Mass", pct("mass_pct_alltime", pct("bmi_pct", 50)), fmt_mass(val("Mass"))),
+        ("Wingspan", pct("wingspan_pct"), fmt_wingspan(val("Wingspan"))),
+        ("BW/Ht", pct("bmi_pct"), pct_sfx(pct("bmi_pct")) if pd.notna(pct("bmi_pct")) else "—"),
+    ]
     if is_pitcher:
-        cats.append("Wingspan")
-        vals.append(sp(row, "wingspan_pct"))
+        anthro_rows.insert(3, ("Wing Adv.", pct("wingspan_pct"), fmt_wingspan_adv(val("wingspan_advantage"))))
+    sections.append(("Anthropometrics", anthro_rows))
+
+    labels, vals, raw_vals, section_for_row = [], [], [], []
+    y = []
+    section_title_y = []
+    cur_y = 0
+    for section, rows in sections:
+        section_title_y.append((section, cur_y))
+        cur_y -= 0.75
+        for lab, pc, rv in rows:
+            labels.append(lab)
+            vals.append(0 if pd.isna(pc) else pc)
+            raw_vals.append(rv)
+            section_for_row.append(section)
+            y.append(cur_y)
+            cur_y -= 1
+        cur_y -= 0.45
+
+    def color_for(v):
+        if pd.isna(v):
+            return "#9AAAC0"
+        if v >= 75:
+            return RED
+        if v >= 50:
+            return "#AFC4C9"
+        return "#6B83B6"
+
+    bar_colors = [color_for(v) for v in vals]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=vals + [vals[0]], theta=cats + [cats[0]],
-        fill="toself", name=label,
-        line=dict(color=RED, width=2),
-        fillcolor="rgba(186,12,47,0.15)",
+
+    # Gray full scale rails, then colored percentile bars.
+    fig.add_trace(go.Bar(
+        x=[100] * len(y), y=y, orientation="h", marker_color="rgba(210,213,218,0.70)",
+        width=0.72, hoverinfo="skip", showlegend=False,
     ))
+    fig.add_trace(go.Bar(
+        x=vals, y=y, orientation="h", marker_color=bar_colors,
+        width=0.72, hoverinfo="skip", showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=vals, y=y, mode="markers+text",
+        marker=dict(size=34, color=bar_colors, line=dict(color="white", width=2)),
+        text=["—" if pd.isna(v) else f"{int(round(v))}" for v in vals],
+        textfont=dict(color="white", size=13, family="Arial Black"),
+        textposition="middle center", hoverinfo="skip", showlegend=False,
+    ))
+
+    # Dashed row separators.
+    for yy in y:
+        fig.add_shape(type="line", x0=-25, x1=118, y0=yy - 0.5, y1=yy - 0.5,
+                      line=dict(color="rgba(150,150,150,0.35)", width=1, dash="dash"), layer="below")
+
+    # Vertical percentile guide lines.
+    for xg in [0, 25, 50, 75, 100]:
+        fig.add_vline(x=xg, line_width=1, line_dash="dash" if xg in [25,50,75] else "solid",
+                      line_color="rgba(170,170,170,0.55)")
+
+    # Metric labels and raw values.
+    for lab, yy, rv in zip(labels, y, raw_vals):
+        fig.add_annotation(x=-4, y=yy, text=lab, showarrow=False, xanchor="right",
+                           font=dict(size=12, color="#20232A"))
+        fig.add_annotation(x=110, y=yy, text=rv, showarrow=False, xanchor="center",
+                           font=dict(size=12, color="#20232A"))
+
+    # Section titles.
+    for section, yy in section_title_y:
+        fig.add_annotation(x=-25, y=yy, text=f"<b>{section}</b>", showarrow=False,
+                           xanchor="left", font=dict(size=16, color="#20232A"))
+        fig.add_shape(type="line", x0=-25, x1=118, y0=yy - 0.35, y1=yy - 0.35,
+                      line=dict(color="rgba(120,120,120,0.45)", width=1), layer="below")
+
     fig.update_layout(
-        polar=dict(
-            radialaxis=dict(visible=True, range=[0,100],
-                            tickfont=dict(size=9, color="#9AAAC0"), gridcolor=BORD),
-            angularaxis=dict(tickfont=dict(size=10, color=NAV)),
-            bgcolor="white",
-        ),
-        showlegend=False,
-        height=300, margin=dict(l=40,r=40,t=30,b=30),
+        barmode="overlay",
+        height=max(440, 62 * len(y) + 70 * len(sections)),
+        margin=dict(l=10, r=10, t=8, b=30),
         paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(family="Source Sans 3, Arial, sans-serif", color=NAV),
+        xaxis=dict(range=[-26, 122], tickmode="array", tickvals=[0,25,50,75,100],
+                   tickfont=dict(size=10, color="#555"), showgrid=False, zeroline=False),
+        yaxis=dict(visible=False, range=[min(y)-0.7, max(t for _, t in section_title_y)+0.5]),
+        showlegend=False,
     )
     return fig
 
