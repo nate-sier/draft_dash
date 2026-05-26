@@ -1,4 +1,4 @@
-# VERSION: leaderboard_no_sprint_v3 -- sidebar sliders removed; typed numeric filters; anthropometrics added; sprint removed from leaderboard
+# VERSION: leaderboard_left_filters_no_seatedheight_v5 -- left-side filters; no sprint/seated height in leaderboard; BW/Ht shown as percentile
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -907,6 +907,7 @@ with tab_board:
     df_lb["Wingspan_in"] = pd.to_numeric(df_lb.get("Wingspan"), errors="coerce") / 2.54
     df_lb["Wing_Adv_in"] = pd.to_numeric(df_lb.get("wingspan_advantage"), errors="coerce") / 2.54
     df_lb["BW_Ht_Ratio"] = pd.to_numeric(df_lb.get("bmi_raw"), errors="coerce")
+    df_lb["BW_Ht_Pct"] = pct_rank(df_lb["BW_Ht_Ratio"])
 
     LEADERBOARD_METRICS = [
         # Force plate
@@ -916,69 +917,21 @@ with tab_board:
         ("RSI-modified", "RSI-modified", 3, "", "Force Plate"),
         ("Peak Power / BM", "Peak Power / BM", 1, "", "Force Plate"),
         ("Jump Height (Flight Time) in Inches", "Jump Height", 2, " in", "Force Plate"),
-        # Anthropometrics
+        # Anthropometrics shown in the leaderboard
         ("Height_in", "Height", 1, " in", "Anthropometrics"),
         ("Mass_lbs", "Mass", 1, " lbs", "Anthropometrics"),
-        ("SeatedHeight_in", "Seated Height", 1, " in", "Anthropometrics"),
         ("Wingspan_in", "Wingspan", 1, " in", "Anthropometrics"),
         ("Wing_Adv_in", "Wingspan Adv.", 1, " in", "Anthropometrics"),
-        ("BW_Ht_Ratio", "BW/Ht Ratio", 2, "", "Anthropometrics"),
+        ("BW_Ht_Pct", "BW/Ht Pct", 0, "th", "Anthropometrics"),
     ]
+
+    FILTERABLE_METRICS = LEADERBOARD_METRICS
 
     # Make sure every expected column exists so the app will not silently drop
     # a leaderboard metric if a sheet is missing a column.
     for _col, _, _, _, _ in LEADERBOARD_METRICS:
         if _col not in df_lb.columns:
             df_lb[_col] = np.nan
-
-    metric_label_to_col = {label: col for col, label, _, _, _ in LEADERBOARD_METRICS}
-    metric_label_to_fmt = {label: (digits, suffix) for col, label, digits, suffix, _ in LEADERBOARD_METRICS}
-
-    # -------------------------------------------------------------------------
-    # Primary filters
-    # -------------------------------------------------------------------------
-    f1, f2, f3, f4 = st.columns([2.6, 0.9, 1.2, 1.4])
-    with f1:
-        search = st.text_input("Search", placeholder="Name…", key="lb_search")
-    with f2:
-        yr_opts = ["All"] + sorted(df_lb["Year"].dropna().unique().astype(int).tolist(), reverse=True)
-        yr_sel = st.selectbox("Year", yr_opts, key="lb_year")
-    with f3:
-        pos_grp_sel = st.selectbox(
-            "Position Group",
-            ["All", "Pitcher", "Catcher", "Infielder", "Outfielder"],
-            key="lb_pos",
-        )
-    with f4:
-        sort_options = [
-            "Athleticism Score", "Pos. Athleticism",
-            "CI", "P1 Conc. Impulse", "CI-100ms", "RSI-modified", "Peak Power / BM",
-            "Jump Height",
-            "Height", "Mass", "Seated Height", "Wingspan", "Wingspan Adv.", "BW/Ht Ratio",
-        ]
-        sort_by = st.selectbox("Sort by", sort_options, key="lb_sort")
-
-    dff = df_lb.copy()
-    if search:
-        dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
-    if yr_sel != "All":
-        dff = dff[dff["Year"] == int(yr_sel)]
-    if pos_grp_sel != "All":
-        dff = dff[dff["pos_group"] == pos_grp_sel]
-
-    # -------------------------------------------------------------------------
-    # Numeric cutoff filters — always visible, typed values, stack as AND logic
-    # -------------------------------------------------------------------------
-    st.markdown("### Numeric Leaderboard Filters")
-    st.caption(
-        "Type minimums and/or maximums. Minimum means show athletes at or above that number; "
-        "maximum means show athletes at or below that number. Blank boxes are ignored. "
-        "Multiple metric filters stack together."
-    )
-
-    filter_groups = ["Force Plate", "Anthropometrics"]
-    filter_tabs = st.tabs(filter_groups)
-    active_filter_notes = []
 
     def _num_from_text(x):
         x = "" if x is None else str(x).strip()
@@ -989,168 +942,219 @@ with tab_board:
         except ValueError:
             return "INVALID"
 
-    # Use the original already-filtered dataframe for showing available ranges,
-    # then apply user cutoffs to dff as they are entered.
-    range_base = dff.copy()
+    filter_col, board_col = st.columns([0.27, 0.73], gap="large")
 
-    for tab, group_name in zip(filter_tabs, filter_groups):
-        with tab:
-            group_metrics = [m for m in LEADERBOARD_METRICS if m[4] == group_name]
-            for i, (col, label, digits, suffix, _) in enumerate(group_metrics):
-                vals = pd.to_numeric(range_base[col], errors="coerce").dropna()
-                if vals.empty:
-                    range_txt = "No data available"
-                else:
-                    range_txt = f"Available range: {vals.min():.{digits}f}{suffix} to {vals.max():.{digits}f}{suffix}"
+    with filter_col:
+        st.markdown("### Filters")
+        search = st.text_input("Search", placeholder="Name…", key="lb_search")
 
-                c_label, c_min, c_max, c_range = st.columns([1.35, 1.05, 1.05, 1.55])
-                c_label.markdown(f"**{label}**")
-                min_txt = c_min.text_input(
-                    "Min / above",
-                    value="",
-                    placeholder="type min",
-                    key=f"lb_min_{group_name}_{i}_{col}",
-                )
-                max_txt = c_max.text_input(
-                    "Max / below",
-                    value="",
-                    placeholder="type max",
-                    key=f"lb_max_{group_name}_{i}_{col}",
-                )
-                c_range.caption(range_txt)
+        yr_opts = ["All"] + sorted(df_lb["Year"].dropna().unique().astype(int).tolist(), reverse=True)
+        yr_sel = st.selectbox("Year", yr_opts, key="lb_year")
 
-                min_val = _num_from_text(min_txt)
-                max_val = _num_from_text(max_txt)
+        pos_grp_sel = st.selectbox(
+            "Position Group",
+            ["All", "Pitcher", "Catcher", "Infielder", "Outfielder"],
+            key="lb_pos",
+        )
 
-                if min_val == "INVALID":
-                    st.warning(f"{label} minimum must be numeric.")
-                    min_val = None
-                if max_val == "INVALID":
-                    st.warning(f"{label} maximum must be numeric.")
-                    max_val = None
-
-                numeric_values = pd.to_numeric(dff[col], errors="coerce")
-                if min_val is not None:
-                    dff = dff[numeric_values >= min_val]
-                    active_filter_notes.append(f"{label} ≥ {min_val:g}{suffix}")
-                if max_val is not None:
-                    dff = dff[numeric_values <= max_val]
-                    active_filter_notes.append(f"{label} ≤ {max_val:g}{suffix}")
-
-    if active_filter_notes:
-        st.success("Active numeric filters: " + "; ".join(active_filter_notes))
-    else:
-        st.info("No numeric cutoff filters are active.")
-
-    # -------------------------------------------------------------------------
-    # Sort
-    # -------------------------------------------------------------------------
-    sort_map = {
-        "Athleticism Score": "athlete_quality_score",
-        "Pos. Athleticism": "aq_pos_score",
-        "CI": "Concentric Impulse",
-        "P1 Conc. Impulse": "P1 Concentric Impulse",
-        "CI-100ms": "Concentric Impulse-100ms",
-        "RSI-modified": "RSI-modified",
-        "Peak Power / BM": "Peak Power / BM",
-        "Jump Height": "Jump Height (Flight Time) in Inches",
-        "Height": "Height_in",
-        "Mass": "Mass_lbs",
-        "Seated Height": "SeatedHeight_in",
-        "Wingspan": "Wingspan_in",
-        "Wingspan Adv.": "Wing_Adv_in",
-        "BW/Ht Ratio": "BW_Ht_Ratio",
-    }
-    sort_col = sort_map[sort_by]
-    dff = dff.sort_values(
-        sort_col,
-        ascending=False,
-        na_position="last",
-    ).reset_index(drop=True)
-
-    if dff.empty:
-        st.warning("No athletes match the selected filters.")
-        default_ath = df.sort_values("athleteName").iloc[0]["athleteName"]
-    else:
-        # ---------------------------------------------------------------------
-        # Median cards
-        # ---------------------------------------------------------------------
-        st.markdown(f'<p class="label">Force Plate Medians</p>', unsafe_allow_html=True)
-        fp_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Force Plate"]
-        fp_cols = st.columns(len(fp_metrics) + 1)
-        fp_cols[0].metric("Athletes", str(len(dff)))
-        for i, (col, label, digits, suffix, _) in enumerate(fp_metrics, start=1):
-            fp_cols[i].metric(f"Median {label}", fmt(pd.to_numeric(dff[col], errors="coerce").median(), digits, suffix))
-
-
-        st.markdown(f'<p class="label">Anthropometric Medians</p>', unsafe_allow_html=True)
-        anthro_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Anthropometrics"]
-        an_cols = st.columns(len(anthro_metrics))
-        for i, (col, label, digits, suffix, _) in enumerate(anthro_metrics):
-            an_cols[i].metric(f"Median {label}", fmt(pd.to_numeric(dff[col], errors="coerce").median(), digits, suffix))
-
-        # ---------------------------------------------------------------------
-        # Leaderboard table: only text columns are Athlete and Position.
-        # Everything else is numeric and filterable/sortable.
-        # ---------------------------------------------------------------------
-        tbl_cols = [
-            "athleteName", "Position", "Year",
-            "athlete_quality_score", "aq_pos_score",
-            "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
-            "RSI-modified", "Peak Power / BM", "Jump Height (Flight Time) in Inches",
-            "Height_in", "Mass_lbs", "SeatedHeight_in", "Wingspan_in", "Wing_Adv_in", "BW_Ht_Ratio",
+        sort_options = [
+            "Athleticism Score", "Pos. Athleticism",
+            "CI", "P1 Conc. Impulse", "CI-100ms", "RSI-modified", "Peak Power / BM",
+            "Jump Height",
+            "Height", "Mass", "Wingspan", "Wingspan Adv.", "BW/Ht Pct",
         ]
-        tbl = dff[tbl_cols].copy()
-        tbl = tbl.rename(columns={
-            "athleteName": "Athlete",
-            "athlete_quality_score": "Athleticism",
-            "aq_pos_score": "Pos. Athleticism",
-            "Concentric Impulse": "CI",
-            "P1 Concentric Impulse": "P1 Conc. Impulse",
-            "Concentric Impulse-100ms": "CI-100ms",
-            "Jump Height (Flight Time) in Inches": "Jump Height",
-            "Height_in": "Height",
-            "Mass_lbs": "Mass",
-            "SeatedHeight_in": "Seated Height",
-            "Wingspan_in": "Wingspan",
-            "Wing_Adv_in": "Wingspan Adv.",
-            "BW_Ht_Ratio": "BW/Ht Ratio",
-        })
+        sort_by = st.selectbox("Sort by", sort_options, key="lb_sort")
 
-        round_map = {
-            "Athleticism": 1,
-            "Pos. Athleticism": 1,
-            "CI": 1,
-            "P1 Conc. Impulse": 1,
-            "CI-100ms": 1,
-            "RSI-modified": 3,
-            "Peak Power / BM": 1,
-            "Jump Height": 2,
-            "Height": 1,
-            "Mass": 1,
-            "Seated Height": 1,
-            "Wingspan": 1,
-            "Wingspan Adv.": 1,
-            "BW/Ht Ratio": 2,
+        st.markdown("---")
+        st.markdown("#### Numeric cutoffs")
+        st.caption("Blank boxes are ignored. All active filters stack together.")
+
+        filter_groups = ["Force Plate", "Anthropometrics"]
+        active_filter_notes = []
+        filter_values = []
+
+        # Use a base dataframe filtered only by the primary controls to display ranges.
+        range_base = df_lb.copy()
+        if search:
+            range_base = range_base[range_base["athleteName"].str.contains(search, case=False, na=False)]
+        if yr_sel != "All":
+            range_base = range_base[range_base["Year"] == int(yr_sel)]
+        if pos_grp_sel != "All":
+            range_base = range_base[range_base["pos_group"] == pos_grp_sel]
+
+        for group_name in filter_groups:
+            with st.expander(group_name, expanded=True):
+                group_metrics = [m for m in FILTERABLE_METRICS if m[4] == group_name]
+                for i, (col, label, digits, suffix, _) in enumerate(group_metrics):
+                    vals = pd.to_numeric(range_base[col], errors="coerce").dropna()
+                    if vals.empty:
+                        range_txt = "No data"
+                    elif col == "BW_Ht_Pct":
+                        range_txt = f"Range: {vals.min():.0f} to {vals.max():.0f} percentile"
+                    else:
+                        range_txt = f"Range: {vals.min():.{digits}f}{suffix} to {vals.max():.{digits}f}{suffix}"
+
+                    st.markdown(f"**{label}**")
+                    min_txt = st.text_input(
+                        "Min / above",
+                        value="",
+                        placeholder="min",
+                        key=f"lb_min_{group_name}_{i}_{col}",
+                    )
+                    max_txt = st.text_input(
+                        "Max / below",
+                        value="",
+                        placeholder="max",
+                        key=f"lb_max_{group_name}_{i}_{col}",
+                    )
+                    st.caption(range_txt)
+
+                    min_val = _num_from_text(min_txt)
+                    max_val = _num_from_text(max_txt)
+
+                    if min_val == "INVALID":
+                        st.warning(f"{label} minimum must be numeric.")
+                        min_val = None
+                    if max_val == "INVALID":
+                        st.warning(f"{label} maximum must be numeric.")
+                        max_val = None
+
+                    if min_val is not None:
+                        active_filter_notes.append(f"{label} ≥ {min_val:g}")
+                    if max_val is not None:
+                        active_filter_notes.append(f"{label} ≤ {max_val:g}")
+                    filter_values.append((col, label, min_val, max_val))
+
+        if active_filter_notes:
+            st.success("Active: " + "; ".join(active_filter_notes))
+        else:
+            st.info("No numeric filters active.")
+
+    with board_col:
+        dff = df_lb.copy()
+        if search:
+            dff = dff[dff["athleteName"].str.contains(search, case=False, na=False)]
+        if yr_sel != "All":
+            dff = dff[dff["Year"] == int(yr_sel)]
+        if pos_grp_sel != "All":
+            dff = dff[dff["pos_group"] == pos_grp_sel]
+
+        for col, label, min_val, max_val in filter_values:
+            numeric_values = pd.to_numeric(dff[col], errors="coerce")
+            if min_val is not None:
+                dff = dff[numeric_values >= min_val]
+                numeric_values = pd.to_numeric(dff[col], errors="coerce")
+            if max_val is not None:
+                dff = dff[numeric_values <= max_val]
+
+        # ---------------------------------------------------------------------
+        # Sort
+        # ---------------------------------------------------------------------
+        sort_map = {
+            "Athleticism Score": "athlete_quality_score",
+            "Pos. Athleticism": "aq_pos_score",
+            "CI": "Concentric Impulse",
+            "P1 Conc. Impulse": "P1 Concentric Impulse",
+            "CI-100ms": "Concentric Impulse-100ms",
+            "RSI-modified": "RSI-modified",
+            "Peak Power / BM": "Peak Power / BM",
+            "Jump Height": "Jump Height (Flight Time) in Inches",
+            "Height": "Height_in",
+            "Mass": "Mass_lbs",
+            "Wingspan": "Wingspan_in",
+            "Wingspan Adv.": "Wing_Adv_in",
+            "BW/Ht Pct": "BW_Ht_Pct",
         }
-        for col, digits in round_map.items():
-            if col in tbl.columns:
-                tbl[col] = pd.to_numeric(tbl[col], errors="coerce").round(digits)
+        sort_col = sort_map[sort_by]
+        dff = dff.sort_values(sort_col, ascending=False, na_position="last").reset_index(drop=True)
 
-        st.caption(
-            "Units: Height, Seated Height, Wingspan, and Wingspan Adv. are inches; "
-            "Mass is pounds; BW/Ht Ratio is pounds per inch."
-        )
-        sel = st.dataframe(
-            tbl,
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row",
-            key="lb_tbl",
-        )
-        sel_rows = sel.selection.rows if sel.selection else []
-        default_ath = dff.iloc[sel_rows[0]]["athleteName"] if sel_rows else dff.iloc[0]["athleteName"]
+        if dff.empty:
+            st.warning("No athletes match the selected filters.")
+            default_ath = df.sort_values("athleteName").iloc[0]["athleteName"]
+        else:
+            # -----------------------------------------------------------------
+            # Median cards
+            # -----------------------------------------------------------------
+            st.markdown(f'<p class="label">Force Plate Medians</p>', unsafe_allow_html=True)
+            fp_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Force Plate"]
+            fp_cols = st.columns(len(fp_metrics) + 1)
+            fp_cols[0].metric("Athletes", str(len(dff)))
+            for i, (col, label, digits, suffix, _) in enumerate(fp_metrics, start=1):
+                fp_cols[i].metric(
+                    f"Median {label}",
+                    fmt(pd.to_numeric(dff[col], errors="coerce").median(), digits, suffix),
+                )
+
+            st.markdown(f'<p class="label">Anthropometric Medians</p>', unsafe_allow_html=True)
+            anthro_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Anthropometrics"]
+            an_cols = st.columns(len(anthro_metrics))
+            for i, (col, label, digits, suffix, _) in enumerate(anthro_metrics):
+                med_val = pd.to_numeric(dff[col], errors="coerce").median()
+                if col == "BW_Ht_Pct":
+                    an_cols[i].metric("Median BW/Ht Pct", pct_sfx(med_val))
+                else:
+                    an_cols[i].metric(f"Median {label}", fmt(med_val, digits, suffix))
+
+            # -----------------------------------------------------------------
+            # Leaderboard table: only text columns are Athlete and Position.
+            # BW/Ht is shown as a percentile, not the raw pounds-per-inch value.
+            # -----------------------------------------------------------------
+            tbl_cols = [
+                "athleteName", "Position", "Year",
+                "athlete_quality_score", "aq_pos_score",
+                "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
+                "RSI-modified", "Peak Power / BM", "Jump Height (Flight Time) in Inches",
+                "Height_in", "Mass_lbs", "Wingspan_in", "Wing_Adv_in", "BW_Ht_Pct",
+            ]
+            tbl = dff[tbl_cols].copy()
+            tbl = tbl.rename(columns={
+                "athleteName": "Athlete",
+                "athlete_quality_score": "Athleticism",
+                "aq_pos_score": "Pos. Athleticism",
+                "Concentric Impulse": "CI",
+                "P1 Concentric Impulse": "P1 Conc. Impulse",
+                "Concentric Impulse-100ms": "CI-100ms",
+                "Jump Height (Flight Time) in Inches": "Jump Height",
+                "Height_in": "Height",
+                "Mass_lbs": "Mass",
+                "Wingspan_in": "Wingspan",
+                "Wing_Adv_in": "Wingspan Adv.",
+                "BW_Ht_Pct": "BW/Ht Pct",
+            })
+
+            round_map = {
+                "Athleticism": 1,
+                "Pos. Athleticism": 1,
+                "CI": 1,
+                "P1 Conc. Impulse": 1,
+                "CI-100ms": 1,
+                "RSI-modified": 3,
+                "Peak Power / BM": 1,
+                "Jump Height": 2,
+                "Height": 1,
+                "Mass": 1,
+                "Wingspan": 1,
+                "Wingspan Adv.": 1,
+                "BW/Ht Pct": 0,
+            }
+            for col, digits in round_map.items():
+                if col in tbl.columns:
+                    tbl[col] = pd.to_numeric(tbl[col], errors="coerce").round(digits)
+
+            st.caption(
+                "Units: Height, Wingspan, and Wingspan Adv. are inches; "
+                "Mass is pounds; BW/Ht Pct is the percentile rank of pounds per inch."
+            )
+            sel = st.dataframe(
+                tbl,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="lb_tbl",
+            )
+            sel_rows = sel.selection.rows if sel.selection else []
+            default_ath = dff.iloc[sel_rows[0]]["athleteName"] if sel_rows else dff.iloc[0]["athleteName"]
 
 # =============================================================================
 # TAB 2 — ATHLETE SCORECARD
