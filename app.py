@@ -1,4 +1,4 @@
-# VERSION: leaderboard_filters_anthro_v2 -- sidebar sliders removed; typed numeric filters; anthropometrics added
+# VERSION: leaderboard_no_sprint_v3 -- sidebar sliders removed; typed numeric filters; anthropometrics added; sprint removed from leaderboard
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -916,10 +916,6 @@ with tab_board:
         ("RSI-modified", "RSI-modified", 3, "", "Force Plate"),
         ("Peak Power / BM", "Peak Power / BM", 1, "", "Force Plate"),
         ("Jump Height (Flight Time) in Inches", "Jump Height", 2, " in", "Force Plate"),
-        # Sprint
-        ("10yd Split", "10yd", 3, " s", "Sprint"),
-        ("20yd Split", "20yd", 3, " s", "Sprint"),
-        ("30yd Split", "30yd", 3, " s", "Sprint"),
         # Anthropometrics
         ("Height_in", "Height", 1, " in", "Anthropometrics"),
         ("Mass_lbs", "Mass", 1, " lbs", "Anthropometrics"),
@@ -957,7 +953,7 @@ with tab_board:
         sort_options = [
             "Athleticism Score", "Pos. Athleticism",
             "CI", "P1 Conc. Impulse", "CI-100ms", "RSI-modified", "Peak Power / BM",
-            "Jump Height", "10yd", "20yd", "30yd",
+            "Jump Height",
             "Height", "Mass", "Seated Height", "Wingspan", "Wingspan Adv.", "BW/Ht Ratio",
         ]
         sort_by = st.selectbox("Sort by", sort_options, key="lb_sort")
@@ -980,7 +976,7 @@ with tab_board:
         "Multiple metric filters stack together."
     )
 
-    filter_groups = ["Force Plate", "Sprint", "Anthropometrics"]
+    filter_groups = ["Force Plate", "Anthropometrics"]
     filter_tabs = st.tabs(filter_groups)
     active_filter_notes = []
 
@@ -1058,9 +1054,6 @@ with tab_board:
         "RSI-modified": "RSI-modified",
         "Peak Power / BM": "Peak Power / BM",
         "Jump Height": "Jump Height (Flight Time) in Inches",
-        "10yd": "10yd Split",
-        "20yd": "20yd Split",
-        "30yd": "30yd Split",
         "Height": "Height_in",
         "Mass": "Mass_lbs",
         "Seated Height": "SeatedHeight_in",
@@ -1071,7 +1064,7 @@ with tab_board:
     sort_col = sort_map[sort_by]
     dff = dff.sort_values(
         sort_col,
-        ascending=True if sort_by in ["10yd", "20yd", "30yd"] else False,
+        ascending=False,
         na_position="last",
     ).reset_index(drop=True)
 
@@ -1089,11 +1082,6 @@ with tab_board:
         for i, (col, label, digits, suffix, _) in enumerate(fp_metrics, start=1):
             fp_cols[i].metric(f"Median {label}", fmt(pd.to_numeric(dff[col], errors="coerce").median(), digits, suffix))
 
-        st.markdown(f'<p class="label">Sprint Medians</p>', unsafe_allow_html=True)
-        sprint_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Sprint"]
-        sp_cols = st.columns(len(sprint_metrics))
-        for i, (col, label, digits, suffix, _) in enumerate(sprint_metrics):
-            sp_cols[i].metric(f"Median {label}", fmt(pd.to_numeric(dff[col], errors="coerce").median(), digits, suffix))
 
         st.markdown(f'<p class="label">Anthropometric Medians</p>', unsafe_allow_html=True)
         anthro_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Anthropometrics"]
@@ -1110,7 +1098,6 @@ with tab_board:
             "athlete_quality_score", "aq_pos_score",
             "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
             "RSI-modified", "Peak Power / BM", "Jump Height (Flight Time) in Inches",
-            "10yd Split", "20yd Split", "30yd Split",
             "Height_in", "Mass_lbs", "SeatedHeight_in", "Wingspan_in", "Wing_Adv_in", "BW_Ht_Ratio",
         ]
         tbl = dff[tbl_cols].copy()
@@ -1122,9 +1109,6 @@ with tab_board:
             "P1 Concentric Impulse": "P1 Conc. Impulse",
             "Concentric Impulse-100ms": "CI-100ms",
             "Jump Height (Flight Time) in Inches": "Jump Height",
-            "10yd Split": "10yd",
-            "20yd Split": "20yd",
-            "30yd Split": "30yd",
             "Height_in": "Height",
             "Mass_lbs": "Mass",
             "SeatedHeight_in": "Seated Height",
@@ -1142,9 +1126,6 @@ with tab_board:
             "RSI-modified": 3,
             "Peak Power / BM": 1,
             "Jump Height": 2,
-            "10yd": 3,
-            "20yd": 3,
-            "30yd": 3,
             "Height": 1,
             "Mass": 1,
             "Seated Height": 1,
@@ -1158,7 +1139,7 @@ with tab_board:
 
         st.caption(
             "Units: Height, Seated Height, Wingspan, and Wingspan Adv. are inches; "
-            "Mass is pounds; sprint splits are seconds; BW/Ht Ratio is pounds per inch."
+            "Mass is pounds; BW/Ht Ratio is pounds per inch."
         )
         sel = st.dataframe(
             tbl,
