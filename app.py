@@ -1,3 +1,4 @@
+# VERSION: option1_wording_smaller_cards_v39 -- reload scorecard_skins and force smaller PDF card values
 # VERSION: option1_wording_v37 -- smaller Athlete Group and Program Focus card text in PDF renderer
 # VERSION: option1_wording_v36 -- smaller PDF Athlete Group and Program Focus card values
 # VERSION: option1_pdf_old_dashboard_fonts_v33 -- dashboard fonts reverted; Option 1 PDF retained
@@ -930,7 +931,10 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
 
     try:
         from datetime import datetime
-        from scorecard_skins import render_scorecard_option_1
+        import importlib
+        import scorecard_skins
+        scorecard_skins = importlib.reload(scorecard_skins)
+        render_scorecard_option_1 = scorecard_skins.render_scorecard_option_1
     except Exception as e:
         raise ImportError("PDF export needs scorecard_skins.py and reportlab>=4.0 available in the app environment.") from e
 
