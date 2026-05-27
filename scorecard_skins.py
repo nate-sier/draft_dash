@@ -1,4 +1,4 @@
-# VERSION: option1_original_card_grid_v48
+# VERSION: option1_original_card_grid_v49
 """Portable Nationals/defensive scorecard skins.
 
 Use this module inside another app by passing the existing scorecard data into
@@ -334,7 +334,7 @@ def _draw_option_1_metric_card(
 
         c.setFillColor(TEXT_DARK)
         # Compact fixed text so the full values fit in the original Skin 1 card grid.
-        _set_font(c, "bold", 6.0)
+        _set_font(c, "bold", 6.6)
         if len(lines) == 1:
             c.drawCentredString(value_x + value_w / 2, y + h / 2 - 2.5, lines[0])
         else:
