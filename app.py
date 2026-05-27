@@ -1,3 +1,4 @@
+# VERSION: option1_identical_v31 -- Option 1 PDF skin integration, Gill Sans styling, Nationals logo support
 # VERSION: stakeholder_feedback_v27 -- potential to gain, athlete group/program focus, cleaner capacity language
 # VERSION: bodyweight_labels_v26 -- display label Mass changed to Bodyweight
 # VERSION: happy_medium_v21 -- development projection moved into right scorecard column
@@ -12,6 +13,7 @@ import os
 import json
 import traceback
 from io import BytesIO
+from pathlib import Path
 import re
 import numpy as np
 import pandas as pd
@@ -593,13 +595,11 @@ def build_scores(_df,
 # ─── CSS ──────────────────────────────────────────────────────────────────────
 CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@300;400;600&display=swap');
-
-html, body, [class*="css"] {{
-    font-family: 'Source Sans 3', sans-serif;
+html, body, [class*="css"] {
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif;
     background-color: {SURF}; color: {NAV};
-}}
-h1,h2,h3 {{ font-family: 'Playfair Display', serif; color: {NAV}; }}
+}
+h1,h2,h3 { font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; color: {NAV}; font-weight: 700; }
 .block-container {{ padding-top: 1.5rem; max-width: 1400px; }}
 
 div[data-testid="metric-container"] {{
@@ -612,7 +612,7 @@ div[data-testid="metric-container"] label {{
     text-transform: uppercase; color: {SLATE};
 }}
 div[data-testid="metric-container"] div[data-testid="metric-value"] {{
-    font-family: 'Playfair Display', serif; font-size: 28px; color: {RED};
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; font-size: 28px; color: {RED};
 }}
 
 .stTabs [data-baseweb="tab-list"] {{
@@ -651,7 +651,7 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
     padding: 3px 12px; border-radius: 20px; letter-spacing: 0.04em;
 }}
 .score-big {{
-    font-family: 'Playfair Display', serif; font-size: 42px;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; font-size: 42px;
     font-weight: 900; line-height: 1;
 }}
 .grad-bar {{
@@ -671,7 +671,7 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
     padding: 12px 16px; text-align: center;
 }}
 .wing-stat-val {{
-    font-family: 'Playfair Display', serif; font-size: 26px;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; font-size: 26px;
     font-weight: 900; color: white; line-height: 1.1;
 }}
 .wing-stat-lbl {{
@@ -706,7 +706,7 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
     text-overflow: ellipsis;
 }}
 .median-card-value {{
-    font-family: 'Playfair Display', serif;
+    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif;
     font-size: 22px;
     font-weight: 800;
     line-height: 1.05;
@@ -920,40 +920,15 @@ def make_trend(player_df, col, label, invert=False):
 
 
 def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=False):
-    """Render the PDF export using Scorecard Option 1 style.
-
-    This uses reportlab, so make sure requirements.txt includes:
-    reportlab>=4.0
-    """
+    """Render the PDF export using the exact Scorecard Option 1 skin."""
     if hasattr(row, "to_dict"):
         row = row.to_dict()
 
     try:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter
-        from reportlab.pdfgen import canvas
-        from reportlab.pdfbase import pdfmetrics
-        from io import BytesIO as _BytesIO
         from datetime import datetime
+        from scorecard_skins import render_scorecard_option_1
     except Exception as e:
-        raise ImportError("PDF export needs reportlab. Add `reportlab>=4.0` to requirements.txt and redeploy.") from e
-
-    PAGE_W, PAGE_H = letter
-    NATS_NAVY = colors.HexColor("#14225A")
-    NATS_RED = colors.HexColor("#AB0003")
-    NATS_WHITE = colors.HexColor("#FFFFFF")
-    TEXT_DARK = colors.HexColor("#111111")
-    LINE_GRAY = colors.HexColor("#D8DDE5")
-    TRACK_GRAY = colors.HexColor("#E8ECF2")
-    GRID_GRAY = colors.HexColor("#9AA4B2")
-    MUTED_TEXT = colors.HexColor("#6F7785")
-    HEADSHOT_GRAY = colors.HexColor("#BFC2C7")
-    GREEN_1 = colors.HexColor("#E3F1D9")
-    GREEN_2 = colors.HexColor("#CDEBB8")
-    GREEN_3 = colors.HexColor("#A8D98C")
-    RED_1 = colors.HexColor("#FFE9EC")
-    RED_2 = colors.HexColor("#F7C3CB")
-    RED_3 = colors.HexColor("#F09AA5")
+        raise ImportError("PDF export needs scorecard_skins.py and reportlab>=4.0 available in the app environment.") from e
 
     def get_val(key):
         try:
@@ -962,13 +937,6 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
             return f if not np.isnan(f) else np.nan
         except Exception:
             return np.nan
-
-    def clean_text(x):
-        if x is None or str(x) in ("nan", "None", "<NA>"):
-            return "-"
-        return (str(x).replace("—", "-").replace("–", "-").replace("·", "|")
-                .replace("≥", ">=").replace("≤", "<=").replace("…", "...")
-                .replace("’", "'").replace("“", '"').replace("”", '"'))
 
     def safe_file_name(name):
         return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name)).strip("_") or "athlete"
@@ -1002,215 +970,90 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
             return f"{p}th"
         return f"{p}{({1:'st', 2:'nd', 3:'rd'}.get(p % 10, 'th'))}"
 
-    def text_width(s, font="Helvetica-Bold", size=10):
-        return pdfmetrics.stringWidth(str(s), font, size)
+    def clean_text(x):
+        if x is None or str(x) in ("nan", "None", "<NA>"):
+            return "-"
+        return str(x)
 
-    def fit_text(c, text, x, y, max_width, *, align="left", font="Helvetica-Bold", max_size=11, min_size=5.5, fill=TEXT_DARK):
-        value = clean_text(text)
-        size = max_size
-        while size > min_size and text_width(value, font, size) > max_width:
-            size -= 0.25
-        c.setFillColor(fill)
-        c.setFont(font, size)
-        if align == "right":
-            c.drawRightString(x, y, value)
-        elif align == "center":
-            c.drawCentredString(x, y, value)
-        else:
-            c.drawString(x, y, value)
+    def resolve_logo_path():
+        candidates = [
+            Path(os.environ.get('NATS_LOGO_PATH', '')),
+            Path('nationals_logo.png'),
+            Path('nats_logo.png'),
+            Path('assets/nationals_logo.png'),
+            Path('assets/nats_logo.png'),
+            Path('/mnt/data/nationals_logo.png'),
+            Path('/mnt/data/nats_logo.png'),
+        ]
+        for p in candidates:
+            if str(p) and p.exists() and p.is_file():
+                return str(p)
+        return None
 
-    def wrap_text(value, max_chars=18, max_lines=2):
-        value = clean_text(value)
-        if len(value) <= max_chars:
-            return [value]
-        words, lines, cur = value.split(), [], ""
-        for word in words:
-            test = word if not cur else cur + " " + word
-            if len(test) <= max_chars:
-                cur = test
-            else:
-                if cur:
-                    lines.append(cur)
-                cur = word
-            if len(lines) >= max_lines:
-                break
-        if len(lines) < max_lines and cur:
-            lines.append(cur)
-        if len(" ".join(lines)) < len(value) and lines:
-            lines[-1] = lines[-1].rstrip(" .") + "..."
-        return lines[:max_lines]
-
-    def pctl_fill(percentile):
-        if percentile is None or pd.isna(percentile):
-            return NATS_WHITE
-        p = int(max(0, min(100, round(float(percentile)))))
-        if p >= 86:
-            return GREEN_3
-        if p >= 71:
-            return GREEN_2
-        if p >= 56:
-            return GREEN_1
-        if p >= 45:
-            return NATS_WHITE
-        if p >= 30:
-            return RED_1
-        if p >= 15:
-            return RED_2
-        return RED_3
-
-    athlete = clean_text(row.get("athleteName", "Athlete"))
-    pos = clean_text(row.get("Position", "-"))
-    school = clean_text(row.get("School Type", "-"))
-    prog = clean_text(row.get("programming_category", "-"))
-    athlete_group = clean_text(row.get("athlete_group", athlete_group_label(prog)))
-    program_focus = clean_text(row.get("program_focus", program_focus_label(prog)))
-    aq = get_val("athlete_quality_score")
-    pos_aq = get_val("aq_pos_score")
-    pot = get_val("potential_score")
-    report_date = datetime.now().strftime("%-m/%-d/%y") if os.name != "nt" else datetime.now().strftime("%#m/%#d/%y")
+    athlete = clean_text(row.get('athleteName', 'Athlete'))
+    pos = clean_text(row.get('Position', '-'))
+    school = clean_text(row.get('School Type', '-'))
+    athlete_group = clean_text(row.get('athlete_group', athlete_group_label(row.get('programming_category', '-'))))
+    program_focus = clean_text(row.get('program_focus', program_focus_label(row.get('programming_category', '-'))))
+    aq = get_val('athlete_quality_score')
+    pos_aq = get_val('aq_pos_score')
+    pot = get_val('potential_score')
+    report_date = datetime.now().strftime('%-m/%-d/%y') if os.name != 'nt' else datetime.now().strftime('%#m/%#d/%y')
 
     def score_text(v):
-        return "-" if pd.isna(v) else f"{int(round(float(v)))}"
+        return '-' if pd.isna(v) else f"{int(round(float(v)))}"
 
     force_rows = [
-        {"label": "CI", "percentile": pct_from_col("ci_pct_alltime"), "value": raw_num("Concentric Impulse", 1)},
-        {"label": "P1 CI", "percentile": pct_from_col("p1_ci_pct_alltime"), "value": raw_num("P1 Concentric Impulse", 1)},
-        {"label": "CI-100ms", "percentile": pct_from_col("ci100_pct_alltime"), "value": raw_num("Concentric Impulse-100ms", 1)},
-        {"label": "RSI-mod", "percentile": pct_from_col("rsi_pct_alltime"), "value": raw_num("RSI-modified", 3)},
-        {"label": "Pk Pwr/BM", "percentile": pct_from_col("pp_pct_alltime"), "value": raw_num("Peak Power / BM", 1)},
-        {"label": "Jump Ht", "percentile": pct_from_col("jump_height_pct_alltime"), "value": raw_num("Jump Height (Flight Time) in Inches", 2, " in")},
+        {'label': 'CI', 'percentile': pct_from_col('ci_pct_alltime'), 'value': raw_num('Concentric Impulse', 1)},
+        {'label': 'P1 CI', 'percentile': pct_from_col('p1_ci_pct_alltime'), 'value': raw_num('P1 Concentric Impulse', 1)},
+        {'label': 'CI-100ms', 'percentile': pct_from_col('ci100_pct_alltime'), 'value': raw_num('Concentric Impulse-100ms', 1)},
+        {'label': 'RSI-mod', 'percentile': pct_from_col('rsi_pct_alltime'), 'value': raw_num('RSI-modified', 3)},
+        {'label': 'Pk Pwr/BM', 'percentile': pct_from_col('pp_pct_alltime'), 'value': raw_num('Peak Power / BM', 1)},
+        {'label': 'Jump Ht', 'percentile': pct_from_col('jump_height_pct_alltime'), 'value': raw_num('Jump Height (Flight Time) in Inches', 2, ' in')},
     ]
     anthro_rows = [
-        {"label": "Height", "percentile": pct_from_col("height_pct"), "value": fmt_height(get_val("Height"))},
-        {"label": "Bodyweight", "percentile": pool_pct("Mass"), "value": fmt_mass(get_val("Mass"))},
-        {"label": "Wingspan", "percentile": pool_pct("Wingspan"), "value": fmt_wingspan(get_val("Wingspan"))},
-        {"label": "Wing Adv.", "percentile": pct_from_col("wingspan_pct"), "value": fmt_wingspan_adv(get_val("wingspan_advantage"))},
-        {"label": "BW/Ht Pct", "percentile": pct_from_col("bmi_pct"), "value": pct_sfx_local(pct_from_col("bmi_pct"))},
+        {'label': 'Height', 'percentile': pct_from_col('height_pct'), 'value': fmt_height(get_val('Height'))},
+        {'label': 'Bodyweight', 'percentile': pool_pct('Mass'), 'value': fmt_mass(get_val('Mass'))},
+        {'label': 'Wingspan', 'percentile': pool_pct('Wingspan'), 'value': fmt_wingspan(get_val('Wingspan'))},
+        {'label': 'Wing Adv.', 'percentile': pct_from_col('wingspan_pct'), 'value': fmt_wingspan_adv(get_val('wingspan_advantage'))},
+        {'label': 'BW/Ht Pct', 'percentile': pct_from_col('bmi_pct'), 'value': pct_sfx_local(pct_from_col('bmi_pct'))},
     ]
     sprint_rows = []
-    if pd.notna(get_val("30yd Split")):
-        sprint_rows.append({"label": "30yd", "percentile": pct_from_col("sprint_pct_alltime"), "value": raw_num("30yd Split", 3, "s")})
-    if pd.notna(get_val("10yd Split")):
-        sprint_rows.append({"label": "10yd", "percentile": pool_pct("10yd Split", inverse=True), "value": raw_num("10yd Split", 3, "s")})
-    if pd.notna(get_val("20yd Split")):
-        sprint_rows.append({"label": "20yd", "percentile": pool_pct("20yd Split", inverse=True), "value": raw_num("20yd Split", 3, "s")})
+    if pd.notna(get_val('30yd Split')):
+        sprint_rows.append({'label': '30yd', 'percentile': pct_from_col('sprint_pct_alltime'), 'value': raw_num('30yd Split', 3, 's')})
+    if pd.notna(get_val('10yd Split')):
+        sprint_rows.append({'label': '10yd', 'percentile': pool_pct('10yd Split', inverse=True), 'value': raw_num('10yd Split', 3, 's')})
+    if pd.notna(get_val('20yd Split')):
+        sprint_rows.append({'label': '20yd', 'percentile': pool_pct('20yd Split', inverse=True), 'value': raw_num('20yd Split', 3, 's')})
 
-    buffer = _BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-
-    # Outer frame and header.
-    margin = 18
-    c.setFillColor(NATS_WHITE)
-    c.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(2.0)
-    c.rect(margin, margin, PAGE_W - 2 * margin, PAGE_H - 2 * margin, stroke=1, fill=0)
-
-    top = PAGE_H - 28
-    left = 46
-    right = PAGE_W - 46
-    head_cx, head_cy, head_r = 64, top - 38, 28
-    initials = "".join(part[:1] for part in athlete.split()[:2]).upper()
-    c.setFillColor(HEADSHOT_GRAY)
-    c.setStrokeColor(colors.HexColor("#BDBDBD"))
-    c.circle(head_cx, head_cy, head_r, stroke=1, fill=1)
-    fit_text(c, initials, head_cx, head_cy - 6, head_r * 1.45, align="center", max_size=16, min_size=10, fill=colors.black)
-
-    fit_text(c, f"{athlete.upper()}, {pos.upper()}", PAGE_W / 2, top - 26, 300, align="center", max_size=15, min_size=10, fill=colors.black)
-    fit_text(c, f"{sel_yr_display} | {school} | Draft Scouting", PAGE_W / 2, top - 49, 300, align="center", max_size=9.5, min_size=7, fill=colors.black)
-    # Stylized W placeholder; avoids needing a logo file.
-    fit_text(c, "W", right - 26, top - 29, 60, align="center", font="Helvetica-BoldOblique", max_size=34, min_size=20, fill=NATS_RED)
-    fit_text(c, report_date, right - 20, top - 67, 70, align="center", max_size=11, min_size=8, fill=colors.black)
-
-    def draw_metric_card(x, y, w, h, label, value, percentile=None):
-        label_w = w * 0.54
-        c.setStrokeColor(colors.black)
-        c.setLineWidth(0.8)
-        c.setFillColor(NATS_NAVY)
-        c.rect(x, y, label_w, h, stroke=1, fill=1)
-        c.setFillColor(pctl_fill(percentile))
-        c.rect(x + label_w, y, w - label_w, h, stroke=1, fill=1)
-        fit_text(c, label, x + label_w / 2, y + h / 2 - 4, label_w - 8, align="center", max_size=9, min_size=5.0, fill=NATS_WHITE)
-        value_lines = wrap_text(value, max_chars=max(8, int((w - label_w - 8) / 5.4)), max_lines=2)
-        if len(value_lines) == 1:
-            fit_text(c, value_lines[0], x + label_w + (w - label_w) / 2, y + h / 2 - 4, w - label_w - 8, align="center", max_size=10.5, min_size=5.0, fill=colors.black)
-        else:
-            fit_text(c, value_lines[0], x + label_w + (w - label_w) / 2, y + h / 2 + 2, w - label_w - 8, align="center", max_size=7.4, min_size=4.6, fill=colors.black)
-            fit_text(c, value_lines[1], x + label_w + (w - label_w) / 2, y + h / 2 - 9, w - label_w - 8, align="center", max_size=7.4, min_size=4.6, fill=colors.black)
-
-    cards = [
-        ("Capacity", score_text(aq), aq),
-        ("Pos. Capacity", score_text(pos_aq), pos_aq),
-        ("Potential to Gain", score_text(pot), pot),
-        ("Athlete Group", athlete_group, None),
-        ("Program Focus", program_focus, None),
-    ]
-    card_x, card_top = 46, top - 105
-    card_gap = 9
-    card_w = (PAGE_W - 92 - 2 * card_gap) / 3
-    card_h = 28
-    for i, (lbl, val, pct) in enumerate(cards):
-        col = i % 3
-        row_i = i // 3
-        x = card_x + col * (card_w + card_gap)
-        y = card_top - row_i * (card_h + 8)
-        draw_metric_card(x, y, card_w, card_h, lbl, val, pct)
-
-    def draw_panel(y_top, title, rows):
-        x, w = 46, PAGE_W - 92
-        row_h = 27
-        h = max(82, 37 + len(rows) * row_h)
-        y = y_top - h
-        c.setStrokeColor(colors.black)
-        c.setLineWidth(1.0)
-        c.rect(x, y, w, h, stroke=1, fill=0)
-        fit_text(c, title, x + w / 2, y_top - 20, w - 20, align="center", max_size=15, min_size=10, fill=colors.black)
-
-        inner_x = x + 10
-        inner_w = w - 20
-        label_w = 78
-        value_w = 62
-        track_x = inner_x + label_w + 8
-        track_w = inner_w - label_w - value_w - 18
-        row_y = y_top - 50
-        for r in rows:
-            p = r.get("percentile")
-            p_num = 50 if p is None or pd.isna(p) else int(max(0, min(100, round(float(p)))))
-            fit_text(c, r["label"], inner_x + label_w, row_y + 9, label_w, align="right", font="Helvetica-Bold", max_size=8.5, min_size=5.0, fill=colors.black)
-            # track
-            c.setFillColor(TRACK_GRAY)
-            c.setStrokeColor(colors.HexColor("#B8C0CC"))
-            c.setLineWidth(0.4)
-            c.rect(track_x, row_y + 8, track_w, 12, stroke=1, fill=1)
-            c.setFillColor(pctl_fill(p))
-            c.rect(track_x, row_y + 8, track_w * p_num / 100, 12, stroke=0, fill=1)
-            # median line
-            c.setStrokeColor(GRID_GRAY)
-            c.setLineWidth(0.6)
-            c.line(track_x + track_w / 2, row_y + 4, track_x + track_w / 2, row_y + 24)
-            # marker circle
-            marker_x = track_x + track_w * p_num / 100
-            c.setFillColor(NATS_WHITE)
-            c.setStrokeColor(colors.black)
-            c.setLineWidth(0.8)
-            c.circle(marker_x, row_y + 14, 3.6, stroke=1, fill=1)
-            fit_text(c, "-" if p is None else f"{int(round(float(p)))} pctl", marker_x, row_y - 2, 42, align="center", max_size=6.2, min_size=4.8, fill=colors.black)
-            fit_text(c, r.get("value", "-"), inner_x + inner_w, row_y + 9, value_w, align="right", font="Helvetica-Bold", max_size=8, min_size=5, fill=colors.black)
-            c.setStrokeColor(colors.HexColor("#E5E7EB"))
-            c.setLineWidth(0.3)
-            c.line(inner_x, row_y - 5, inner_x + inner_w, row_y - 5)
-            row_y -= row_h
-        return y - 14
-
-    y = card_top - 2 * (card_h + 8) - 16
-    y = draw_panel(y, "Force Plate", force_rows)
-    y = draw_panel(y, "Anthropometrics", anthro_rows)
+    scorecard_data = {
+        'player_name': athlete,
+        'position': pos,
+        'context': f"{sel_yr_display} | {school} | Draft Scouting",
+        'subtitle': f"{sel_yr_display} - {pos} - {school}",
+        'banner_label': 'WASHINGTON NATIONALS - DRAFT SCOUTING',
+        'report_date': report_date,
+        'capacity': score_text(aq),
+        'headshot_path': None,
+        'logo_path': resolve_logo_path(),
+        'summary_cards': [
+            {'label': 'Capacity', 'value': score_text(aq), 'percentile': aq, 'filled': True},
+            {'label': 'Pos. Capacity', 'value': score_text(pos_aq), 'percentile': pos_aq},
+            {'label': 'Potential to Gain', 'value': score_text(pot), 'percentile': pot},
+            {'label': 'Athlete Group', 'value': athlete_group},
+            {'label': 'Program Focus', 'value': program_focus},
+        ],
+        'sections': [
+            {'title': 'Force Plate', 'rows': force_rows},
+            {'title': 'Anthropometrics', 'rows': anthro_rows},
+        ],
+    }
     if sprint_rows:
-        y = draw_panel(y, "Sprint", sprint_rows)
+        scorecard_data['sections'].append({'title': 'Sprint', 'rows': sprint_rows})
 
-    c.showPage()
-    c.save()
-    return buffer.getvalue(), safe_file_name(athlete)
+    pdf_bytes = render_scorecard_option_1(scorecard_data)
+    return pdf_bytes, safe_file_name(athlete)
+
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 def check_password():
@@ -1220,7 +1063,7 @@ def check_password():
         padding:36px 32px;box-shadow:0 4px 24px rgba(17,34,90,0.10);border-top:4px solid {RED}">
         <p style="font-size:10px;font-weight:600;letter-spacing:0.2em;color:{RED};margin-bottom:6px">
             WASHINGTON NATIONALS · DRAFT SCOUTING</p>
-        <h2 style="font-family:'Playfair Display',serif;color:{NAV};margin:0 0 20px 0;font-size:22px">
+        <h2 style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;color:{NAV};margin:0 0 20px 0;font-size:22px">
             Athlete Scorecard</h2>
     </div>
     """, unsafe_allow_html=True)
@@ -1743,7 +1586,7 @@ with tab_card:
             <div>
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:{RED};margin:0 0 4px 0">
                     WASHINGTON NATIONALS · ATHLETE SCORECARD</p>
-                <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
+                <h2 style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
                     {sel_ath}</h2>
                 <span style="font-size:12px;color:{SLATE}">{sel_yr_display} · {pos_str} · {sch_str}</span><br>
                 <span style="display:inline-block;margin-top:8px;background:{prog_color};
@@ -1753,7 +1596,7 @@ with tab_card:
             </div>
             <div style="text-align:right">
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:{SLATE};margin:0">OVERALL RANK</p>
-                <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
+                <p style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:36px;font-weight:900;
                     color:{RED};margin:0">{"#"+str(rnk_val) if rnk_val else "—"}</p>
                 <p style="font-size:11px;color:#9AAAC0;margin:0">of {pool_n} athletes (all years)</p>
             </div>
@@ -1773,7 +1616,7 @@ with tab_card:
             box-shadow:0 4px 16px rgba(186,12,47,0.12)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{RED};margin-bottom:8px">★ CAPACITY SCORE</div>
-            <div style="font-family:'Playfair Display',serif;font-size:64px;
+            <div style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:64px;
                 font-weight:900;color:{RED};line-height:1">
                 {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
             <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">{aq_pct_str}</div>
@@ -1804,7 +1647,7 @@ with tab_card:
             box-shadow:0 4px 16px rgba(17,34,90,0.08)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{SLATE};margin-bottom:8px">ATHLETE GROUP</div>
-            <div style="font-family:'Playfair Display',serif;font-size:clamp(18px,1.6vw,24px);
+            <div style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:clamp(18px,1.6vw,24px);
                 font-weight:900;color:{NAV};line-height:1.15;margin-bottom:10px;white-space:normal;overflow-wrap:normal">
                 {athlete_group_val}</div>
             <div style="font-size:11px;color:{SLATE};line-height:1.45">
@@ -1824,7 +1667,7 @@ with tab_card:
             box-shadow:0 4px 16px rgba(226,193,136,0.16)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{SLATE};margin-bottom:8px">POTENTIAL TO GAIN</div>
-            <div style="font-family:'Playfair Display',serif;font-size:54px;
+            <div style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:54px;
                 font-weight:900;color:{GOLD};line-height:1">
                 {str(int(round(pot_val))) if pd.notna(pot_val) else "—"}</div>
             <div style="font-size:11px;color:{SLATE};margin-top:6px;line-height:1.35">
