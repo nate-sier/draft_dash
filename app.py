@@ -1067,9 +1067,31 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
             return "#B7C8CC"
         return "#7892B7"
 
-    def short_value(value, max_len=18):
+    def wrap_pdf_text(value, max_chars=26, max_lines=2):
+        """Word-wrap short PDF card values without cutting off the meaning."""
         v = clean_text(value)
-        return v if len(v) <= max_len else v[:max_len-1] + "..."
+        if len(v) <= max_chars:
+            return [v]
+        words = v.split()
+        lines = []
+        cur = ""
+        for word in words:
+            test = word if not cur else cur + " " + word
+            if len(test) <= max_chars:
+                cur = test
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = word
+            if len(lines) >= max_lines:
+                break
+        if len(lines) < max_lines and cur:
+            lines.append(cur)
+        # If there is still leftover text, make the final line end cleanly with ellipsis.
+        joined = " ".join(lines)
+        if len(joined) < len(v) and lines:
+            lines[-1] = lines[-1].rstrip(" .") + "..."
+        return lines[:max_lines]
 
     def draw_metric_card(x, y, w, h, label, value, top_color, dark=False):
         fill = NAV_DARK if dark else "#FFFFFF"
@@ -1079,7 +1101,15 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         label_col = "#DDE5F1" if dark else MUTED
         val_col = "#FFFFFF" if dark else NAV_DARK
         text(x + 8, y + 18, label.upper(), 6.2, label_col, bold=True)
-        text(x + 8, y + h - 12, short_value(value, 16), 13.0, val_col, bold=True)
+
+        value_clean = clean_text(value)
+        max_chars = max(14, int((w - 16) / 5.2))
+        value_lines = wrap_pdf_text(value_clean, max_chars=max_chars, max_lines=2)
+        if len(value_lines) == 1:
+            text(x + 8, y + h - 12, value_lines[0], 13.0, val_col, bold=True)
+        else:
+            text(x + 8, y + h - 22, value_lines[0], 9.8, val_col, bold=True)
+            text(x + 8, y + h - 10, value_lines[1], 9.8, val_col, bold=True)
 
     def draw_section_header(x, y, w, title):
         text(x, y, title, 15, NAV_DARK, bold=True)
@@ -1131,22 +1161,25 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     text(517, 75, "-" if pd.isna(aq) else f"{int(round(aq))}", 27, RED_MAIN, bold=True, align="center")
     text(517, 96, "CAPACITY", 6.2, MUTED, bold=True, align="center")
 
-    # Score cards in a compact 2-row grid
-    cards = [
+    # Score cards in a compact 2-row grid.
+    # The group/focus cards are intentionally wider so labels like
+    # "Low CI / Foundational" and "Foundational Strength/Capacity" do not get cut off.
+    top_cards = [
         ("Capacity", "-" if pd.isna(aq) else f"{aq:.0f}", RED_MAIN, True),
         ("Pos. Capacity", "-" if pd.isna(pos_aq) else f"{pos_aq:.0f}", NAV_MID, False),
         ("Potential to Gain", "-" if pd.isna(pot) else f"{pot:.0f}", GOLD_MAIN, False),
+    ]
+    bottom_cards = [
         ("Athlete Group", athlete_group, RED_MAIN, False),
         ("Program Focus", program_focus, GREEN_MAIN if prog == "High-High" else GOLD_MAIN if prog == "High-Low" else RED_MAIN, False),
     ]
     card_x, card_y, card_w, card_h = 28, 137, 174, 50
     gap_x, gap_y = 13, 10
-    for i, (lbl, val, col, dark) in enumerate(cards):
-        row_i = i // 3
-        col_i = i % 3
-        # center the last row of two cards a bit
-        x_shift = 93 if row_i == 1 else 0
-        draw_metric_card(card_x + x_shift + col_i * (card_w + gap_x), card_y + row_i * (card_h + gap_y), card_w, card_h, lbl, val, col, dark=dark)
+    for i, (lbl, val, col, dark) in enumerate(top_cards):
+        draw_metric_card(card_x + i * (card_w + gap_x), card_y, card_w, card_h, lbl, val, col, dark=dark)
+    bottom_w = (556 - gap_x) / 2
+    for i, (lbl, val, col, dark) in enumerate(bottom_cards):
+        draw_metric_card(card_x + i * (bottom_w + gap_x), card_y + card_h + gap_y, bottom_w, card_h, lbl, val, col, dark=dark)
 
     force_rows = [
         ("CI", pct_from_col("ci_pct_alltime"), raw_num("Concentric Impulse", 1)),
@@ -1761,7 +1794,7 @@ with tab_card:
     """, unsafe_allow_html=True)
 
     # ── Hero row: Capacity | Pos. gauge | Athlete Group | Potential to Gain ──
-    h1, h2, h3, h4 = st.columns([1,1,1.05,1.05])
+    h1, h2, h3, h4 = st.columns([1,1,1.25,1.05])
 
     with h1:
         bar_w  = min(100, max(0, float(aq_val or 0)))
@@ -1803,13 +1836,13 @@ with tab_card:
             box-shadow:0 4px 16px rgba(17,34,90,0.08)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{SLATE};margin-bottom:8px">ATHLETE GROUP</div>
-            <div style="font-family:'Playfair Display',serif;font-size:26px;
-                font-weight:900;color:{NAV};line-height:1.1;margin-bottom:10px">
+            <div style="font-family:'Playfair Display',serif;font-size:clamp(18px,1.6vw,24px);
+                font-weight:900;color:{NAV};line-height:1.15;margin-bottom:10px;white-space:normal;overflow-wrap:normal">
                 {athlete_group_val}</div>
             <div style="font-size:11px;color:{SLATE};line-height:1.45">
                 CI: <strong style="color:{NAV}">{fmt(ci_val,1)}</strong><br>
                 P1 CI: <strong style="color:{NAV}">{fmt(sf(row.get('P1 Concentric Impulse')),1)}</strong><br>
-                Focus: <strong style="color:{prog_color}">{program_focus_val}</strong>
+                Focus:<br><strong style="color:{prog_color};font-size:12px;line-height:1.25">{program_focus_val}</strong>
             </div>
         </div>
         """, unsafe_allow_html=True)
