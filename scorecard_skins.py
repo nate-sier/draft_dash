@@ -1,3 +1,4 @@
+# VERSION: option1_bottom_cards_fixed_v46
 """Portable Nationals/defensive scorecard skins.
 
 Use this module inside another app by passing the existing scorecard data into
@@ -257,70 +258,6 @@ def _draw_option_1_header(c: canvas.Canvas, data: dict[str, Any]) -> float:
     return bottom - 10
 
 
-
-def _wrap_to_width(text: Any, variant: str, size: float, max_width: float, max_lines: int = 2) -> list[str]:
-    """Wrap short card text to fit a box. Keeps the PDF Option 1 layout clean."""
-    value = str(text)
-    if _text_width(value, variant, size) <= max_width:
-        return [value]
-    words = value.replace("/", "/ ").replace("-", "- ").split()
-    lines: list[str] = []
-    cur = ""
-    for word in words:
-        candidate = word if not cur else f"{cur} {word}"
-        candidate = candidate.replace("/ ", "/").replace("- ", "-")
-        if _text_width(candidate, variant, size) <= max_width:
-            cur = candidate
-        else:
-            if cur:
-                lines.append(cur)
-            cur = word.replace("/ ", "/").replace("- ", "-")
-        if len(lines) >= max_lines:
-            break
-    if len(lines) < max_lines and cur:
-        lines.append(cur)
-    if not lines:
-        lines = [value]
-    return lines[:max_lines]
-
-
-def _fit_wrapped_text(
-    c: canvas.Canvas,
-    text: Any,
-    x: float,
-    y_center: float,
-    max_width: float,
-    *,
-    align: str = "center",
-    variant: str = "bold",
-    max_size: float = 10,
-    min_size: float = 5,
-    fill: colors.Color = TEXT_DARK,
-    max_lines: int = 2,
-    leading_mult: float = 1.08,
-) -> None:
-    value = str(text)
-    size = max_size
-    while size > min_size:
-        lines = _wrap_to_width(value, variant, size, max_width, max_lines=max_lines)
-        if all(_text_width(line, variant, size) <= max_width for line in lines):
-            break
-        size -= 0.25
-    lines = _wrap_to_width(value, variant, size, max_width, max_lines=max_lines)
-    c.setFillColor(fill)
-    _set_font(c, variant, size)
-    leading = size * leading_mult
-    start_y = y_center + ((len(lines) - 1) * leading / 2.0) - size * 0.35
-    for i, line in enumerate(lines):
-        yy = start_y - i * leading
-        if align == "right":
-            c.drawRightString(x, yy, line)
-        elif align == "center":
-            c.drawCentredString(x, yy, line)
-        else:
-            c.drawString(x, yy, line)
-
-
 def _draw_option_1_metric_card(
     c: canvas.Canvas,
     x: float,
@@ -332,61 +269,125 @@ def _draw_option_1_metric_card(
     value: str,
     percentile: int | float | None = None,
 ) -> None:
-    label_w = w * 0.54
+    """Option 1 top-card renderer with hard-fit long bottom values."""
+    label_clean = str(label).strip()
+    value_clean = str(value).strip()
+    is_long_bottom_card = label_clean.lower() in {"athlete group", "program focus"}
+
+    label_w = w * (0.46 if is_long_bottom_card else 0.54)
+
     c.setStrokeColor(colors.black)
     c.setLineWidth(0.8)
     c.setFillColor(NATS_NAVY)
     c.rect(x, y, label_w, h, stroke=1, fill=1)
     c.setFillColor(_pctl_fill(percentile))
     c.rect(x + label_w, y, w - label_w, h, stroke=1, fill=1)
+
     _fit_text(
         c,
-        label,
+        label_clean,
         x + label_w / 2,
         y + h / 2 - 3,
         label_w - 8,
         align="center",
-        max_size=9,
-        min_size=5.5,
+        max_size=8.6 if is_long_bottom_card else 9,
+        min_size=5,
         fill=NATS_WHITE,
     )
-    _fit_wrapped_text(
+
+    value_x = x + label_w
+    value_w = w - label_w
+
+    if is_long_bottom_card:
+        manual_lines = {
+            "low ci / foundational": ["Low CI /", "Foundational"],
+            "foundational strength/capacity": ["Foundational", "Strength/Capacity"],
+            "high ci - low p1": ["High CI -", "Low P1"],
+            "high ci - high p1": ["High CI -", "High P1"],
+            "p1 development": ["P1", "Development"],
+            "advanced": ["Advanced"],
+            "unclassified": ["Unclassified"],
+        }
+        lines = manual_lines.get(value_clean.lower())
+        if lines is None:
+            words, lines, cur = value_clean.split(), [], ""
+            for word in words:
+                test = word if not cur else f"{cur} {word}"
+                if len(test) <= 18:
+                    cur = test
+                else:
+                    if cur:
+                        lines.append(cur)
+                    cur = word
+                if len(lines) == 2:
+                    break
+            if cur and len(lines) < 2:
+                lines.append(cur)
+            lines = lines[:2] or ["-"]
+
+        c.setFillColor(TEXT_DARK)
+        _set_font(c, "bold", 6.2)
+        if len(lines) == 1:
+            c.drawCentredString(value_x + value_w / 2, y + h / 2 - 2.5, lines[0])
+        else:
+            c.drawCentredString(value_x + value_w / 2, y + h / 2 + 3.4, lines[0])
+            c.drawCentredString(value_x + value_w / 2, y + h / 2 - 7.2, lines[1])
+        return
+
+    _fit_text(
         c,
-        value,
-        x + label_w + (w - label_w) / 2,
-        y + h / 2,
-        w - label_w - 8,
+        value_clean,
+        value_x + value_w / 2,
+        y + h / 2 - 3,
+        value_w - 8,
         align="center",
-        max_size=10.5,
-        min_size=5.2,
-        max_lines=2,
+        max_size=11,
+        min_size=6,
     )
 
 
 def _draw_option_1_summary_cards(c: canvas.Canvas, y_top: float, cards: list[dict[str, Any]]) -> float:
+    """Draw Option 1 score summary: 3 cards top, 2 wider cards bottom."""
     x = 46
-    w = PAGE_W - 92
-    gap = 9
-    cols = 3
-    card_w = (w - gap * (cols - 1)) / cols
+    total_w = PAGE_W - 92
+    gap = 14
     card_h = 28
-    for i, card in enumerate(cards):
-        col = i % cols
-        row = i // cols
-        cx = x + col * (card_w + gap)
-        cy = y_top - card_h - row * (card_h + 8)
+
+    top_cards = cards[:3]
+    bottom_cards = cards[3:5]
+
+    top_w = (total_w - 2 * gap) / 3
+    y1 = y_top - card_h
+    for i, card in enumerate(top_cards):
         _draw_option_1_metric_card(
             c,
-            cx,
-            cy,
-            card_w,
+            x + i * (top_w + gap),
+            y1,
+            top_w,
             card_h,
             label=str(card["label"]),
             value=str(card.get("value", "-")),
             percentile=card.get("percentile"),
         )
-    rows = (len(cards) + cols - 1) // cols
-    return y_top - rows * (card_h + 8) - 6
+
+    if bottom_cards:
+        bottom_gap = 16
+        bottom_w = (total_w - bottom_gap) / 2
+        y2 = y1 - card_h - 8
+        for i, card in enumerate(bottom_cards):
+            _draw_option_1_metric_card(
+                c,
+                x + i * (bottom_w + bottom_gap),
+                y2,
+                bottom_w,
+                card_h,
+                label=str(card["label"]),
+                value=str(card.get("value", "-")),
+                percentile=card.get("percentile"),
+            )
+        return y2 - 14
+
+    return y1 - 14
 
 
 def _draw_option_1_panel(
