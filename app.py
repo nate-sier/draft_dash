@@ -1,4 +1,5 @@
-# VERSION: capacity_labels_v25 -- Capacity labels changed to Capacity
+# VERSION: stakeholder_feedback_v27 -- potential to gain, athlete group/program focus, cleaner capacity language
+# VERSION: bodyweight_labels_v26 -- display label Mass changed to Bodyweight
 # VERSION: happy_medium_v21 -- development projection moved into right scorecard column
 # VERSION: compact_medians_v9 -- leaderboard medians compact; removed BW/Ht percentile median
 # VERSION: athlete_scorecard_profile_bars_less_cramped_v8 -- profile bars moved full-width and spacing fixed
@@ -101,6 +102,26 @@ def programming_category(ci, p1_ci):
         return "High-High" if p1_ci >= 195 else "High-Low"
     return "Low"
 
+
+def athlete_group_label(category):
+    """User-facing athlete group based on CI/P1 CI buckets."""
+    return {
+        "High-High": "High CI - High P1",
+        "High-Low": "High CI - Low P1",
+        "Low": "Low CI / Foundational",
+        "Unclassified": "Unclassified",
+    }.get(str(category), "Unclassified")
+
+
+def program_focus_label(category):
+    """User-facing training/development focus tied to athlete group."""
+    return {
+        "High-High": "Advanced",
+        "High-Low": "P1 Development",
+        "Low": "Foundational Strength/Capacity",
+        "Unclassified": "Unclassified",
+    }.get(str(category), "Unclassified")
+
 PROG_COLORS = {
     "High-High":    "#4CAF82",
     "High-Low":     "#E2C188",
@@ -108,9 +129,10 @@ PROG_COLORS = {
     "Unclassified": "#9AAAC0",
 }
 PROG_DESC = {
-    "High-High": "CI ≥ 285 & P1 CI ≥ 195 — advanced program",
-    "High-Low":  "CI ≥ 285 & P1 CI < 195 — high base, develop P1",
-    "Low":       "CI < 285 — foundational program",
+    "High-High": "High CI and high P1 — advanced focus",
+    "High-Low":  "High CI with lower P1 — prioritize P1 development",
+    "Low":       "Lower CI — foundational strength/capacity focus",
+    "Unclassified": "Insufficient CI/P1 data",
 }
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
@@ -476,13 +498,13 @@ def build_scores(_df,
     for yr, idx in df.groupby("Year").groups.items():
         df.loc[idx, "aq_score_yr"] = scaled_0_100(df.loc[idx, "aq_yr_raw"].values)
 
-    # ── Potential Score ───────────────────────────────────────────────────────
+    # ── Potential to Gain Score ───────────────────────────────────────────────────────
     df["pp_pct"]      = df["pp_pct_alltime"]
     df["height_pct"]  = pct_rank(df["Height"])
     df["bmi_raw"]     = safe_div(df["Mass"] * 2.20462, df["Height"] / 2.54)
     df["bmi_pct"]     = pct_rank(df["bmi_raw"])
     # For potential, lower BW/Ht percentile = more projectable frame.
-    # Keep bmi_pct as the displayed BW/Ht percentile, but invert it for Potential Score only.
+    # Keep bmi_pct as the displayed BW/Ht percentile, but invert it for Potential to Gain Score only.
     df["bwht_potential_pct"] = 100 - df["bmi_pct"]
     school_score_map  = {"High School": 100, "Junior College": 75, "4-Year College": 60}
     df["school_score"] = df["School Type"].map(school_score_map).fillna(50)
@@ -508,15 +530,19 @@ def build_scores(_df,
         return sum(v*w for _, (v, w) in components.items() if v is not None) / total_w * 100
 
     df["potential_raw"]   = df.apply(pot_score, axis=1)
-    df["potential_score"] = scaled_0_100(df["potential_raw"].values)
+    # Display Potential to Gain as a percentile-like 0-100 score so interpretation is clearer:
+    # 50 is roughly the middle of the loaded player pool; higher = more room/profile to add capacity.
+    df["potential_score"] = pct_rank(df["potential_raw"])
     df["potential_score_yr"] = np.nan
     for yr, idx in df.groupby("Year").groups.items():
-        df.loc[idx, "potential_score_yr"] = scaled_0_100(df.loc[idx, "potential_raw"].values)
+        df.loc[idx, "potential_score_yr"] = pct_rank(df.loc[idx, "potential_raw"])
 
     df["programming_category"] = df.apply(
         lambda r: programming_category(
             r.get("Concentric Impulse", np.nan),
             r.get("P1 Concentric Impulse", np.nan)), axis=1)
+    df["athlete_group"] = df["programming_category"].apply(athlete_group_label)
+    df["program_focus"] = df["programming_category"].apply(program_focus_label)
 
     df["overall_rank"] = np.nan
     for yr, idx in df.groupby("Year").groups.items():
@@ -759,7 +785,7 @@ def make_radar(row, label="Athlete", is_pitcher=False):
 
     anthro_rows = [
         ("Height", pct("height_pct"), fmt_height(val("Height"))),
-        ("Mass", pct("mass_pct_alltime", pct("bmi_pct", 50)), fmt_mass(val("Mass"))),
+        ("Bodyweight", pct("mass_pct_alltime", pct("bmi_pct", 50)), fmt_mass(val("Mass"))),
         ("Wingspan", pct("wingspan_pct"), fmt_wingspan(val("Wingspan"))),
         ("BW/Ht", pct("bmi_pct"), pct_sfx(pct("bmi_pct")) if pd.notna(pct("bmi_pct")) else "—"),
     ]
@@ -967,6 +993,8 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     pos = clean_text(row.get("Position", "-"))
     school = clean_text(row.get("School Type", "-"))
     prog = clean_text(row.get("programming_category", "-"))
+    athlete_group = clean_text(row.get("athlete_group", athlete_group_label(prog)))
+    program_focus = clean_text(row.get("program_focus", program_focus_label(prog)))
 
     aq = get_val("athlete_quality_score")
     pos_aq = get_val("aq_pos_score")
@@ -1107,9 +1135,9 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     cards = [
         ("Capacity", "-" if pd.isna(aq) else f"{aq:.0f}", RED_MAIN, True),
         ("Pos. Capacity", "-" if pd.isna(pos_aq) else f"{pos_aq:.0f}", NAV_MID, False),
-        ("Potential", "-" if pd.isna(pot) else f"{pot:.0f}", GOLD_MAIN, False),
-        ("CI Tier", ci_tier_label(ci), RED_MAIN, False),
-        ("Program", prog, GREEN_MAIN if prog == "High-High" else GOLD_MAIN if prog == "High-Low" else RED_MAIN, False),
+        ("Potential to Gain", "-" if pd.isna(pot) else f"{pot:.0f}", GOLD_MAIN, False),
+        ("Athlete Group", athlete_group, RED_MAIN, False),
+        ("Program Focus", program_focus, GREEN_MAIN if prog == "High-High" else GOLD_MAIN if prog == "High-Low" else RED_MAIN, False),
     ]
     card_x, card_y, card_w, card_h = 28, 137, 174, 50
     gap_x, gap_y = 13, 10
@@ -1130,7 +1158,7 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     ]
     anthro_rows = [
         ("Height", pct_from_col("height_pct"), fmt_height(get_val("Height"))),
-        ("Mass", pool_pct("Mass"), fmt_mass(get_val("Mass"))),
+        ("Bodyweight", pool_pct("Mass"), fmt_mass(get_val("Mass"))),
         ("Wingspan", pool_pct("Wingspan"), fmt_wingspan(get_val("Wingspan"))),
         ("Wing Adv.", pct_from_col("wingspan_pct"), fmt_wingspan_adv(get_val("wingspan_advantage"))),
         ("BW/Ht Pct", pct_from_col("bmi_pct"), pct_sfx_local(pct_from_col("bmi_pct"))),
@@ -1285,7 +1313,7 @@ with tab_board:
 
     # Create display/filter columns in the units scouts actually want to see.
     df_lb["Height_in"] = pd.to_numeric(df_lb.get("Height"), errors="coerce") / 2.54
-    df_lb["Mass_lbs"] = pd.to_numeric(df_lb.get("Mass"), errors="coerce") * 2.20462
+    df_lb["Bodyweight_lbs"] = pd.to_numeric(df_lb.get("Mass"), errors="coerce") * 2.20462
     df_lb["SeatedHeight_in"] = pd.to_numeric(df_lb.get("Seated Height"), errors="coerce") / 2.54
     df_lb["Wingspan_in"] = pd.to_numeric(df_lb.get("Wingspan"), errors="coerce") / 2.54
     df_lb["Wing_Adv_in"] = pd.to_numeric(df_lb.get("wingspan_advantage"), errors="coerce") / 2.54
@@ -1302,7 +1330,7 @@ with tab_board:
         ("Jump Height (Flight Time) in Inches", "Jump Height", 2, " in", "Force Plate"),
         # Anthropometrics shown in the leaderboard
         ("Height_in", "Height", 1, " in", "Anthropometrics"),
-        ("Mass_lbs", "Mass", 1, " lbs", "Anthropometrics"),
+        ("Bodyweight_lbs", "Bodyweight", 1, " lbs", "Anthropometrics"),
         ("Wingspan_in", "Wingspan", 1, " in", "Anthropometrics"),
         ("Wing_Adv_in", "Wingspan Adv.", 1, " in", "Anthropometrics"),
         ("BW_Ht_Pct", "BW/Ht Pct", 0, "th", "Anthropometrics"),
@@ -1349,7 +1377,7 @@ with tab_board:
             "Capacity Score", "Pos. Capacity",
             "CI", "P1 Conc. Impulse", "CI-100ms", "RSI-modified", "Peak Power / BM",
             "Jump Height",
-            "Height", "Mass", "Wingspan", "Wingspan Adv.", "BW/Ht Pct",
+            "Height", "Bodyweight", "Wingspan", "Wingspan Adv.", "BW/Ht Pct",
         ]
         sort_by = st.selectbox("Sort by", sort_options, key="lb_sort")
 
@@ -1448,7 +1476,7 @@ with tab_board:
         "Peak Power / BM": "Peak Power / BM",
         "Jump Height": "Jump Height (Flight Time) in Inches",
         "Height": "Height_in",
-        "Mass": "Mass_lbs",
+        "Bodyweight": "Bodyweight_lbs",
         "Wingspan": "Wingspan_in",
         "Wingspan Adv.": "Wing_Adv_in",
         "BW/Ht Pct": "BW_Ht_Pct",
@@ -1500,6 +1528,24 @@ with tab_board:
             unsafe_allow_html=True,
         )
 
+        with st.expander("Cohort medians: Pitchers vs Position Players", expanded=False):
+            cohort_base = dff.copy()
+            cohort_base["Cohort"] = np.where(cohort_base["pos_group"] == "Pitcher", "Pitcher", "Position Player")
+            cohort_rows = []
+            for cohort, sub in cohort_base.groupby("Cohort"):
+                cohort_rows.append({
+                    "Cohort": cohort,
+                    "N": int(len(sub)),
+                    "Median Capacity": round(pd.to_numeric(sub["athlete_quality_score"], errors="coerce").median(), 1),
+                    "Median Potential to Gain": round(pd.to_numeric(sub["potential_score"], errors="coerce").median(), 1),
+                    "Median CI": round(pd.to_numeric(sub["Concentric Impulse"], errors="coerce").median(), 1),
+                    "Median P1 CI": round(pd.to_numeric(sub["P1 Concentric Impulse"], errors="coerce").median(), 1),
+                    "Median RSI-mod": round(pd.to_numeric(sub["RSI-modified"], errors="coerce").median(), 3),
+                    "Median Bodyweight": round(pd.to_numeric(sub["Bodyweight_lbs"], errors="coerce").median(), 1),
+                })
+            if cohort_rows:
+                st.dataframe(pd.DataFrame(cohort_rows), use_container_width=True, hide_index=True, key="lb_cohort_medians")
+
         # -----------------------------------------------------------------
         # Leaderboard table: only text columns are Athlete and Position.
         # BW/Ht is shown as a percentile, not the raw pounds-per-inch value.
@@ -1509,7 +1555,7 @@ with tab_board:
             "athlete_quality_score", "aq_pos_score",
             "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms",
             "RSI-modified", "Peak Power / BM", "Jump Height (Flight Time) in Inches",
-            "Height_in", "Mass_lbs", "Wingspan_in", "Wing_Adv_in", "BW_Ht_Pct",
+            "Height_in", "Bodyweight_lbs", "Wingspan_in", "Wing_Adv_in", "BW_Ht_Pct",
         ]
         tbl = dff[tbl_cols].copy()
         tbl = tbl.rename(columns={
@@ -1521,7 +1567,7 @@ with tab_board:
             "Concentric Impulse-100ms": "CI-100ms",
             "Jump Height (Flight Time) in Inches": "Jump Height",
             "Height_in": "Height",
-            "Mass_lbs": "Mass",
+            "Bodyweight_lbs": "Bodyweight",
             "Wingspan_in": "Wingspan",
             "Wing_Adv_in": "Wingspan Adv.",
             "BW_Ht_Pct": "BW/Ht Pct",
@@ -1537,7 +1583,7 @@ with tab_board:
             "Peak Power / BM": 1,
             "Jump Height": 2,
             "Height": 1,
-            "Mass": 1,
+            "Bodyweight": 1,
             "Wingspan": 1,
             "Wingspan Adv.": 1,
             "BW/Ht Pct": 0,
@@ -1548,7 +1594,7 @@ with tab_board:
 
         st.caption(
             "Units: Height, Wingspan, and Wingspan Adv. are inches; "
-            "Mass is pounds; BW/Ht Pct in the table is the percentile rank of pounds per inch."
+            "Bodyweight is pounds; BW/Ht Pct in the table is the percentile rank of pounds per inch."
         )
         sel = st.dataframe(
             tbl,
@@ -1602,6 +1648,7 @@ with tab_card:
     # ── Core values ───────────────────────────────────────────────────────────
     aq_val  = sf(row.get("athlete_quality_score"))
     pos_val = sf(row.get("aq_pos_score"))
+    pot_val = sf(row.get("potential_score"))
     ci_val  = sf(row.get("Concentric Impulse"))
     mass_kg = sf(row.get("Mass"))
     ht_cm   = sf(row.get("Height"))
@@ -1647,6 +1694,8 @@ with tab_card:
     tier_clrs    = ["#BA0C2F","#E2C188","#11225A"]
     tier_color   = tier_clrs[tier_idx] if tier_idx >= 0 else "#9AAAC0"
     prog_cat     = str(row.get("programming_category","—"))
+    athlete_group_val = str(row.get("athlete_group", athlete_group_label(prog_cat)))
+    program_focus_val = str(row.get("program_focus", program_focus_label(prog_cat)))
     prog_color   = PROG_COLORS.get(prog_cat, "#9AAAC0")
     prog_desc    = PROG_DESC.get(prog_cat, "")
 
@@ -1698,8 +1747,8 @@ with tab_card:
                 <span style="font-size:12px;color:{SLATE}">{sel_yr_display} · {pos_str} · {sch_str}</span><br>
                 <span style="display:inline-block;margin-top:8px;background:{prog_color};
                     color:white;font-size:11px;font-weight:700;padding:3px 14px;
-                    border-radius:20px;letter-spacing:0.06em">⚙ {prog_cat}</span>
-                <span style="font-size:11px;color:{SLATE};margin-left:8px">{prog_desc}</span>
+                    border-radius:20px;letter-spacing:0.06em">{athlete_group_val}</span>
+                <span style="font-size:11px;color:{SLATE};margin-left:8px">Program Focus: {program_focus_val}</span>
             </div>
             <div style="text-align:right">
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:{SLATE};margin:0">OVERALL RANK</p>
@@ -1711,8 +1760,8 @@ with tab_card:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Hero row: Capacity | Pos. gauge | CI Tier ──────────────────────────
-    h1, h2, h3 = st.columns([1,1,1.3])
+    # ── Hero row: Capacity | Pos. gauge | Athlete Group | Potential to Gain ──
+    h1, h2, h3, h4 = st.columns([1,1,1.05,1.05])
 
     with h1:
         bar_w  = min(100, max(0, float(aq_val or 0)))
@@ -1748,32 +1797,43 @@ with tab_card:
             use_container_width=True, key="g_pos")
 
     with h3:
-        parts = [
-            f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {tier_color};'
-            f'border-radius:10px;padding:18px 20px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">',
-            f'<p style="font-size:10px;font-weight:700;letter-spacing:0.14em;'
-            f'text-transform:uppercase;color:{SLATE};margin:0 0 4px 0">CI TIER</p>',
-            f'<div style="font-family:Playfair Display,serif;font-size:32px;font-weight:900;'
-            f'color:{tier_color}">{ci_tier_val}</div>',
-            f'<div style="font-size:12px;color:{SLATE};margin-top:2px">Current CI: '
-            f'<strong style="color:{NAV}">{fmt(ci_val,1)}</strong></div>',
-            f'<hr style="border-color:{BORD};margin:10px 0">',
-            f'<div style="display:flex;gap:16px;flex-wrap:wrap">',
-            f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;'
-            f'text-transform:uppercase;color:{SLATE};margin:0 0 2px 0">To next tier ({next_label})</p>',
-            f'<div style="font-size:18px;font-weight:700;color:{wc_col}">{lbs_next_str}</div>',
-            f'<div style="font-size:11px;color:{SLATE}">BW/Ht at target: {proj_bwht(lbs_next)}</div>',
-            f'<span style="display:inline-block;background:{wc_col};color:white;font-size:10px;'
-            f'font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_next}</span></div>',
-            f'<div><p style="font-size:9px;font-weight:700;letter-spacing:0.1em;'
-            f'text-transform:uppercase;color:{SLATE};margin:0 0 2px 0">To 315 CI</p>',
-            f'<div style="font-size:18px;font-weight:700;color:{wc_315_col}">{lbs_315_str}</div>',
-            f'<div style="font-size:11px;color:{SLATE}">BW/Ht at target: {proj_bwht(lbs_to_315)}</div>',
-            f'<span style="display:inline-block;background:{wc_315_col};color:white;font-size:10px;'
-            f'font-weight:700;padding:2px 8px;border-radius:10px;margin-top:4px">{wc_315}</span></div>',
-            '</div></div>',
-        ]
-        st.markdown("".join(parts), unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background:white;border:1px solid {BORD};border-top:6px solid {prog_color};
+            border-radius:12px;padding:22px 18px;text-align:left;height:100%;
+            box-shadow:0 4px 16px rgba(17,34,90,0.08)">
+            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
+                text-transform:uppercase;color:{SLATE};margin-bottom:8px">ATHLETE GROUP</div>
+            <div style="font-family:'Playfair Display',serif;font-size:26px;
+                font-weight:900;color:{NAV};line-height:1.1;margin-bottom:10px">
+                {athlete_group_val}</div>
+            <div style="font-size:11px;color:{SLATE};line-height:1.45">
+                CI: <strong style="color:{NAV}">{fmt(ci_val,1)}</strong><br>
+                P1 CI: <strong style="color:{NAV}">{fmt(sf(row.get('P1 Concentric Impulse')),1)}</strong><br>
+                Focus: <strong style="color:{prog_color}">{program_focus_val}</strong>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with h4:
+        pot_w = min(100, max(0, float(pot_val or 0)))
+        pot_cl = GREEN if pd.notna(pot_val) and pot_val>=75 else GOLD if pd.notna(pot_val) and pot_val>=50 else RED
+        st.markdown(f"""
+        <div style="background:white;border:1px solid {BORD};border-top:6px solid {GOLD};
+            border-radius:12px;padding:22px 18px;text-align:center;height:100%;
+            box-shadow:0 4px 16px rgba(226,193,136,0.16)">
+            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
+                text-transform:uppercase;color:{SLATE};margin-bottom:8px">POTENTIAL TO GAIN</div>
+            <div style="font-family:'Playfair Display',serif;font-size:54px;
+                font-weight:900;color:{GOLD};line-height:1">
+                {str(int(round(pot_val))) if pd.notna(pot_val) else "—"}</div>
+            <div style="font-size:11px;color:{SLATE};margin-top:6px;line-height:1.35">
+                Frame/projectability score<br>higher = more room to add capacity
+            </div>
+            <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
+                <div style="width:{pot_w:.0f}%;background:{pot_cl};border-radius:6px;height:8px"></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # ── Score legend ──────────────────────────────────────────────────────────
     st.markdown(f"""
@@ -1781,25 +1841,26 @@ with tab_card:
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
             <span style="width:10px;height:10px;border-radius:50%;background:{GREEN};display:inline-block"></span>
-            <strong>75–100</strong>&nbsp;Elite · clear draft target
+            <strong>75–100</strong>&nbsp;High-end present capacity
         </div>
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
             <span style="width:10px;height:10px;border-radius:50%;background:{GOLD};display:inline-block"></span>
-            <strong>50–74</strong>&nbsp;Above average · worth consideration
+            <strong>50–74</strong>&nbsp;Above-average present capacity
         </div>
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
             <span style="width:10px;height:10px;border-radius:50%;background:#D0D7E6;display:inline-block"></span>
-            <strong>25–49</strong>&nbsp;Below average
+            <strong>25–49</strong>&nbsp;Below-average present capacity
         </div>
         <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
             border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
             <span style="width:10px;height:10px;border-radius:50%;background:#9AAAC0;display:inline-block"></span>
-            <strong>0–24</strong>&nbsp;Well below average
+            <strong>0–24</strong>&nbsp;Well below-average present capacity
         </div>
     </div>
     """, unsafe_allow_html=True)
+    st.caption("Capacity = present physical capacity relative to the loaded dataset. Potential to Gain = projectability/frame score; 50 is roughly middle-of-pool, not a draft grade.")
 
     # ── Pitcher flag ─────────────────────────────────────────────────────────
     is_pitcher = str(row.get("pos_group","")).strip() == "Pitcher"
@@ -1907,7 +1968,7 @@ with tab_card:
                 "Scenario":  label,
                 "CI":  f"{ci_p:.1f}" + (f" ({'+' if delta>=0 else ''}{delta:.1f})" if gain_lbs>0 else ""),
                 "CI Pct":    pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
-                "Mass": f"{new_kg*2.20462:.1f}",
+                "Bodyweight": f"{new_kg*2.20462:.1f}",
                 "BW/Ht":     f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
                 "BW/Ht Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
             })
@@ -1970,7 +2031,7 @@ with tab_card:
             f'<span style="color:{SLATE};min-width:160px;font-size:12px">Height</span>'
             f'<span style="font-weight:600;color:{NAV}">{fmt_height(sf(row.get("Height")))}</span></div>'
             f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Mass</span>'
+            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Bodyweight</span>'
             f'<span style="font-weight:600;color:{NAV}">{fmt_mass(sf(row.get("Mass")))}</span></div>'
             f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
             f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan</span>'
@@ -2038,7 +2099,7 @@ with tab_card:
                 f'<div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
                 f'color:{GREEN};margin-bottom:4px">Development Projection</div>'
                 f'<div style="font-size:11px;color:{SLATE};margin-bottom:8px">'
-                f'Added-mass scenarios with 3% CI/kg penalty.</div>'
+                f'Added-bodyweight scenarios with 3% CI/kg penalty.</div>'
                 f'</div>',
                 unsafe_allow_html=True)
             st.dataframe(proj_df, use_container_width=True, hide_index=True, key="sc_proj_tbl_side")
