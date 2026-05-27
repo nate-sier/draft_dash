@@ -997,6 +997,10 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     school = clean_text(row.get('School Type', '-'))
     athlete_group = clean_text(row.get('athlete_group', athlete_group_label(row.get('programming_category', '-'))))
     program_focus = clean_text(row.get('program_focus', program_focus_label(row.get('programming_category', '-'))))
+    prog_short = clean_text(row.get('programming_category', '-'))
+    if prog_short == 'Unclassified':
+        prog_short = '-'
+    ci_tier_short = clean_text(row.get('ci_tier', ci_tier_label(get_val('Concentric Impulse'))))
     aq = get_val('athlete_quality_score')
     pos_aq = get_val('aq_pos_score')
     pot = get_val('potential_score')
@@ -1038,12 +1042,15 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         'capacity': score_text(aq),
         'headshot_path': None,
         'logo_path': resolve_logo_path(),
+        # Keep the PDF top cards an exact match to Scorecard Option 1.
+        # Long dashboard labels like Athlete Group / Program Focus stay on the app page,
+        # but the PDF uses the compact CI Tier / Program cards so nothing gets squeezed.
         'summary_cards': [
             {'label': 'Capacity', 'value': score_text(aq), 'percentile': aq, 'filled': True},
             {'label': 'Pos. Capacity', 'value': score_text(pos_aq), 'percentile': pos_aq},
-            {'label': 'Potential to Gain', 'value': score_text(pot), 'percentile': pot},
-            {'label': 'Athlete Group', 'value': athlete_group},
-            {'label': 'Program Focus', 'value': program_focus},
+            {'label': 'Potential', 'value': score_text(pot), 'percentile': pot},
+            {'label': 'CI Tier', 'value': ci_tier_short},
+            {'label': 'Program', 'value': prog_short},
         ],
         'sections': [
             {'title': 'Force Plate', 'rows': force_rows},
