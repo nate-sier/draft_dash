@@ -1,3 +1,4 @@
+# VERSION: option1_wording_v36 -- smaller PDF Athlete Group and Program Focus card values
 # VERSION: option1_pdf_old_dashboard_fonts_v33 -- dashboard fonts reverted; Option 1 PDF retained
 # VERSION: stakeholder_feedback_v27 -- potential to gain, athlete group/program focus, cleaner capacity language
 # VERSION: bodyweight_labels_v26 -- display label Mass changed to Bodyweight
