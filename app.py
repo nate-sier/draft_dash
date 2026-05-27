@@ -1539,7 +1539,6 @@ with tab_board:
                     "Cohort": cohort,
                     "N": int(len(sub)),
                     "Median Capacity": round(pd.to_numeric(sub["athlete_quality_score"], errors="coerce").median(), 1),
-                    "Median Potential to Gain": round(pd.to_numeric(sub["potential_score"], errors="coerce").median(), 1),
                     "Median CI": round(pd.to_numeric(sub["Concentric Impulse"], errors="coerce").median(), 1),
                     "Median P1 CI": round(pd.to_numeric(sub["P1 Concentric Impulse"], errors="coerce").median(), 1),
                     "Median RSI-mod": round(pd.to_numeric(sub["RSI-modified"], errors="coerce").median(), 3),
