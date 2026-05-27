@@ -1,4 +1,4 @@
-# VERSION: option1_identical_v31 -- Option 1 PDF skin integration, Gill Sans styling, Nationals logo support
+# VERSION: option1_identical_v32 -- fixed CSS f-string braces; Option 1 PDF skin integration, Gill Sans styling, Nationals logo support
 # VERSION: stakeholder_feedback_v27 -- potential to gain, athlete group/program focus, cleaner capacity language
 # VERSION: bodyweight_labels_v26 -- display label Mass changed to Bodyweight
 # VERSION: happy_medium_v21 -- development projection moved into right scorecard column
@@ -595,11 +595,11 @@ def build_scores(_df,
 # ─── CSS ──────────────────────────────────────────────────────────────────────
 CSS = f"""
 <style>
-html, body, [class*="css"] {
+html, body, [class*="css"] {{
     font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif;
     background-color: {SURF}; color: {NAV};
-}
-h1,h2,h3 { font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; color: {NAV}; font-weight: 700; }
+}}
+h1,h2,h3 {{ font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; color: {NAV}; font-weight: 700; }}
 .block-container {{ padding-top: 1.5rem; max-width: 1400px; }}
 
 div[data-testid="metric-container"] {{
