@@ -1,4 +1,4 @@
-# VERSION: option1_bottom_cards_fixed_v46
+# VERSION: option1_original_card_grid_v47
 """Portable Nationals/defensive scorecard skins.
 
 Use this module inside another app by passing the existing scorecard data into
@@ -269,17 +269,24 @@ def _draw_option_1_metric_card(
     value: str,
     percentile: int | float | None = None,
 ) -> None:
-    """Option 1 top-card renderer with hard-fit long bottom values."""
+    """Option 1 top-card renderer using original Skin 1 organization.
+
+    Athlete Group and Program Focus stay in the same card grid as the original
+    skin, but their value text is manually wrapped and reduced so it fits.
+    """
     label_clean = str(label).strip()
     value_clean = str(value).strip()
     is_long_bottom_card = label_clean.lower() in {"athlete group", "program focus"}
 
-    label_w = w * (0.46 if is_long_bottom_card else 0.54)
+    # Keep the original feel while giving long-value cards a little more room.
+    label_w = w * (0.44 if is_long_bottom_card else 0.54)
 
     c.setStrokeColor(colors.black)
     c.setLineWidth(0.8)
+
     c.setFillColor(NATS_NAVY)
     c.rect(x, y, label_w, h, stroke=1, fill=1)
+
     c.setFillColor(_pctl_fill(percentile))
     c.rect(x + label_w, y, w - label_w, h, stroke=1, fill=1)
 
@@ -288,10 +295,10 @@ def _draw_option_1_metric_card(
         label_clean,
         x + label_w / 2,
         y + h / 2 - 3,
-        label_w - 8,
+        label_w - 6,
         align="center",
-        max_size=8.6 if is_long_bottom_card else 9,
-        min_size=5,
+        max_size=8.0 if is_long_bottom_card else 9,
+        min_size=4.7,
         fill=NATS_WHITE,
     )
 
@@ -326,12 +333,13 @@ def _draw_option_1_metric_card(
             lines = lines[:2] or ["-"]
 
         c.setFillColor(TEXT_DARK)
-        _set_font(c, "bold", 6.2)
+        # Tiny, fixed text so the full values fit in the original Skin 1 card grid.
+        _set_font(c, "bold", 5.4)
         if len(lines) == 1:
             c.drawCentredString(value_x + value_w / 2, y + h / 2 - 2.5, lines[0])
         else:
-            c.drawCentredString(value_x + value_w / 2, y + h / 2 + 3.4, lines[0])
-            c.drawCentredString(value_x + value_w / 2, y + h / 2 - 7.2, lines[1])
+            c.drawCentredString(value_x + value_w / 2, y + h / 2 + 3.2, lines[0])
+            c.drawCentredString(value_x + value_w / 2, y + h / 2 - 7.0, lines[1])
         return
 
     _fit_text(
@@ -347,47 +355,37 @@ def _draw_option_1_metric_card(
 
 
 def _draw_option_1_summary_cards(c: canvas.Canvas, y_top: float, cards: list[dict[str, Any]]) -> float:
-    """Draw Option 1 score summary: 3 cards top, 2 wider cards bottom."""
+    """Draw Option 1 score summary using the original Skin 1 card grid.
+
+    This restores the original organization:
+    - 3 equal-width cards on the first row
+    - 2 equal-width cards on the second row, aligned left/middle
+    """
     x = 46
     total_w = PAGE_W - 92
-    gap = 14
+    gap = 9
+    cols = 3
+    card_w = (total_w - gap * (cols - 1)) / cols
     card_h = 28
 
-    top_cards = cards[:3]
-    bottom_cards = cards[3:5]
-
-    top_w = (total_w - 2 * gap) / 3
-    y1 = y_top - card_h
-    for i, card in enumerate(top_cards):
+    for i, card in enumerate(cards):
+        col = i % cols
+        row = i // cols
+        cx = x + col * (card_w + gap)
+        cy = y_top - card_h - row * (card_h + 8)
         _draw_option_1_metric_card(
             c,
-            x + i * (top_w + gap),
-            y1,
-            top_w,
+            cx,
+            cy,
+            card_w,
             card_h,
             label=str(card["label"]),
             value=str(card.get("value", "-")),
             percentile=card.get("percentile"),
         )
 
-    if bottom_cards:
-        bottom_gap = 16
-        bottom_w = (total_w - bottom_gap) / 2
-        y2 = y1 - card_h - 8
-        for i, card in enumerate(bottom_cards):
-            _draw_option_1_metric_card(
-                c,
-                x + i * (bottom_w + bottom_gap),
-                y2,
-                bottom_w,
-                card_h,
-                label=str(card["label"]),
-                value=str(card.get("value", "-")),
-                percentile=card.get("percentile"),
-            )
-        return y2 - 14
-
-    return y1 - 14
+    rows = (len(cards) + cols - 1) // cols
+    return y_top - rows * (card_h + 8) - 6
 
 
 def _draw_option_1_panel(
