@@ -257,6 +257,70 @@ def _draw_option_1_header(c: canvas.Canvas, data: dict[str, Any]) -> float:
     return bottom - 10
 
 
+
+def _wrap_to_width(text: Any, variant: str, size: float, max_width: float, max_lines: int = 2) -> list[str]:
+    """Wrap short card text to fit a box. Keeps the PDF Option 1 layout clean."""
+    value = str(text)
+    if _text_width(value, variant, size) <= max_width:
+        return [value]
+    words = value.replace("/", "/ ").replace("-", "- ").split()
+    lines: list[str] = []
+    cur = ""
+    for word in words:
+        candidate = word if not cur else f"{cur} {word}"
+        candidate = candidate.replace("/ ", "/").replace("- ", "-")
+        if _text_width(candidate, variant, size) <= max_width:
+            cur = candidate
+        else:
+            if cur:
+                lines.append(cur)
+            cur = word.replace("/ ", "/").replace("- ", "-")
+        if len(lines) >= max_lines:
+            break
+    if len(lines) < max_lines and cur:
+        lines.append(cur)
+    if not lines:
+        lines = [value]
+    return lines[:max_lines]
+
+
+def _fit_wrapped_text(
+    c: canvas.Canvas,
+    text: Any,
+    x: float,
+    y_center: float,
+    max_width: float,
+    *,
+    align: str = "center",
+    variant: str = "bold",
+    max_size: float = 10,
+    min_size: float = 5,
+    fill: colors.Color = TEXT_DARK,
+    max_lines: int = 2,
+    leading_mult: float = 1.08,
+) -> None:
+    value = str(text)
+    size = max_size
+    while size > min_size:
+        lines = _wrap_to_width(value, variant, size, max_width, max_lines=max_lines)
+        if all(_text_width(line, variant, size) <= max_width for line in lines):
+            break
+        size -= 0.25
+    lines = _wrap_to_width(value, variant, size, max_width, max_lines=max_lines)
+    c.setFillColor(fill)
+    _set_font(c, variant, size)
+    leading = size * leading_mult
+    start_y = y_center + ((len(lines) - 1) * leading / 2.0) - size * 0.35
+    for i, line in enumerate(lines):
+        yy = start_y - i * leading
+        if align == "right":
+            c.drawRightString(x, yy, line)
+        elif align == "center":
+            c.drawCentredString(x, yy, line)
+        else:
+            c.drawString(x, yy, line)
+
+
 def _draw_option_1_metric_card(
     c: canvas.Canvas,
     x: float,
@@ -286,15 +350,16 @@ def _draw_option_1_metric_card(
         min_size=5.5,
         fill=NATS_WHITE,
     )
-    _fit_text(
+    _fit_wrapped_text(
         c,
         value,
         x + label_w + (w - label_w) / 2,
-        y + h / 2 - 3,
+        y + h / 2,
         w - label_w - 8,
         align="center",
-        max_size=11,
-        min_size=6,
+        max_size=10.5,
+        min_size=5.2,
+        max_lines=2,
     )
 
 
