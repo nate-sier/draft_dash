@@ -1,3 +1,4 @@
+# VERSION: option1_program_focus_fit_v43 -- uses updated scorecard_skins with compact Athlete Group and Program Focus cards
 # VERSION: option1_skins_force_tiny_v42 -- uses fixed scorecard_skins.py card text sizing
 # VERSION: option1_skins_fixed_v41 -- uses scorecard_skins.py; fixed Athlete Group/Program Focus sizing in skin
 # VERSION: option1_wording_smaller_cards_v39 -- reload scorecard_skins and force smaller PDF card values
