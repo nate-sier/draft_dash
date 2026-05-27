@@ -1,4 +1,4 @@
-# VERSION: option1_original_card_grid_v47 -- PDF uses Skin 1 original card organization
+# VERSION: option1_original_card_grid_v48 -- bottom card text slightly larger
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
 # VERSION: option1_program_focus_fit_v43 -- uses updated scorecard_skins with compact Athlete Group and Program Focus cards
 # VERSION: option1_skins_force_tiny_v42 -- uses fixed scorecard_skins.py card text sizing
