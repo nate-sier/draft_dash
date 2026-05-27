@@ -1,4 +1,3 @@
-# VERSION: option1_inline_fixed_v40 -- PDF renderer is fully inline; Athlete Group/Program Focus font forced smaller
 # VERSION: option1_wording_smaller_cards_v39 -- reload scorecard_skins and force smaller PDF card values
 # VERSION: option1_wording_v37 -- smaller Athlete Group and Program Focus card text in PDF renderer
 # VERSION: option1_wording_v36 -- smaller PDF Athlete Group and Program Focus card values
@@ -926,62 +925,18 @@ def make_trend(player_df, col, label, invert=False):
 
 
 def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=False):
-    """Render the Option 1 scorecard PDF inline so GitHub/Streamlit cannot use a stale scorecard_skins.py."""
+    """Render the PDF export using the exact Scorecard Option 1 skin."""
     if hasattr(row, "to_dict"):
         row = row.to_dict()
 
     try:
-        from reportlab.lib import colors
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib.utils import ImageReader
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        from reportlab.pdfgen import canvas
-        from io import BytesIO as _BytesIO
         from datetime import datetime
-        import platform
+        import importlib
+        import scorecard_skins
+        scorecard_skins = importlib.reload(scorecard_skins)
+        render_scorecard_option_1 = scorecard_skins.render_scorecard_option_1
     except Exception as e:
-        raise ImportError("PDF export needs reportlab>=4.0 in requirements.txt.") from e
-
-    PAGE_W, PAGE_H = letter
-    NATS_NAVY = colors.HexColor("#14225A")
-    NATS_RED = colors.HexColor("#AB0003")
-    NATS_WHITE = colors.HexColor("#FFFFFF")
-    TEXT_DARK = colors.HexColor("#111111")
-    LINE_GRAY = colors.HexColor("#D8DDE5")
-    TRACK_GRAY = colors.HexColor("#E8ECF2")
-    GRID_GRAY = colors.HexColor("#9AA4B2")
-    HEADSHOT_GRAY = colors.HexColor("#BFC2C7")
-    GREEN_1 = colors.HexColor("#E3F1D9")
-    GREEN_2 = colors.HexColor("#CDEBB8")
-    GREEN_3 = colors.HexColor("#A8D98C")
-    RED_1 = colors.HexColor("#FFE9EC")
-    RED_2 = colors.HexColor("#F7C3CB")
-    RED_3 = colors.HexColor("#F09AA5")
-
-    # Font setup. This uses Gill Sans if the environment has it, or if you add licensed files to assets/fonts.
-    FONT_REG = "Helvetica"
-    FONT_BOLD = "Helvetica-Bold"
-    try:
-        font_candidates = [
-            (Path("assets/fonts/GillSans.ttf"), "GillSansCustom"),
-            (Path("assets/fonts/GillSans-Bold.ttf"), "GillSansCustom-Bold"),
-        ]
-        if font_candidates[0][0].exists():
-            pdfmetrics.registerFont(TTFont("GillSansCustom", str(font_candidates[0][0])))
-            FONT_REG = "GillSansCustom"
-        if font_candidates[1][0].exists():
-            pdfmetrics.registerFont(TTFont("GillSansCustom-Bold", str(font_candidates[1][0])))
-            FONT_BOLD = "GillSansCustom-Bold"
-        mac_font = Path("/System/Library/Fonts/Supplemental/GillSans.ttc")
-        if platform.system() == "Darwin" and mac_font.exists() and FONT_REG == "Helvetica":
-            pdfmetrics.registerFont(TTFont("GillSans", str(mac_font), subfontIndex=0))
-            pdfmetrics.registerFont(TTFont("GillSans-Bold", str(mac_font), subfontIndex=1))
-            FONT_REG = "GillSans"
-            FONT_BOLD = "GillSans-Bold"
-    except Exception:
-        FONT_REG = "Helvetica"
-        FONT_BOLD = "Helvetica-Bold"
+        raise ImportError("PDF export needs scorecard_skins.py and reportlab>=4.0 available in the app environment.") from e
 
     def get_val(key):
         try:
@@ -993,13 +948,6 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
 
     def safe_file_name(name):
         return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name)).strip("_") or "athlete"
-
-    def clean_text(x):
-        if x is None or str(x) in ("nan", "None", "<NA>"):
-            return "-"
-        return (str(x).replace("—", "-").replace("–", "-").replace("·", "|")
-                .replace("≥", ">=").replace("≤", "<=").replace("…", "...")
-                .replace("’", "'").replace("“", '"').replace("”", '"'))
 
     def raw_num(key, digits=1, suffix=""):
         v = get_val(key)
@@ -1030,233 +978,95 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
             return f"{p}th"
         return f"{p}{({1:'st', 2:'nd', 3:'rd'}.get(p % 10, 'th'))}"
 
-    def score_text(v):
-        return "-" if pd.isna(v) else f"{int(round(float(v)))}"
-
-    def text_width(text, font, size):
-        return pdfmetrics.stringWidth(str(text), font, size)
-
-    def fit_text(c, text, x, y, max_width, *, align="left", font=None, max_size=10, min_size=4.5, fill=TEXT_DARK):
-        value = clean_text(text)
-        font = font or FONT_BOLD
-        size = max_size
-        while size > min_size and text_width(value, font, size) > max_width:
-            size -= 0.25
-        c.setFillColor(fill)
-        c.setFont(font, size)
-        if align == "center":
-            c.drawCentredString(x, y, value)
-        elif align == "right":
-            c.drawRightString(x, y, value)
-        else:
-            c.drawString(x, y, value)
-
-    def wrap_to_lines(text, max_width, font, size, max_lines=2):
-        words = clean_text(text).split()
-        if not words:
-            return ["-"]
-        lines, cur = [], ""
-        for word in words:
-            test = word if not cur else cur + " " + word
-            if text_width(test, font, size) <= max_width:
-                cur = test
-            else:
-                if cur:
-                    lines.append(cur)
-                cur = word
-            if len(lines) == max_lines:
-                break
-        if len(lines) < max_lines and cur:
-            lines.append(cur)
-        # If still too long, shrink by clipping with ellipsis only as a last resort.
-        out = lines[:max_lines]
-        for i, line in enumerate(out):
-            while text_width(line, font, size) > max_width and len(line) > 4:
-                line = line[:-4].rstrip() + "..."
-            out[i] = line
-        return out
-
-    def pctl_fill(percentile):
-        if percentile is None or pd.isna(percentile):
-            return NATS_WHITE
-        p = int(max(0, min(100, round(float(percentile)))))
-        if p >= 86: return GREEN_3
-        if p >= 71: return GREEN_2
-        if p >= 56: return GREEN_1
-        if p >= 45: return NATS_WHITE
-        if p >= 30: return RED_1
-        if p >= 15: return RED_2
-        return RED_3
+    def clean_text(x):
+        if x is None or str(x) in ("nan", "None", "<NA>"):
+            return "-"
+        return str(x)
 
     def resolve_logo_path():
         candidates = [
-            Path(os.environ.get("NATS_LOGO_PATH", "")),
-            Path("nationals_logo.png"), Path("nats_logo.png"),
-            Path("assets/nationals_logo.png"), Path("assets/nats_logo.png"),
-            Path("/mnt/data/nationals_logo.png"), Path("/mnt/data/nats_logo.png"),
+            Path(os.environ.get('NATS_LOGO_PATH', '')),
+            Path('nationals_logo.png'),
+            Path('nats_logo.png'),
+            Path('assets/nationals_logo.png'),
+            Path('assets/nats_logo.png'),
+            Path('/mnt/data/nationals_logo.png'),
+            Path('/mnt/data/nats_logo.png'),
         ]
         for p in candidates:
             if str(p) and p.exists() and p.is_file():
                 return str(p)
         return None
 
-    athlete = clean_text(row.get("athleteName", "Athlete"))
-    pos = clean_text(row.get("Position", "-"))
-    school = clean_text(row.get("School Type", "-"))
-    athlete_group = clean_text(row.get("athlete_group", athlete_group_label(row.get("programming_category", "-"))))
-    program_focus = clean_text(row.get("program_focus", program_focus_label(row.get("programming_category", "-"))))
-    aq = get_val("athlete_quality_score")
-    pos_aq = get_val("aq_pos_score")
-    pot = get_val("potential_score")
-    report_date = datetime.now().strftime("%-m/%-d/%y") if os.name != "nt" else datetime.now().strftime("%#m/%#d/%y")
+    athlete = clean_text(row.get('athleteName', 'Athlete'))
+    pos = clean_text(row.get('Position', '-'))
+    school = clean_text(row.get('School Type', '-'))
+    athlete_group = clean_text(row.get('athlete_group', athlete_group_label(row.get('programming_category', '-'))))
+    program_focus = clean_text(row.get('program_focus', program_focus_label(row.get('programming_category', '-'))))
+    prog_short = clean_text(row.get('programming_category', '-'))
+    if prog_short == 'Unclassified':
+        prog_short = '-'
+    ci_tier_short = clean_text(row.get('ci_tier', ci_tier_label(get_val('Concentric Impulse'))))
+    aq = get_val('athlete_quality_score')
+    pos_aq = get_val('aq_pos_score')
+    pot = get_val('potential_score')
+    report_date = datetime.now().strftime('%-m/%-d/%y') if os.name != 'nt' else datetime.now().strftime('%#m/%#d/%y')
+
+    def score_text(v):
+        return '-' if pd.isna(v) else f"{int(round(float(v)))}"
 
     force_rows = [
-        {"label": "CI", "percentile": pct_from_col("ci_pct_alltime"), "value": raw_num("Concentric Impulse", 1)},
-        {"label": "P1 CI", "percentile": pct_from_col("p1_ci_pct_alltime"), "value": raw_num("P1 Concentric Impulse", 1)},
-        {"label": "CI-100ms", "percentile": pct_from_col("ci100_pct_alltime"), "value": raw_num("Concentric Impulse-100ms", 1)},
-        {"label": "RSI-mod", "percentile": pct_from_col("rsi_pct_alltime"), "value": raw_num("RSI-modified", 3)},
-        {"label": "Pk Pwr/BM", "percentile": pct_from_col("pp_pct_alltime"), "value": raw_num("Peak Power / BM", 1)},
-        {"label": "Jump Ht", "percentile": pct_from_col("jump_height_pct_alltime"), "value": raw_num("Jump Height (Flight Time) in Inches", 2, " in")},
+        {'label': 'CI', 'percentile': pct_from_col('ci_pct_alltime'), 'value': raw_num('Concentric Impulse', 1)},
+        {'label': 'P1 CI', 'percentile': pct_from_col('p1_ci_pct_alltime'), 'value': raw_num('P1 Concentric Impulse', 1)},
+        {'label': 'CI-100ms', 'percentile': pct_from_col('ci100_pct_alltime'), 'value': raw_num('Concentric Impulse-100ms', 1)},
+        {'label': 'RSI-mod', 'percentile': pct_from_col('rsi_pct_alltime'), 'value': raw_num('RSI-modified', 3)},
+        {'label': 'Pk Pwr/BM', 'percentile': pct_from_col('pp_pct_alltime'), 'value': raw_num('Peak Power / BM', 1)},
+        {'label': 'Jump Ht', 'percentile': pct_from_col('jump_height_pct_alltime'), 'value': raw_num('Jump Height (Flight Time) in Inches', 2, ' in')},
     ]
     anthro_rows = [
-        {"label": "Height", "percentile": pct_from_col("height_pct"), "value": fmt_height(get_val("Height"))},
-        {"label": "Bodyweight", "percentile": pool_pct("Mass"), "value": fmt_mass(get_val("Mass"))},
-        {"label": "Wingspan", "percentile": pool_pct("Wingspan"), "value": fmt_wingspan(get_val("Wingspan"))},
-        {"label": "Wing Adv.", "percentile": pct_from_col("wingspan_pct"), "value": fmt_wingspan_adv(get_val("wingspan_advantage"))},
-        {"label": "BW/Ht Pct", "percentile": pct_from_col("bmi_pct"), "value": pct_sfx_local(pct_from_col("bmi_pct"))},
+        {'label': 'Height', 'percentile': pct_from_col('height_pct'), 'value': fmt_height(get_val('Height'))},
+        {'label': 'Bodyweight', 'percentile': pool_pct('Mass'), 'value': fmt_mass(get_val('Mass'))},
+        {'label': 'Wingspan', 'percentile': pool_pct('Wingspan'), 'value': fmt_wingspan(get_val('Wingspan'))},
+        {'label': 'Wing Adv.', 'percentile': pct_from_col('wingspan_pct'), 'value': fmt_wingspan_adv(get_val('wingspan_advantage'))},
+        {'label': 'BW/Ht Pct', 'percentile': pct_from_col('bmi_pct'), 'value': pct_sfx_local(pct_from_col('bmi_pct'))},
     ]
     sprint_rows = []
-    if pd.notna(get_val("30yd Split")):
-        sprint_rows.append({"label": "30yd", "percentile": pct_from_col("sprint_pct_alltime"), "value": raw_num("30yd Split", 3, "s")})
-    if pd.notna(get_val("10yd Split")):
-        sprint_rows.append({"label": "10yd", "percentile": pool_pct("10yd Split", inverse=True), "value": raw_num("10yd Split", 3, "s")})
-    if pd.notna(get_val("20yd Split")):
-        sprint_rows.append({"label": "20yd", "percentile": pool_pct("20yd Split", inverse=True), "value": raw_num("20yd Split", 3, "s")})
+    if pd.notna(get_val('30yd Split')):
+        sprint_rows.append({'label': '30yd', 'percentile': pct_from_col('sprint_pct_alltime'), 'value': raw_num('30yd Split', 3, 's')})
+    if pd.notna(get_val('10yd Split')):
+        sprint_rows.append({'label': '10yd', 'percentile': pool_pct('10yd Split', inverse=True), 'value': raw_num('10yd Split', 3, 's')})
+    if pd.notna(get_val('20yd Split')):
+        sprint_rows.append({'label': '20yd', 'percentile': pool_pct('20yd Split', inverse=True), 'value': raw_num('20yd Split', 3, 's')})
 
-    buffer = _BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    margin = 18
-    c.setFillColor(NATS_WHITE)
-    c.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(2)
-    c.rect(margin, margin, PAGE_W - 2 * margin, PAGE_H - 2 * margin, stroke=1, fill=0)
-
-    # Header: matches Option 1 structure.
-    top = PAGE_H - margin - 10
-    left = margin + 28
-    right = PAGE_W - margin - 28
-    head_cx, head_cy, head_r = left + 18, top - 38, 28
-    initials = "".join(part[:1] for part in athlete.split()[:2]).upper()
-    c.setFillColor(colors.HexColor("#BEBFC3"))
-    c.setStrokeColor(colors.HexColor("#BDBDBD"))
-    c.circle(head_cx, head_cy, head_r, stroke=1, fill=1)
-    fit_text(c, initials, head_cx, head_cy - 5, head_r * 1.35, align="center", font=FONT_BOLD, max_size=16, min_size=10, fill=colors.black)
-
-    logo_path = resolve_logo_path()
-    if logo_path:
-        try:
-            c.drawImage(ImageReader(logo_path), right - 72, top - 56, 58, 40, preserveAspectRatio=True, anchor="c", mask="auto")
-        except Exception:
-            fit_text(c, "W", right - 44, top - 44, 50, align="center", font=FONT_BOLD, max_size=28, min_size=18, fill=NATS_RED)
-    else:
-        fit_text(c, "W", right - 44, top - 44, 50, align="center", font=FONT_BOLD, max_size=28, min_size=18, fill=NATS_RED)
-
-    fit_text(c, f"{athlete.upper()}, {pos.upper()}", PAGE_W / 2, top - 24, 315, align="center", font=FONT_BOLD, max_size=14, min_size=9, fill=colors.black)
-    fit_text(c, f"{sel_yr_display} | {school} | Draft Scouting", PAGE_W / 2, top - 45, 315, align="center", font=FONT_REG, max_size=9, min_size=6, fill=colors.black)
-    fit_text(c, report_date, right - 26, top - 68, 80, align="center", font=FONT_BOLD, max_size=11, min_size=7, fill=colors.black)
-
-    def draw_metric_card(x, y, w, h, label, value, percentile=None, small_value=False):
-        # Bigger right side and much smaller text for the two long stakeholder cards.
-        label_w = w * (0.46 if small_value else 0.54)
-        c.setStrokeColor(colors.black)
-        c.setLineWidth(0.8)
-        c.setFillColor(NATS_NAVY)
-        c.rect(x, y, label_w, h, stroke=1, fill=1)
-        c.setFillColor(pctl_fill(percentile))
-        c.rect(x + label_w, y, w - label_w, h, stroke=1, fill=1)
-        fit_text(c, label, x + label_w / 2, y + h / 2 - 4, label_w - 8, align="center", font=FONT_BOLD, max_size=8.6, min_size=4.8, fill=NATS_WHITE)
-        value_w = w - label_w - 8
-        if small_value:
-            size = 5.1
-            lines = wrap_to_lines(value, value_w, FONT_BOLD, size, max_lines=2)
-            if len(lines) == 1:
-                fit_text(c, lines[0], x + label_w + (w - label_w) / 2, y + h / 2 - 3, value_w, align="center", font=FONT_BOLD, max_size=size, min_size=4.0, fill=colors.black)
-            else:
-                fit_text(c, lines[0], x + label_w + (w - label_w) / 2, y + h / 2 + 2, value_w, align="center", font=FONT_BOLD, max_size=size, min_size=4.0, fill=colors.black)
-                fit_text(c, lines[1], x + label_w + (w - label_w) / 2, y + h / 2 - 8, value_w, align="center", font=FONT_BOLD, max_size=size, min_size=4.0, fill=colors.black)
-        else:
-            fit_text(c, value, x + label_w + (w - label_w) / 2, y + h / 2 - 4, value_w, align="center", font=FONT_BOLD, max_size=10.5, min_size=5.5, fill=colors.black)
-
-    cards = [
-        ("Capacity", score_text(aq), aq, False),
-        ("Pos. Capacity", score_text(pos_aq), pos_aq, False),
-        ("Potential to Gain", score_text(pot), pot, False),
-        ("Athlete Group", athlete_group, None, True),
-        ("Program Focus", program_focus, None, True),
-    ]
-    card_x, card_top = 46, top - 102
-    card_gap = 9
-    card_w = (PAGE_W - 92 - 2 * card_gap) / 3
-    card_h = 28
-    for i, (lbl, val, pct, small) in enumerate(cards):
-        col = i % 3
-        row_i = i // 3
-        x = card_x + col * (card_w + card_gap)
-        y = card_top - row_i * (card_h + 8)
-        draw_metric_card(x, y, card_w, card_h, lbl, val, pct, small_value=small)
-
-    def draw_panel(y_top, title, rows):
-        x, w = 46, PAGE_W - 92
-        row_h = 27
-        h = max(82, 37 + len(rows) * row_h)
-        y = y_top - h
-        c.setStrokeColor(colors.black)
-        c.setLineWidth(1.0)
-        c.rect(x, y, w, h, stroke=1, fill=0)
-        fit_text(c, title, x + w / 2, y_top - 20, w - 20, align="center", font=FONT_BOLD, max_size=15, min_size=10, fill=colors.black)
-        inner_x = x + 10
-        inner_w = w - 20
-        label_w = 78
-        value_w = 62
-        track_x = inner_x + label_w + 8
-        track_w = inner_w - label_w - value_w - 18
-        row_y = y_top - 50
-        for r in rows:
-            p = r.get("percentile")
-            p_num = 50 if p is None or pd.isna(p) else int(max(0, min(100, round(float(p)))))
-            fit_text(c, r["label"], inner_x + label_w, row_y + 9, label_w, align="right", font=FONT_BOLD, max_size=8.5, min_size=5.0, fill=colors.black)
-            c.setFillColor(TRACK_GRAY)
-            c.setStrokeColor(colors.HexColor("#B8C0CC"))
-            c.setLineWidth(0.4)
-            c.rect(track_x, row_y + 8, track_w, 12, stroke=1, fill=1)
-            c.setFillColor(pctl_fill(p))
-            c.rect(track_x, row_y + 8, track_w * p_num / 100, 12, stroke=0, fill=1)
-            c.setStrokeColor(GRID_GRAY)
-            c.setLineWidth(0.6)
-            c.line(track_x + track_w / 2, row_y + 4, track_x + track_w / 2, row_y + 24)
-            marker_x = track_x + track_w * p_num / 100
-            c.setFillColor(NATS_WHITE)
-            c.setStrokeColor(colors.black)
-            c.setLineWidth(0.8)
-            c.circle(marker_x, row_y + 14, 3.6, stroke=1, fill=1)
-            fit_text(c, "-" if p is None else f"{int(round(float(p)))} pctl", marker_x, row_y - 2, 42, align="center", font=FONT_BOLD, max_size=6.2, min_size=4.8, fill=colors.black)
-            fit_text(c, r.get("value", "-"), inner_x + inner_w, row_y + 9, value_w, align="right", font=FONT_BOLD, max_size=8, min_size=5, fill=colors.black)
-            c.setStrokeColor(colors.HexColor("#E5E7EB"))
-            c.setLineWidth(0.3)
-            c.line(inner_x, row_y - 5, inner_x + inner_w, row_y - 5)
-            row_y -= row_h
-        return y - 14
-
-    y = card_top - 2 * (card_h + 8) - 16
-    y = draw_panel(y, "Force Plate", force_rows)
-    y = draw_panel(y, "Anthropometrics", anthro_rows)
+    scorecard_data = {
+        'player_name': athlete,
+        'position': pos,
+        'context': f"{sel_yr_display} | {school} | Draft Scouting",
+        'subtitle': f"{sel_yr_display} - {pos} - {school}",
+        'banner_label': 'WASHINGTON NATIONALS - DRAFT SCOUTING',
+        'report_date': report_date,
+        'capacity': score_text(aq),
+        'headshot_path': None,
+        'logo_path': resolve_logo_path(),
+        # Scorecard top cards use the stakeholder wording from the Option 1 mockup.
+        # scorecard_skins.py handles wrapping so these fit cleanly in the boxes.
+        'summary_cards': [
+            {'label': 'Capacity', 'value': score_text(aq), 'percentile': aq, 'filled': True},
+            {'label': 'Pos. Capacity', 'value': score_text(pos_aq), 'percentile': pos_aq},
+            {'label': 'Potential to Gain', 'value': score_text(pot), 'percentile': pot},
+            {'label': 'Athlete Group', 'value': athlete_group},
+            {'label': 'Program Focus', 'value': program_focus},
+        ],
+        'sections': [
+            {'title': 'Force Plate', 'rows': force_rows},
+            {'title': 'Anthropometrics', 'rows': anthro_rows},
+        ],
+    }
     if sprint_rows:
-        y = draw_panel(y, "Sprint", sprint_rows)
+        scorecard_data['sections'].append({'title': 'Sprint', 'rows': sprint_rows})
 
-    c.showPage()
-    c.save()
-    return buffer.getvalue(), safe_file_name(athlete)
+    pdf_bytes = render_scorecard_option_1(scorecard_data)
+    return pdf_bytes, safe_file_name(athlete)
 
 
 # ─── Auth ─────────────────────────────────────────────────────────────────────
