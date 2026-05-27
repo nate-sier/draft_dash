@@ -1042,15 +1042,14 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         'capacity': score_text(aq),
         'headshot_path': None,
         'logo_path': resolve_logo_path(),
-        # Keep the PDF top cards an exact match to Scorecard Option 1.
-        # Long dashboard labels like Athlete Group / Program Focus stay on the app page,
-        # but the PDF uses the compact CI Tier / Program cards so nothing gets squeezed.
+        # Scorecard top cards use the stakeholder wording from the Option 1 mockup.
+        # scorecard_skins.py handles wrapping so these fit cleanly in the boxes.
         'summary_cards': [
             {'label': 'Capacity', 'value': score_text(aq), 'percentile': aq, 'filled': True},
             {'label': 'Pos. Capacity', 'value': score_text(pos_aq), 'percentile': pos_aq},
-            {'label': 'Potential', 'value': score_text(pot), 'percentile': pot},
-            {'label': 'CI Tier', 'value': ci_tier_short},
-            {'label': 'Program', 'value': prog_short},
+            {'label': 'Potential to Gain', 'value': score_text(pot), 'percentile': pot},
+            {'label': 'Athlete Group', 'value': athlete_group},
+            {'label': 'Program Focus', 'value': program_focus},
         ],
         'sections': [
             {'title': 'Force Plate', 'rows': force_rows},
