@@ -1,4 +1,4 @@
-# VERSION: option1_identical_v32 -- fixed CSS f-string braces; Option 1 PDF skin integration, Gill Sans styling, Nationals logo support
+# VERSION: option1_pdf_old_dashboard_fonts_v33 -- dashboard fonts reverted; Option 1 PDF retained
 # VERSION: stakeholder_feedback_v27 -- potential to gain, athlete group/program focus, cleaner capacity language
 # VERSION: bodyweight_labels_v26 -- display label Mass changed to Bodyweight
 # VERSION: happy_medium_v21 -- development projection moved into right scorecard column
@@ -595,11 +595,13 @@ def build_scores(_df,
 # ─── CSS ──────────────────────────────────────────────────────────────────────
 CSS = f"""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Source+Sans+3:wght@300;400;600&display=swap');
+
 html, body, [class*="css"] {{
-    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif;
+    font-family: 'Source Sans 3', sans-serif;
     background-color: {SURF}; color: {NAV};
 }}
-h1,h2,h3 {{ font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; color: {NAV}; font-weight: 700; }}
+h1,h2,h3 {{ font-family: 'Playfair Display', serif; color: {NAV}; }}
 .block-container {{ padding-top: 1.5rem; max-width: 1400px; }}
 
 div[data-testid="metric-container"] {{
@@ -612,7 +614,7 @@ div[data-testid="metric-container"] label {{
     text-transform: uppercase; color: {SLATE};
 }}
 div[data-testid="metric-container"] div[data-testid="metric-value"] {{
-    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; font-size: 28px; color: {RED};
+    font-family: 'Playfair Display', serif; font-size: 28px; color: {RED};
 }}
 
 .stTabs [data-baseweb="tab-list"] {{
@@ -651,7 +653,7 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
     padding: 3px 12px; border-radius: 20px; letter-spacing: 0.04em;
 }}
 .score-big {{
-    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; font-size: 42px;
+    font-family: 'Playfair Display', serif; font-size: 42px;
     font-weight: 900; line-height: 1;
 }}
 .grad-bar {{
@@ -671,7 +673,7 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
     padding: 12px 16px; text-align: center;
 }}
 .wing-stat-val {{
-    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif; font-size: 26px;
+    font-family: 'Playfair Display', serif; font-size: 26px;
     font-weight: 900; color: white; line-height: 1.1;
 }}
 .wing-stat-lbl {{
@@ -706,7 +708,7 @@ div[data-testid="metric-container"] div[data-testid="metric-value"] {{
     text-overflow: ellipsis;
 }}
 .median-card-value {{
-    font-family: 'Gill Sans', 'Gill Sans MT', Calibri, Arial, sans-serif;
+    font-family: 'Playfair Display', serif;
     font-size: 22px;
     font-weight: 800;
     line-height: 1.05;
@@ -1063,7 +1065,7 @@ def check_password():
         padding:36px 32px;box-shadow:0 4px 24px rgba(17,34,90,0.10);border-top:4px solid {RED}">
         <p style="font-size:10px;font-weight:600;letter-spacing:0.2em;color:{RED};margin-bottom:6px">
             WASHINGTON NATIONALS · DRAFT SCOUTING</p>
-        <h2 style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;color:{NAV};margin:0 0 20px 0;font-size:22px">
+        <h2 style="font-family:'Playfair Display',serif;color:{NAV};margin:0 0 20px 0;font-size:22px">
             Athlete Scorecard</h2>
     </div>
     """, unsafe_allow_html=True)
@@ -1586,7 +1588,7 @@ with tab_card:
             <div>
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:{RED};margin:0 0 4px 0">
                     WASHINGTON NATIONALS · ATHLETE SCORECARD</p>
-                <h2 style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
+                <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
                     {sel_ath}</h2>
                 <span style="font-size:12px;color:{SLATE}">{sel_yr_display} · {pos_str} · {sch_str}</span><br>
                 <span style="display:inline-block;margin-top:8px;background:{prog_color};
@@ -1596,7 +1598,7 @@ with tab_card:
             </div>
             <div style="text-align:right">
                 <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:{SLATE};margin:0">OVERALL RANK</p>
-                <p style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:36px;font-weight:900;
+                <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
                     color:{RED};margin:0">{"#"+str(rnk_val) if rnk_val else "—"}</p>
                 <p style="font-size:11px;color:#9AAAC0;margin:0">of {pool_n} athletes (all years)</p>
             </div>
@@ -1616,7 +1618,7 @@ with tab_card:
             box-shadow:0 4px 16px rgba(186,12,47,0.12)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{RED};margin-bottom:8px">★ CAPACITY SCORE</div>
-            <div style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:64px;
+            <div style="font-family:'Playfair Display',serif;font-size:64px;
                 font-weight:900;color:{RED};line-height:1">
                 {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
             <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">{aq_pct_str}</div>
@@ -1647,7 +1649,7 @@ with tab_card:
             box-shadow:0 4px 16px rgba(17,34,90,0.08)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{SLATE};margin-bottom:8px">ATHLETE GROUP</div>
-            <div style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:clamp(18px,1.6vw,24px);
+            <div style="font-family:'Playfair Display',serif;font-size:clamp(18px,1.6vw,24px);
                 font-weight:900;color:{NAV};line-height:1.15;margin-bottom:10px;white-space:normal;overflow-wrap:normal">
                 {athlete_group_val}</div>
             <div style="font-size:11px;color:{SLATE};line-height:1.45">
@@ -1667,7 +1669,7 @@ with tab_card:
             box-shadow:0 4px 16px rgba(226,193,136,0.16)">
             <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
                 text-transform:uppercase;color:{SLATE};margin-bottom:8px">POTENTIAL TO GAIN</div>
-            <div style="font-family:'Gill Sans','Gill Sans MT',Calibri,Arial,sans-serif;font-size:54px;
+            <div style="font-family:'Playfair Display',serif;font-size:54px;
                 font-weight:900;color:{GOLD};line-height:1">
                 {str(int(round(pot_val))) if pd.notna(pot_val) else "—"}</div>
             <div style="font-size:11px;color:{SLATE};margin-top:6px;line-height:1.35">
