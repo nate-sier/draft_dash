@@ -1,3 +1,4 @@
+# VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
 # VERSION: option1_original_card_grid_v49 -- bottom card text 6.6
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
 # VERSION: option1_program_focus_fit_v43 -- uses updated scorecard_skins with compact Athlete Group and Program Focus cards
@@ -479,7 +480,9 @@ def build_scores(_df,
                     w_pp_ns*row["pp_pct_alltime"])
 
     df["athlete_quality_raw"]   = df.apply(aq_raw, axis=1)
-    df["athlete_quality_score"] = scaled_0_100(df["athlete_quality_raw"].values)
+    # Capacity Score is now the raw weighted-percentile composite.
+    # This avoids min-max scaling, so scores are more stable across loaded pools/filters.
+    df["athlete_quality_score"] = df["athlete_quality_raw"]
 
     for col, pct_col, inv in [
         ("Concentric Impulse", "ci_pct_yr",    False),
@@ -801,7 +804,7 @@ def make_radar(row, label="Athlete", is_pitcher=False):
     ]
     if is_pitcher:
         anthro_rows.insert(3, ("Wing Adv.", pct("wingspan_pct"), fmt_wingspan_adv(val("wingspan_advantage"))))
-    sections.append(("Anthropometrics", anthro_rows))
+    sections.append(("Physical Attributes", anthro_rows))
 
     labels, vals, raw_vals, section_for_row = [], [], [], []
     y = []
@@ -1064,7 +1067,7 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         ],
         'sections': [
             {'title': 'Force Plate', 'rows': force_rows},
-            {'title': 'Anthropometrics', 'rows': anthro_rows},
+            {'title': 'Physical Attributes', 'rows': anthro_rows},
         ],
     }
     if sprint_rows:
@@ -1192,12 +1195,12 @@ with tab_board:
         ("RSI-modified", "RSI-modified", 3, "", "Force Plate"),
         ("Peak Power / BM", "Peak Power / BM", 1, "", "Force Plate"),
         ("Jump Height (Flight Time) in Inches", "Jump Height", 2, " in", "Force Plate"),
-        # Anthropometrics shown in the leaderboard
-        ("Height_in", "Height", 1, " in", "Anthropometrics"),
-        ("Bodyweight_lbs", "Bodyweight", 1, " lbs", "Anthropometrics"),
-        ("Wingspan_in", "Wingspan", 1, " in", "Anthropometrics"),
-        ("Wing_Adv_in", "Wingspan Adv.", 1, " in", "Anthropometrics"),
-        ("BW_Ht_Pct", "BW/Ht Pct", 0, "th", "Anthropometrics"),
+        # Physical attributes shown in the leaderboard
+        ("Height_in", "Height", 1, " in", "Physical Attributes"),
+        ("Bodyweight_lbs", "Bodyweight", 1, " lbs", "Physical Attributes"),
+        ("Wingspan_in", "Wingspan", 1, " in", "Physical Attributes"),
+        ("Wing_Adv_in", "Wingspan Adv.", 1, " in", "Physical Attributes"),
+        ("BW_Ht_Pct", "BW/Ht Pct", 0, "th", "Physical Attributes"),
     ]
 
     FILTERABLE_METRICS = LEADERBOARD_METRICS
@@ -1261,7 +1264,7 @@ with tab_board:
         if pos_grp_sel != "All":
             range_base = range_base[range_base["pos_group"] == pos_grp_sel]
 
-        filter_groups = ["Force Plate", "Anthropometrics"]
+        filter_groups = ["Force Plate", "Physical Attributes"]
         for group_name in filter_groups:
             with st.expander(group_name, expanded=False):
                 group_metrics = [m for m in FILTERABLE_METRICS if m[4] == group_name]
@@ -1374,10 +1377,10 @@ with tab_board:
             unsafe_allow_html=True,
         )
 
-        st.markdown(f'<p class="label">Anthropometric Medians</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="label">Physical Attributes Medians</p>', unsafe_allow_html=True)
         anthro_metrics = [
             m for m in LEADERBOARD_METRICS
-            if m[4] == "Anthropometrics" and m[0] != "BW_Ht_Pct"
+            if m[4] == "Physical Attributes" and m[0] != "BW_Ht_Pct"
         ]
         anthro_cards = []
         for col, label, digits, suffix, _ in anthro_metrics:
@@ -1841,7 +1844,7 @@ with tab_card:
     m1, m2 = st.columns([1.05, 1.95])
 
     with m1:
-        # Wingspan row in anthropometrics — always show raw numbers, but
+        # Wingspan row in physical attributes — always show raw numbers, but
         # only add the advantage flag line for pitchers
         wing_adv_row = ""
         if is_pitcher:
