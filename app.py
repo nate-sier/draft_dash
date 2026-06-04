@@ -1,5 +1,5 @@
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
-# VERSION: force_plate_2026_scorecards_v54 -- robust Force Plate 2026 position fallback by case-insensitive header, playerID, and athleteName
+# VERSION: force_plate_2026_scorecards_v55 -- robust sheet reader plus trailing Position fallback for Force Plate 2026
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
 # VERSION: option1_original_card_grid_v49 -- bottom card text 6.6
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
@@ -284,6 +284,52 @@ def label_archetype(row, all_rz_cols):
 
 
 
+
+def worksheet_to_dataframe(sh, worksheet_name):
+    """Read a Google Sheet tab with raw values so late-added columns are not missed.
+
+    gspread.get_all_records() can be brittle when a sheet has duplicate/blank
+    headers or manually-added columns at the far right. This reader keeps every
+    non-empty header, uniquifies duplicate names, and pads short rows.
+    """
+    ws = sh.worksheet(worksheet_name)
+    values = ws.get_all_values()
+    if not values:
+        return pd.DataFrame()
+
+    raw_headers = [str(h).strip() for h in values[0]]
+    max_len = max(len(r) for r in values)
+    if len(raw_headers) < max_len:
+        raw_headers += [""] * (max_len - len(raw_headers))
+
+    seen = {}
+    headers = []
+    for i, h in enumerate(raw_headers):
+        base = h if h else f"__blank_{i}"
+        key = base
+        if key in seen:
+            seen[key] += 1
+            key = f"{base}__{seen[base]}"
+        else:
+            seen[key] = 1
+        headers.append(key)
+
+    rows = []
+    for r in values[1:]:
+        rr = list(r) + [""] * (max_len - len(r))
+        rows.append(rr[:max_len])
+
+    df = pd.DataFrame(rows, columns=headers)
+    # Drop columns that truly have no header and no values, but keep any blank-header
+    # column with data because it may be a manually-added field.
+    drop_cols = []
+    for c in df.columns:
+        if str(c).startswith("__blank_") and df[c].astype(str).str.strip().eq("").all():
+            drop_cols.append(c)
+    if drop_cols:
+        df = df.drop(columns=drop_cols)
+    return df
+
 def clean_forcedecks_force_plate(raw_df):
     """Convert a raw ForceDecks CMJ export into the app's Force Plate tab format.
 
@@ -349,6 +395,30 @@ def clean_forcedecks_force_plate(raw_df):
 
         return raw.apply(one)
 
+    def position_col():
+        """Read position from a named header or, if needed, from a trailing manual column."""
+        named = first_existing("Position", "position", "POSITION", "Pos", "Primary Position", "PrimaryPosition")
+        if named is not None:
+            return fd[named].astype(str).replace({"nan": "", "None": ""}).str.strip()
+
+        # Fallback: user is manually adding Position as the last column. If a blank
+        # or oddly-named trailing column contains position-like values, use it.
+        valid_aliases = {
+            "SP", "RHP", "LHP", "RP", "TWP", "P", "PITCHER",
+            "C", "CATCHER",
+            "SS", "3B", "2B", "1B", "INF", "IF", "INFIELD", "INFIELDER",
+            "CF", "LF", "RF", "OF", "OUTFIELD", "OUTFIELDER",
+        }
+        for c in list(fd.columns)[::-1]:
+            s = fd[c].astype(str).replace({"nan": "", "None": ""}).str.strip()
+            nonempty = s[s.ne("")]
+            if nonempty.empty:
+                continue
+            norm = nonempty.str.upper()
+            if norm.isin(valid_aliases).mean() >= 0.75:
+                return s
+        return pd.Series("", index=fd.index, dtype="object")
+
     name = text_col("athleteName", "Name")
     external_id = text_col("playerID", "ExternalId", "External ID")
 
@@ -387,7 +457,7 @@ def clean_forcedecks_force_plate(raw_df):
         "Test Type": text_col("Test Type"),
         "Tags": text_col("Tags"),
         "Height": height_to_cm("Height", "Height [cm]", "Height [in]", "Height (in)", "Height Inches"),
-        "Position": text_col("Position", "Pos", "Primary Position"),
+        "Position": position_col(),
     })
 
     # ForceDecks exports durations in milliseconds. The dashboard's bounds/scoring
@@ -415,7 +485,7 @@ def clean_forcedecks_force_plate(raw_df):
 
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data…")
-def load_data(_v=5):
+def load_data(_v=6):
     import gspread
     from google.oauth2.service_account import Credentials
     scopes = [
@@ -430,7 +500,7 @@ def load_data(_v=5):
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(os.environ.get("GOOGLE_SHEET_ID", SHEET_ID))
 
-    fp_raw     = pd.DataFrame(sh.worksheet("Force Plate").get_all_records())
+    fp_raw     = worksheet_to_dataframe(sh, "Force Plate")
     if "Data Source" not in fp_raw.columns:
         fp_raw["Data Source"] = "Force Plate"
 
@@ -438,7 +508,7 @@ def load_data(_v=5):
     # ForceDecks CSV export; the app converts names/units and appends it to the
     # historical Force Plate dataset before scoring.
     try:
-        fp_2026_raw = pd.DataFrame(sh.worksheet("Force Plate 2026").get_all_records())
+        fp_2026_raw = worksheet_to_dataframe(sh, "Force Plate 2026")
         fp_2026_clean = clean_forcedecks_force_plate(fp_2026_raw)
         if not fp_2026_clean.empty:
             fp_raw = pd.concat([fp_raw, fp_2026_clean], ignore_index=True, sort=False)
@@ -447,9 +517,9 @@ def load_data(_v=5):
         # Keep the app working if the optional tab has not been created yet.
         pass
 
-    isak_raw   = pd.DataFrame(sh.worksheet("ISAK").get_all_records())
-    sprint_raw = pd.DataFrame(sh.worksheet("Sprint").get_all_records())
-    pos_raw    = pd.DataFrame(sh.worksheet("Positions").get_all_records())
+    isak_raw   = worksheet_to_dataframe(sh, "ISAK")
+    sprint_raw = worksheet_to_dataframe(sh, "Sprint")
+    pos_raw    = worksheet_to_dataframe(sh, "Positions")
 
     for df in [fp_raw, isak_raw, sprint_raw]:
         if "playerID" not in df.columns:
