@@ -1,3 +1,4 @@
+# VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
 # VERSION: option1_original_card_grid_v49 -- bottom card text 6.6
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
@@ -1166,7 +1167,79 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card = st.tabs(["Leaderboard", "Athlete Scorecard"])
+tab_board, tab_card, tab_info = st.tabs(["Leaderboard", "Athlete Scorecard", "Score Info"])
+
+
+# =============================================================================
+# TAB 0 — SCORE INFO
+# =============================================================================
+with tab_info:
+    st.markdown(f"""
+    <div class="card card-navy">
+        <p class="label">Scoring Methodology</p>
+        <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Score Info</h2>
+        <p style="font-size:14px;line-height:1.55;color:{NAV};margin-bottom:0;">
+            This tab describes how the dashboard's major summary scores should be interpreted.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="card card-red">
+        <h3 style="margin-top:0;color:{RED};font-family:'Playfair Display',serif;">Capacity Score:</h3>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            A composite score (out of 100) that represents their current "physical capacity" relative to all athletes in the MLB combine dataset. (Sample of 641 athletes.)
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            The weighting is based on 45% CI percentile, 20% mRSI percentile, and 35% Rel/Peak Power percentile.
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            Not all position players have sprint values. If they do, the weighting is 35% CI, 30% 30 yard sprint, 15% mRSI, and 20% Rel/Peak Power.
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            These are the weights that S&C currently feels most convicted in. Since a small percentage of players do not participate in all parts of the combine (some skip the sprints or jumps altogether), this score is worth using as a rough guideline for their athleticism rather than an exact number. (Think of using this score as a litmus test for how closely our subjective idea of a player's athleticism lines up with the objective data they would be assessed on in the org.)
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            CI is the #1 correlation with bat speed and velo.
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            mRSI is representative of elasticity and "quickness." Ability to produce force quickly could have implications defensively.
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
+            Rel/Peak Power looks at how much force an athlete can produce relative to their size. This helps round out our understanding of their athleticism, checking to see that CI isn't just driven by their size.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="card card-navy">
+        <h3 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Capacity vs Position Group:</h3>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
+            Where their score falls relative to their position. Potential position groups are Pitchers, Outfielders, Infielders, Catchers. (A small percentage of players who didn't have a position designated for them in the combine data will not have a score for this.)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="card card-gold">
+        <h3 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Athlete Group:</h3>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
+            Shows the initial CI/P1 bucket we would have them in, and how we would approach their training based on where they are at currently.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="card card-green">
+        <h3 style="margin-top:0;color:{GREEN};font-family:'Playfair Display',serif;">Potential to Gain:</h3>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            A composite score (out of 100) that represents their ability to gain CI moving forwad. Athletes with the most potential to gain are typically tall, skinny and/or springy. (In other words, there is more potential room to increase CI simply by increasing body weight / filling out their frame.)
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
+            The weighting is based on 20% Rel/Peak Power percentile, 25% height percentile, 30% Bw/Ht percentile (inverted so a skinnier guy is shown as having more potential), 10% wingspan advantage (how much greater their wingspan is than their height), and 15% school type (High school has more potential than Juco, which has more than a 4 year, etc. This is used as a proxy for the quality of their training history.)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # =============================================================================
 # TAB 1 — LEADERBOARD
