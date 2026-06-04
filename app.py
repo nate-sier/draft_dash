@@ -1,5 +1,5 @@
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
-# VERSION: force_plate_2026_scorecards_v55 -- robust sheet reader plus trailing Position fallback for Force Plate 2026
+# VERSION: force_plate_2026_scorecards_v56 -- handle X/missing wingspan in Force Plate 2026
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
 # VERSION: option1_original_card_grid_v49 -- bottom card text 6.6
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
@@ -366,34 +366,42 @@ def clean_forcedecks_force_plate(raw_df):
             return pd.Series("", index=fd.index, dtype="object")
         return fd[col].astype(str).replace({"nan": "", "None": ""}).str.strip()
 
+    def length_to_cm_value(v):
+        """Accept cm, inches, feet-inches text, blanks, or X/NA markers and return cm."""
+        if pd.isna(v):
+            return np.nan
+        txt = str(v).strip()
+        if not txt:
+            return np.nan
+        if txt.upper() in {"X", "NA", "N/A", "NONE", "NULL", "-", "--"}:
+            return np.nan
+        # Handles values like 6'4, 6'4", 6-4, or 6 4.
+        m = re.match(r"^\s*(\d+)\s*(?:'|-|ft| )\s*(\d+(?:\.\d+)?)", txt, flags=re.I)
+        if m:
+            ft = float(m.group(1)); inch = float(m.group(2))
+            return (ft * 12 + inch) * 2.54
+        try:
+            x = float(txt.replace(",", ""))
+        except Exception:
+            return np.nan
+        # Most manual entries will be inches (55-90). ISAK style could be cm (155-230).
+        if 55 <= x <= 90:
+            return x * 2.54
+        return x
+
     def height_to_cm(*names):
-        """Accept height as cm, inches, or feet-inches text and return cm."""
+        """Accept height as cm, inches, feet-inches text, or X/NA and return cm."""
         col = first_existing(*names)
         if col is None:
             return pd.Series(np.nan, index=fd.index)
-        raw = fd[col]
+        return fd[col].apply(length_to_cm_value)
 
-        def one(v):
-            if pd.isna(v):
-                return np.nan
-            txt = str(v).strip()
-            if not txt:
-                return np.nan
-            # Handles values like 6'4, 6'4", 6-4, or 6 4.
-            m = re.match(r"^\s*(\d+)\s*(?:'|-|ft| )\s*(\d+(?:\.\d+)?)", txt, flags=re.I)
-            if m:
-                ft = float(m.group(1)); inch = float(m.group(2))
-                return (ft * 12 + inch) * 2.54
-            try:
-                x = float(txt.replace(",", ""))
-            except Exception:
-                return np.nan
-            # Most manual entries will be inches (70-85). ForceDecks/ISAK style could be cm (155-215).
-            if 55 <= x <= 90:
-                return x * 2.54
-            return x
-
-        return raw.apply(one)
+    def wingspan_to_cm(*names):
+        """Accept wingspan as cm, inches, feet-inches text, or X/NA and return cm."""
+        col = first_existing(*names)
+        if col is None:
+            return pd.Series(np.nan, index=fd.index)
+        return fd[col].apply(length_to_cm_value)
 
     def position_col():
         """Read position from a named header or, if needed, from a trailing manual column."""
@@ -457,6 +465,7 @@ def clean_forcedecks_force_plate(raw_df):
         "Test Type": text_col("Test Type"),
         "Tags": text_col("Tags"),
         "Height": height_to_cm("Height", "Height [cm]", "Height [in]", "Height (in)", "Height Inches"),
+        "Wingspan": wingspan_to_cm("Wingspan", "Wingspan [cm]", "Wingspan [in]", "Wingspan (in)", "Wingspan Inches"),
         "Position": position_col(),
     })
 
@@ -485,7 +494,7 @@ def clean_forcedecks_force_plate(raw_df):
 
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data…")
-def load_data(_v=6):
+def load_data(_v=7):
     import gspread
     from google.oauth2.service_account import Credentials
     scopes = [
@@ -1390,6 +1399,102 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     return pdf_bytes, safe_file_name(athlete)
 
 
+# ─── Score Info PDF Explainer ────────────────────────────────────────────────
+def make_score_info_pdf():
+    """Create a one-page PDF explainer for the Score Info tab."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_LEFT
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    except Exception as e:
+        raise ImportError("Score Info PDF export requires reportlab.") from e
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.42 * inch,
+        leftMargin=0.42 * inch,
+        topMargin=0.34 * inch,
+        bottomMargin=0.34 * inch,
+    )
+
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle(
+        "NatsTitle", parent=styles["Title"], fontName="Helvetica-Bold",
+        fontSize=20, leading=22, textColor=colors.HexColor(NAV), alignment=TA_LEFT,
+        spaceAfter=4,
+    )
+    kicker = ParagraphStyle(
+        "Kicker", parent=styles["Normal"], fontName="Helvetica-Bold",
+        fontSize=7.5, leading=9, textColor=colors.HexColor(RED), alignment=TA_LEFT,
+        uppercase=True, spaceAfter=4,
+    )
+    section = ParagraphStyle(
+        "Section", parent=styles["Heading2"], fontName="Helvetica-Bold",
+        fontSize=10.5, leading=12, textColor=colors.HexColor(RED), spaceBefore=5, spaceAfter=2,
+    )
+    body = ParagraphStyle(
+        "Body", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=7.9, leading=9.7, textColor=colors.HexColor(NAV), spaceAfter=3,
+    )
+    small = ParagraphStyle(
+        "Small", parent=styles["BodyText"], fontName="Helvetica",
+        fontSize=7.2, leading=8.8, textColor=colors.HexColor(NAV), spaceAfter=2,
+    )
+    bullet = ParagraphStyle(
+        "Bullet", parent=body, leftIndent=9, firstLineIndent=-6, spaceAfter=1.8,
+    )
+
+    story = []
+    story.append(Paragraph("WASHINGTON NATIONALS · DRAFT SCOUTING", kicker))
+    story.append(Paragraph("Score Info Explainer", title))
+    story.append(Paragraph("A one-page reference for interpreting the Athlete Scorecard summary metrics.", body))
+
+    story.append(Paragraph("Capacity Score", section))
+    story.append(Paragraph('A composite score (out of 100) that represents current "physical capacity" relative to all athletes in the MLB combine dataset. Sample of 641 athletes.', body))
+    story.append(Paragraph("The weighting is based on 45% CI percentile, 20% mRSI percentile, and 35% Rel/Peak Power percentile.", body))
+    story.append(Paragraph("• Concentric Impulse (CI) is the #1 correlated metric to bat speed and velo.", bullet))
+    story.append(Paragraph('• mRSI is representative of elasticity and "quickness." Ability to produce force quickly could have implications defensively.', bullet))
+    story.append(Paragraph("• Rel/Peak Power looks at how much force an athlete can produce relative to their size. This helps round out our understanding of their athleticism, checking to see that CI isn't just driven by their size.", bullet))
+    story.append(Paragraph("Not all position players have sprint values. If they do, the weighting is 35% CI, 30% 30 yard sprint, 15% mRSI, and 20% Rel/Peak Power.", body))
+    story.append(Paragraph("These are the weights that S&C currently feels most convicted in. Since a small percentage of players do not participate in all parts of the combine, this score should be used as a rough guideline for athleticism rather than an exact number.", body))
+
+    story.append(Paragraph("Capacity vs Position Group", section))
+    story.append(Paragraph("Where the athlete's score falls relative to their position group: Pitchers, Outfielders, Infielders, or Catchers. Players without a designated position may not have a position-group score.", body))
+
+    story.append(Paragraph("Athlete Group", section))
+    story.append(Paragraph("Shows the initial CI/P1 bucket we would place them in and how we would approach their training in Player Development.", body))
+
+    story.append(Paragraph("Potential to Gain", section))
+    story.append(Paragraph("A composite score (out of 100) that represents ability to gain CI moving forward. Athletes with the most potential to gain are typically tall, skinny and/or springy, meaning there may be more room to increase CI by increasing body weight or filling out their frame.", body))
+    story.append(Paragraph("The weighting is based on 20% Rel/Peak Power percentile, 25% height percentile, 30% BW/Ht percentile inverted, 10% wingspan advantage, and 15% school type. School type is used as a proxy for training history.", body))
+
+    story.append(Paragraph("Force Plate Metric Notes", section))
+    notes = [
+        [Paragraph("<b>Concentric Impulse</b>", small), Paragraph("Total concentric force output; the main capacity metric and the #1 correlated metric to bat speed and velo.", small)],
+        [Paragraph("<b>P1 Concentric Impulse</b>", small), Paragraph("Breaking inertia: early concentric force determines how easily the system starts moving and overcoming inertia.", small)],
+        [Paragraph("<b>Relative Peak Power</b>", small), Paragraph("How much force an athlete can produce relative to their size.", small)],
+        [Paragraph("<b>mRSI</b>", small), Paragraph('Representative of elasticity and "quickness." Ability to produce force quickly.', small)],
+    ]
+    tbl = Table(notes, colWidths=[1.55 * inch, 5.0 * inch], hAlign="LEFT")
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#F7F8FA")),
+        ("GRID", (0,0), (-1,-1), 0.35, colors.HexColor(BORD)),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+        ("LEFTPADDING", (0,0), (-1,-1), 5),
+        ("RIGHTPADDING", (0,0), (-1,-1), 5),
+        ("TOPPADDING", (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+    ]))
+    story.append(tbl)
+    doc.build(story)
+    return buffer.getvalue()
+
+
 # ─── Auth ─────────────────────────────────────────────────────────────────────
 def check_password():
     if st.session_state.get("auth"): return True
@@ -1486,6 +1591,18 @@ tab_board, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Athlete Score
 # TAB 0 — SCORE INFO
 # =============================================================================
 with tab_info:
+    try:
+        score_info_pdf = make_score_info_pdf()
+        st.download_button(
+            "Download One-Page PDF Explainer",
+            data=score_info_pdf,
+            file_name="score_info_explainer.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    except Exception as e:
+        st.warning(f"Score Info PDF export is unavailable: {e}")
+
     st.markdown(f"""
     <div class="card card-navy">
         <p class="label">Scoring Methodology</p>
@@ -1506,19 +1623,19 @@ with tab_info:
             The weighting is based on 45% CI percentile, 20% mRSI percentile, and 35% Rel/Peak Power percentile.
         </p>
         <p style="font-size:14px;line-height:1.6;color:{NAV};">
-            Not all position players have sprint values. If they do, the weighting is 35% CI, 30% 30 yard sprint, 15% mRSI, and 20% Rel/Peak Power.
-        </p>
-        <p style="font-size:14px;line-height:1.6;color:{NAV};">
-            These are the weights that S&C currently feels most convicted in. Since a small percentage of players do not participate in all parts of the combine (some skip the sprints or jumps altogether), this score is worth using as a rough guideline for their athleticism rather than an exact number. (Think of using this score as a litmus test for how closely our subjective idea of a player's athleticism lines up with the objective data they would be assessed on in the org.)
-        </p>
-        <p style="font-size:14px;line-height:1.6;color:{NAV};">
-            CI is the #1 correlation with bat speed and velo.
+            Concentric Impulse (CI) is the #1 correlated metric to bat speed and velo.
         </p>
         <p style="font-size:14px;line-height:1.6;color:{NAV};">
             mRSI is representative of elasticity and "quickness." Ability to produce force quickly could have implications defensively.
         </p>
-        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
             Rel/Peak Power looks at how much force an athlete can produce relative to their size. This helps round out our understanding of their athleticism, checking to see that CI isn't just driven by their size.
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};">
+            Not all position players have sprint values. If they do, the weighting is 35% CI, 30% 30 yard sprint, 15% mRSI, and 20% Rel/Peak Power.
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
+            These are the weights that S&C currently feels most convicted in. Since a small percentage of players do not participate in all parts of the combine (some skip the sprints or jumps altogether), this score is worth using as a rough guideline for their athleticism rather than an exact number. (Think of using this score as a litmus test for how closely our subjective idea of a player's athleticism lines up with the objective data they would be assessed on in the org.)
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1536,7 +1653,7 @@ with tab_info:
     <div class="card card-gold">
         <h3 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Athlete Group:</h3>
         <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
-            Shows the initial CI/P1 bucket we would have them in, and how we would approach their training based on where they are at currently.
+            Shows the initial CI/P1 bucket we would place them in and how we would approach their training in Player Development.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1545,11 +1662,21 @@ with tab_info:
     <div class="card card-green">
         <h3 style="margin-top:0;color:{GREEN};font-family:'Playfair Display',serif;">Potential to Gain:</h3>
         <p style="font-size:14px;line-height:1.6;color:{NAV};">
-            A composite score (out of 100) that represents their ability to gain CI moving forwad. Athletes with the most potential to gain are typically tall, skinny and/or springy. (In other words, there is more potential room to increase CI simply by increasing body weight / filling out their frame.)
+            A composite score (out of 100) that represents their ability to gain CI moving forward. Athletes with the most potential to gain are typically tall, skinny and/or springy. (In other words, there is more potential room to increase CI simply by increasing body weight / filling out their frame.)
         </p>
         <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
             The weighting is based on 20% Rel/Peak Power percentile, 25% height percentile, 30% Bw/Ht percentile (inverted so a skinnier guy is shown as having more potential), 10% wingspan advantage (how much greater their wingspan is than their height), and 15% school type (High school has more potential than Juco, which has more than a 4 year, etc. This is used as a proxy for the quality of their training history.)
         </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="card card-red">
+        <h3 style="margin-top:0;color:{RED};font-family:'Playfair Display',serif;">Force Plate Metric Notes:</h3>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};"><b>Concentric Impulse</b> - Total concentric force output; the main capacity metric and the #1 correlated metric to bat speed and velo.</p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};"><b>P1 Concentric Impulse</b> - Breaking Inertia, early concentric force determines how easily the system starts moving and overcoming inertia.</p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};"><b>Relative Peak Power</b> - How much force an athlete can produce relative to their size.</p>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;"><b>mRSI</b> - Representative of elasticity and "quickness." Ability to produce force quickly.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1874,7 +2001,7 @@ with tab_2026:
         <p class="label">Force Plate 2026</p>
         <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">2026 Player Scorecards</h2>
         <p style="font-size:14px;line-height:1.55;color:{NAV};margin-bottom:0;">
-            These cards are built from the <strong>Force Plate 2026</strong> tab. Height, School Type, and Position can come from that tab; missing wingspan is treated as a neutral 50th percentile input for Potential to Gain scoring only.
+            These cards are built from the <strong>Force Plate 2026</strong> tab. Height, School Type, and Position can come from that tab; missing wingspan, including cells marked X, is treated as a neutral 50th percentile input for Potential to Gain scoring only.
         </p>
     </div>
     """, unsafe_allow_html=True)
