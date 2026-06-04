@@ -1,5 +1,5 @@
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
-# VERSION: force_plate_2026_scorecards_v51 -- Force Plate 2026 appended with height/school type, neutral wingspan, 2026 scorecard tab
+# VERSION: force_plate_2026_scorecards_v52 -- Force Plate 2026 reads height/school type/position, neutral wingspan, 2026 scorecard tab
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
 # VERSION: option1_original_card_grid_v49 -- bottom card text 6.6
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
@@ -95,8 +95,8 @@ WEIGHT_CLASS_COLORS = {
 # ─── Position groups ──────────────────────────────────────────────────────────
 PITCHERS   = {"SP", "RHP", "LHP", "RP", "TWP"}
 CATCHERS   = {"C"}
-INFIELDERS = {"SS", "3B", "2B", "1B"}
-OUTFIELDERS= {"CF", "LF", "RF"}
+INFIELDERS = {"SS", "3B", "2B", "1B", "INF"}
+OUTFIELDERS= {"CF", "LF", "RF", "OF"}
 
 def pos_group(pos):
     if pos in PITCHERS:    return "Pitcher"
@@ -382,6 +382,7 @@ def clean_forcedecks_force_plate(raw_df):
         "Test Type": text_col("Test Type"),
         "Tags": text_col("Tags"),
         "Height": height_to_cm("Height", "Height [cm]", "Height [in]", "Height (in)", "Height Inches"),
+        "Position": text_col("Position", "Pos", "Primary Position"),
     })
 
     # ForceDecks exports durations in milliseconds. The dashboard's bounds/scoring
@@ -498,12 +499,24 @@ def load_data(_v=3):
     df = df.merge(sprint_raw.drop(columns=["athleteName"], errors="ignore"),
                   on=["playerID","Year"], how="outer")
 
+    # Position can now come from either the regular Positions tab or the raw
+    # Force Plate 2026 tab. Prefer the official Positions tab when available,
+    # but use the 2026 tab as the fallback for new players.
+    if "Position" not in df.columns:
+        df["Position"] = ""
+    df["Position"] = df["Position"].astype(str).replace({"nan": "", "None": ""}).str.strip()
+
     if "playerID" in pos_raw.columns and "Position" in pos_raw.columns:
         pos_raw["playerID"] = pos_raw["playerID"].astype(str).str.strip()
-        df = df.merge(pos_raw[["playerID","Position"]].drop_duplicates("playerID"),
-                      on="playerID", how="left")
-    else:
-        df["Position"] = ""
+        pos_lookup = (pos_raw[["playerID", "Position"]]
+                      .dropna()
+                      .drop_duplicates("playerID")
+                      .set_index("playerID")["Position"]
+                      .astype(str)
+                      .str.strip()
+                      .to_dict())
+        official_pos = df["playerID"].map(pos_lookup).fillna("")
+        df["Position"] = official_pos.where(official_pos.ne(""), df["Position"])
 
     name_map = {}
     for src in [fp_raw, isak_raw, sprint_raw]:
@@ -1136,22 +1149,30 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         v = get_val(key)
         return "-" if pd.isna(v) else f"{v:.{digits}f}{suffix}"
 
-    def pct_from_col(pct_key):
-        v = get_val(pct_key)
-        if pd.isna(v):
-            return None
-        return max(0, min(100, int(round(float(v)))))
+    def safe_pdf_percentile(v, fallback=50):
+        """Return a finite 0-100 integer so the PDF skin never receives NaN."""
+        try:
+            f = float(v)
+            if not np.isfinite(f):
+                return int(fallback)
+            return max(0, min(100, int(round(f))))
+        except Exception:
+            return int(fallback)
 
-    def pool_pct(value_key, inverse=False):
+    def pct_from_col(pct_key, fallback=50):
+        v = get_val(pct_key)
+        return safe_pdf_percentile(v, fallback=fallback)
+
+    def pool_pct(value_key, inverse=False, fallback=50):
         v = get_val(value_key)
         if pd.isna(v) or value_key not in df_all.columns:
-            return None
+            return int(fallback)
         pool = pd.to_numeric(df_all[value_key], errors="coerce").dropna()
         if len(pool) == 0:
-            return None
+            return int(fallback)
         pct = (pool < v).mean() * 100.0
         pct = 100.0 - pct if inverse else pct
-        return max(0, min(100, int(round(float(pct)))))
+        return safe_pdf_percentile(pct, fallback=fallback)
 
     def pct_sfx_local(p):
         if p is None or pd.isna(p):
@@ -1232,11 +1253,11 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         'headshot_path': None,
         'logo_path': resolve_logo_path(),
         # Scorecard top cards use the stakeholder wording from the Option 1 mockup.
-        # scorecard_skins.py handles wrapping so these fit cleanly in the boxes.
+        # All percentile values are sanitized because the PDF renderer cannot draw NaN.
         'summary_cards': [
-            {'label': 'Capacity', 'value': score_text(aq), 'percentile': aq, 'filled': True},
-            {'label': 'Pos. Capacity', 'value': score_text(pos_aq), 'percentile': pos_aq},
-            {'label': 'Potential to Gain', 'value': score_text(pot), 'percentile': pot},
+            {'label': 'Capacity', 'value': score_text(aq), 'percentile': safe_pdf_percentile(aq), 'filled': True},
+            {'label': 'Pos. Capacity', 'value': score_text(pos_aq), 'percentile': safe_pdf_percentile(pos_aq)},
+            {'label': 'Potential to Gain', 'value': score_text(pot), 'percentile': safe_pdf_percentile(pot)},
             {'label': 'Athlete Group', 'value': athlete_group},
             {'label': 'Program Focus', 'value': program_focus},
         ],
@@ -1736,7 +1757,7 @@ with tab_2026:
         <p class="label">Force Plate 2026</p>
         <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">2026 Player Scorecards</h2>
         <p style="font-size:14px;line-height:1.55;color:{NAV};margin-bottom:0;">
-            These cards are built from the <strong>Force Plate 2026</strong> tab. Height and School Type can come from that tab; missing wingspan is treated as a neutral 50th percentile input for Potential to Gain scoring only.
+            These cards are built from the <strong>Force Plate 2026</strong> tab. Height, School Type, and Position can come from that tab; missing wingspan is treated as a neutral 50th percentile input for Potential to Gain scoring only.
         </p>
     </div>
     """, unsafe_allow_html=True)
