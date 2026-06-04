@@ -1452,7 +1452,6 @@ def make_score_info_pdf():
     story = []
     story.append(Paragraph("WASHINGTON NATIONALS · DRAFT SCOUTING", kicker))
     story.append(Paragraph("Score Info Explainer", title))
-    story.append(Paragraph("A one-page reference for interpreting the Athlete Scorecard summary metrics.", body))
 
     story.append(Paragraph("Capacity Score", section))
     story.append(Paragraph('A composite score (out of 100) that represents current "physical capacity" relative to all athletes in the MLB combine dataset. Sample of 641 athletes.', body))
