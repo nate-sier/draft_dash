@@ -1,5 +1,5 @@
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
-# VERSION: force_plate_2026_scorecards_v52 -- Force Plate 2026 reads height/school type/position, neutral wingspan, 2026 scorecard tab
+# VERSION: force_plate_2026_scorecards_v54 -- robust Force Plate 2026 position fallback by case-insensitive header, playerID, and athleteName
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
 # VERSION: option1_original_card_grid_v49 -- bottom card text 6.6
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
@@ -298,9 +298,14 @@ def clean_forcedecks_force_plate(raw_df):
     fd.columns = [str(c).strip() for c in fd.columns]
 
     def first_existing(*names):
+        """Find a column by exact or case-insensitive stripped header name."""
+        col_map = {str(c).strip().lower(): c for c in fd.columns}
         for name in names:
             if name in fd.columns:
                 return name
+            key = str(name).strip().lower()
+            if key in col_map:
+                return col_map[key]
         return None
 
     def num_col(*names):
@@ -410,7 +415,7 @@ def clean_forcedecks_force_plate(raw_df):
 
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data…")
-def load_data(_v=3):
+def load_data(_v=4):
     import gspread
     from google.oauth2.service_account import Credentials
     scopes = [
@@ -517,6 +522,48 @@ def load_data(_v=3):
                       .to_dict())
         official_pos = df["playerID"].map(pos_lookup).fillna("")
         df["Position"] = official_pos.where(official_pos.ne(""), df["Position"])
+
+    # Extra fallback for new Force Plate 2026 players: if the official Positions
+    # tab does not contain the player yet, use the Position column that was added
+    # to the end of Force Plate 2026. Do this by playerID first, then by athleteName.
+    if "Position" in fp_raw.columns:
+        fp_pos = fp_raw.copy()
+        for _c in ["playerID", "athleteName", "Position"]:
+            if _c not in fp_pos.columns:
+                fp_pos[_c] = ""
+        fp_pos["playerID"] = fp_pos["playerID"].astype(str).str.strip()
+        fp_pos["athleteName"] = fp_pos["athleteName"].astype(str).str.strip()
+        fp_pos["Position"] = fp_pos["Position"].astype(str).replace({"nan": "", "None": ""}).str.strip()
+        fp_pos = fp_pos[fp_pos["Position"].ne("")].copy()
+
+        if not fp_pos.empty:
+            fp_pos_by_id = (fp_pos.drop_duplicates("playerID", keep="last")
+                                  .set_index("playerID")["Position"].to_dict())
+            fp_pos_by_name = (fp_pos.drop_duplicates("athleteName", keep="last")
+                                    .set_index("athleteName")["Position"].to_dict())
+            fallback_by_id = df["playerID"].astype(str).str.strip().map(fp_pos_by_id).fillna("")
+            if "athleteName" in df.columns:
+                fallback_by_name = df["athleteName"].astype(str).str.strip().map(fp_pos_by_name).fillna("")
+            else:
+                fallback_by_name = pd.Series("", index=df.index)
+            current_pos = df["Position"].astype(str).replace({"nan": "", "None": ""}).str.strip()
+            df["Position"] = current_pos.where(current_pos.ne(""), fallback_by_id)
+            current_pos = df["Position"].astype(str).replace({"nan": "", "None": ""}).str.strip()
+            df["Position"] = current_pos.where(current_pos.ne(""), fallback_by_name)
+
+    # Normalize common position entries before grouping/PDF output.
+    df["Position"] = (df["Position"].astype(str)
+                      .replace({"nan": "", "None": ""})
+                      .str.strip()
+                      .str.upper())
+    df["Position"] = df["Position"].replace({
+        "OF": "OF", "OUTFIELD": "OF", "OUTFIELDER": "OF",
+        "INF": "INF", "INFIELD": "INF", "INFIELDER": "INF",
+        "P": "RHP", "PITCHER": "RHP",
+        "CATCHER": "C",
+        "FIRST BASE": "1B", "SECOND BASE": "2B", "THIRD BASE": "3B", "SHORTSTOP": "SS",
+        "LEFT FIELD": "LF", "CENTER FIELD": "CF", "RIGHT FIELD": "RF",
+    })
 
     name_map = {}
     for src in [fp_raw, isak_raw, sprint_raw]:
