@@ -1,4 +1,5 @@
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
+# VERSION: force_plate_2026_scorecards_v51 -- Force Plate 2026 appended with height/school type, neutral wingspan, 2026 scorecard tab
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
 # VERSION: option1_original_card_grid_v49 -- bottom card text 6.6
 # VERSION: option1_bottom_cards_wide_v44 -- skins-based, wider bottom summary cards so Program Focus fits
@@ -281,6 +282,131 @@ def label_archetype(row, all_rz_cols):
     if z_dep < -0.7 and z_ratio < -0.5:                return "Shallow Late-Driver"
     return "Unclassified"
 
+
+
+def clean_forcedecks_force_plate(raw_df):
+    """Convert a raw ForceDecks CMJ export into the app's Force Plate tab format.
+
+    Expected source tab: Force Plate 2026
+    The raw ForceDecks export uses column names with units and sometimes trailing spaces.
+    The dashboard scoring pipeline expects the simplified historical Google Sheet column names.
+    """
+    if raw_df is None or raw_df.empty:
+        return pd.DataFrame()
+
+    fd = raw_df.copy()
+    fd.columns = [str(c).strip() for c in fd.columns]
+
+    def first_existing(*names):
+        for name in names:
+            if name in fd.columns:
+                return name
+        return None
+
+    def num_col(*names):
+        col = first_existing(*names)
+        if col is None:
+            return pd.Series(np.nan, index=fd.index)
+        return pd.to_numeric(fd[col], errors="coerce")
+
+    def text_col(*names):
+        col = first_existing(*names)
+        if col is None:
+            return pd.Series("", index=fd.index, dtype="object")
+        return fd[col].astype(str).replace({"nan": "", "None": ""}).str.strip()
+
+    def height_to_cm(*names):
+        """Accept height as cm, inches, or feet-inches text and return cm."""
+        col = first_existing(*names)
+        if col is None:
+            return pd.Series(np.nan, index=fd.index)
+        raw = fd[col]
+
+        def one(v):
+            if pd.isna(v):
+                return np.nan
+            txt = str(v).strip()
+            if not txt:
+                return np.nan
+            # Handles values like 6'4, 6'4", 6-4, or 6 4.
+            m = re.match(r"^\s*(\d+)\s*(?:'|-|ft| )\s*(\d+(?:\.\d+)?)", txt, flags=re.I)
+            if m:
+                ft = float(m.group(1)); inch = float(m.group(2))
+                return (ft * 12 + inch) * 2.54
+            try:
+                x = float(txt.replace(",", ""))
+            except Exception:
+                return np.nan
+            # Most manual entries will be inches (70-85). ForceDecks/ISAK style could be cm (155-215).
+            if 55 <= x <= 90:
+                return x * 2.54
+            return x
+
+        return raw.apply(one)
+
+    name = text_col("athleteName", "Name")
+    external_id = text_col("playerID", "ExternalId", "External ID")
+
+    # ExternalId is ideal. If it is blank, fall back to the athlete name so rows
+    # still load into the dashboard instead of being dropped. Add ExternalId to
+    # ForceDecks long-term if you want perfect merging with ISAK/Sprint/Positions.
+    player_id = external_id.where(external_id.ne(""), name)
+
+    date_col = first_existing("Date", "Test Date")
+    if date_col:
+        parsed_date = pd.to_datetime(fd[date_col], errors="coerce")
+        year = parsed_date.dt.year
+    else:
+        year = pd.Series(np.nan, index=fd.index)
+
+    if "Year" in fd.columns:
+        year = pd.to_numeric(fd["Year"], errors="coerce").fillna(year)
+    year = year.fillna(2026)
+
+    out = pd.DataFrame({
+        "playerID": player_id,
+        "athleteName": name,
+        "Year": year,
+        "Mass": num_col("Mass", "BW [KG]", "Bodyweight [kg]", "Bodyweight [KG]"),
+        "Peak Power / BM": num_col("Peak Power / BM [W/kg]", "Peak Power / BM", "Relative Peak Power [W/kg]"),
+        "Concentric Impulse": num_col("Concentric Impulse [N s]", "Concentric Impulse"),
+        "Force at Zero Velocity": num_col("Force at Zero Velocity [N]", "Force at Zero Velocity"),
+        "Peak Power": num_col("Peak Power [W]", "Peak Power"),
+        "P1 Concentric Impulse": num_col("P1 Concentric Impulse [N s]", "P1 Concentric Impulse"),
+        "P2 Concentric Impulse": num_col("P2 Concentric Impulse [N s]", "P2 Concentric Impulse"),
+        "RSI-modified": num_col("RSI-modified (Imp-Mom) [m/s]", "RSI-modified"),
+        "Jump Height (Flight Time) in Inches": num_col("Jump Height (Imp-Mom) in Inches [in]", "Jump Height (Flight Time) in Inches"),
+        "Concentric Impulse-100ms": num_col("Concentric Impulse-100ms [N s]", "Concentric Impulse-100ms"),
+        "Vertical Velocity at Takeoff": num_col("Vertical Velocity at Takeoff [m/s]", "Vertical Velocity at Takeoff"),
+        "Eccentric Braking Impulse": num_col("Eccentric Braking Impulse [N s]", "Eccentric Braking Impulse"),
+        "Test Type": text_col("Test Type"),
+        "Tags": text_col("Tags"),
+        "Height": height_to_cm("Height", "Height [cm]", "Height [in]", "Height (in)", "Height Inches"),
+    })
+
+    # ForceDecks exports durations in milliseconds. The dashboard's bounds/scoring
+    # expect seconds, so convert ms -> s.
+    out["Eccentric Duration"] = num_col("Eccentric Duration [ms]", "Eccentric Duration") / 1000.0
+    out["Concentric Duration"] = num_col("Concentric Duration [ms]", "Concentric Duration") / 1000.0
+    out["Braking Phase Duration"] = num_col("Braking Phase Duration [ms]", "Braking Phase Duration") / 1000.0
+
+    # Current ForceDecks exports already use negative CM depth. If a future export
+    # comes in as positive depth, flip it to match the dashboard's expected convention.
+    depth = num_col("Countermovement Depth [cm]", "Countermovement Depth")
+    out["Countermovement Depth"] = np.where(depth > 0, -depth, depth)
+
+    # School Type is used in Potential to Gain. The 2026 tab can include it as
+    # a manual column at the end of the raw ForceDecks export.
+    out["School Type"] = text_col("School Type")
+    out["Data Source"] = "Force Plate 2026"
+
+    out = out[out["athleteName"].astype(str).str.strip().ne("")].copy()
+    out["playerID"] = out["playerID"].astype(str).str.strip()
+    out["athleteName"] = out["athleteName"].astype(str).str.strip()
+    out["Year"] = pd.to_numeric(out["Year"], errors="coerce")
+
+    return out
+
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data…")
 def load_data(_v=3):
@@ -299,18 +425,39 @@ def load_data(_v=3):
     sh = gc.open_by_key(os.environ.get("GOOGLE_SHEET_ID", SHEET_ID))
 
     fp_raw     = pd.DataFrame(sh.worksheet("Force Plate").get_all_records())
+    if "Data Source" not in fp_raw.columns:
+        fp_raw["Data Source"] = "Force Plate"
+
+    # Optional raw ForceDecks 2026 tab. This tab can be pasted directly from the
+    # ForceDecks CSV export; the app converts names/units and appends it to the
+    # historical Force Plate dataset before scoring.
+    try:
+        fp_2026_raw = pd.DataFrame(sh.worksheet("Force Plate 2026").get_all_records())
+        fp_2026_clean = clean_forcedecks_force_plate(fp_2026_raw)
+        if not fp_2026_clean.empty:
+            fp_raw = pd.concat([fp_raw, fp_2026_clean], ignore_index=True, sort=False)
+            fp_raw = fp_raw.drop_duplicates(subset=["playerID", "athleteName", "Year"], keep="last")
+    except Exception:
+        # Keep the app working if the optional tab has not been created yet.
+        pass
+
     isak_raw   = pd.DataFrame(sh.worksheet("ISAK").get_all_records())
     sprint_raw = pd.DataFrame(sh.worksheet("Sprint").get_all_records())
     pos_raw    = pd.DataFrame(sh.worksheet("Positions").get_all_records())
 
     for df in [fp_raw, isak_raw, sprint_raw]:
+        if "playerID" not in df.columns:
+            df["playerID"] = ""
+        if "Year" not in df.columns:
+            df["Year"] = np.nan
         df["playerID"] = df["playerID"].astype(str).str.strip()
         df["Year"]     = pd.to_numeric(df["Year"], errors="coerce")
 
     num_fp = ["Eccentric Duration","Concentric Duration","Braking Phase Duration",
               "Countermovement Depth","Concentric Impulse","Concentric Impulse-100ms",
-              "P1 Concentric Impulse","Jump Height (Flight Time) in Inches",
-              "RSI-modified","Peak Power / BM"]
+              "P1 Concentric Impulse","P2 Concentric Impulse",
+              "Jump Height (Flight Time) in Inches", "Force at Zero Velocity",
+              "Peak Power", "Mass", "Height", "RSI-modified","Peak Power / BM"]
     for c in num_fp:
         if c in fp_raw.columns:
             fp_raw[c] = pd.to_numeric(fp_raw[c], errors="coerce")
@@ -323,8 +470,31 @@ def load_data(_v=3):
         if c in sprint_raw.columns:
             sprint_raw[c] = pd.to_numeric(sprint_raw[c], errors="coerce")
 
-    df = fp_raw.merge(isak_raw.drop(columns=["athleteName"], errors="ignore"),
-                      on=["playerID","Year"], how="outer")
+    df = fp_raw.merge(
+        isak_raw.drop(columns=["athleteName"], errors="ignore"),
+        on=["playerID", "Year"], how="outer", suffixes=("_fp", "_isak")
+    )
+
+    # If the new Force Plate 2026 tab includes Height/Mass/School Type, coalesce
+    # those values with the ISAK sheet so the scoring columns remain named exactly
+    # Height, Mass, Seated Height, Wingspan, and School Type. ISAK wins when present;
+    # Force Plate 2026 is the fallback for players who do not exist in ISAK yet.
+    def coalesce_pair(base, preferred_suffix="_isak", fallback_suffix="_fp"):
+        preferred = f"{base}{preferred_suffix}"
+        fallback = f"{base}{fallback_suffix}"
+        if preferred in df.columns and fallback in df.columns:
+            df[base] = df[preferred].where(df[preferred].notna() & (df[preferred] != ""), df[fallback])
+            df.drop(columns=[preferred, fallback], inplace=True)
+        elif preferred in df.columns:
+            df[base] = df[preferred]
+            df.drop(columns=[preferred], inplace=True)
+        elif fallback in df.columns:
+            df[base] = df[fallback]
+            df.drop(columns=[fallback], inplace=True)
+
+    for _base in ["Mass", "Height", "Seated Height", "Wingspan", "School Type"]:
+        coalesce_pair(_base)
+
     df = df.merge(sprint_raw.drop(columns=["athleteName"], errors="ignore"),
                   on=["playerID","Year"], how="outer")
 
@@ -524,6 +694,10 @@ def build_scores(_df,
     df["school_score"] = df["School Type"].map(school_score_map).fillna(50)
     df["wingspan_advantage"] = df["Wingspan"] - df["Height"]
     df["wingspan_pct"]       = pct_rank(df["wingspan_advantage"])
+    # 2026 ForceDecks entries do not currently include wingspan. Treat missing
+    # wingspan as neutral/50th percentile for Potential to Gain scoring only.
+    # Raw wingspan still displays as missing on the scorecard.
+    df["wingspan_pct_for_scoring"] = df["wingspan_pct"].fillna(50)
 
     def pot_score(row):
         def sv(key):
@@ -537,7 +711,7 @@ def build_scores(_df,
             "height_pct":   (sv("height_pct"),   wp_height),
             "bwht_potential_pct": (sv("bwht_potential_pct"), wp_bmi),
             "school_score": (sv("school_score"), wp_school),
-            "wingspan_pct": (sv("wingspan_pct"), wp_wingspan),
+            "wingspan_pct_for_scoring": (sv("wingspan_pct_for_scoring"), wp_wingspan),
         }
         total_w = sum(w for _, (v, w) in components.items() if v is not None)
         if total_w == 0: return np.nan
@@ -1133,7 +1307,7 @@ wp_pp = 0.20; wp_ht = 0.25; wp_bmi = 0.30; wp_school = 0.15; wp_wings = 0.10
 
 # ─── Load & score ─────────────────────────────────────────────────────────────
 try:
-    raw = load_data(_v=3)
+    raw = load_data(_v=4)
     load_err = None
 except Exception as e:
     raw = None; load_err = f"{type(e).__name__}: {e}\n\n{traceback.format_exc()}"
@@ -1167,7 +1341,7 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card, tab_info = st.tabs(["Leaderboard", "Athlete Scorecard", "Score Info"])
+tab_board, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Athlete Scorecard", "2026 Scorecards", "Score Info"])
 
 
 # =============================================================================
@@ -1546,8 +1720,108 @@ with tab_board:
         sel_rows = sel.selection.rows if sel.selection else []
         default_ath = dff.iloc[sel_rows[0]]["athleteName"] if sel_rows else dff.iloc[0]["athleteName"]
 
+
 # =============================================================================
-# TAB 2 — ATHLETE SCORECARD
+# TAB 2 — 2026 SCORECARDS
+# =============================================================================
+with tab_2026:
+    df_2026 = df[(pd.to_numeric(df["Year"], errors="coerce") == 2026)].copy()
+    if "Data Source" in df_2026.columns:
+        fp2026_only = df_2026[df_2026["Data Source"].astype(str).eq("Force Plate 2026")].copy()
+        if not fp2026_only.empty:
+            df_2026 = fp2026_only
+
+    st.markdown(f"""
+    <div class="card card-red">
+        <p class="label">Force Plate 2026</p>
+        <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">2026 Player Scorecards</h2>
+        <p style="font-size:14px;line-height:1.55;color:{NAV};margin-bottom:0;">
+            These cards are built from the <strong>Force Plate 2026</strong> tab. Height and School Type can come from that tab; missing wingspan is treated as a neutral 50th percentile input for Potential to Gain scoring only.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if df_2026.empty:
+        st.warning("No 2026 Force Plate rows are currently loaded.")
+    else:
+        df_2026 = df_2026.sort_values(["athlete_quality_score", "athleteName"], ascending=[False, True])
+        st.caption(f"Loaded {len(df_2026)} 2026 scorecard rows.")
+
+        summary_cols = [
+            "athleteName", "Position", "School Type", "athlete_quality_score", "aq_pos_score",
+            "potential_score", "Concentric Impulse", "P1 Concentric Impulse", "RSI-modified",
+            "Peak Power / BM", "Mass", "Height", "wingspan_pct_for_scoring"
+        ]
+        for c in summary_cols:
+            if c not in df_2026.columns:
+                df_2026[c] = np.nan
+        summary = df_2026[summary_cols].copy()
+        summary["Height"] = pd.to_numeric(summary["Height"], errors="coerce") / 2.54
+        summary["Mass"] = pd.to_numeric(summary["Mass"], errors="coerce") * 2.20462
+        summary = summary.rename(columns={
+            "athleteName": "Athlete",
+            "athlete_quality_score": "Capacity",
+            "aq_pos_score": "Pos. Capacity",
+            "potential_score": "Potential",
+            "Concentric Impulse": "CI",
+            "P1 Concentric Impulse": "P1 CI",
+            "RSI-modified": "mRSI",
+            "Peak Power / BM": "Rel Peak Power",
+            "Mass": "Bodyweight",
+            "Height": "Height",
+            "wingspan_pct_for_scoring": "Wing Pct Used"
+        })
+        for c in ["Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI", "Rel Peak Power", "Bodyweight", "Height", "Wing Pct Used"]:
+            if c in summary.columns:
+                summary[c] = pd.to_numeric(summary[c], errors="coerce").round(1)
+        if "mRSI" in summary.columns:
+            summary["mRSI"] = pd.to_numeric(summary["mRSI"], errors="coerce").round(3)
+
+        st.dataframe(summary, use_container_width=True, hide_index=True)
+
+        st.markdown("### Scorecard PDFs")
+        st.caption("Each button exports the same one-page scorecard format as the Athlete Scorecard tab, filtered to the 2026 row.")
+
+        card_cols = st.columns(3)
+        for i, (_, r) in enumerate(df_2026.iterrows()):
+            with card_cols[i % 3]:
+                name = str(r.get("athleteName", "Athlete"))
+                cap = sf(r.get("athlete_quality_score"))
+                pot = sf(r.get("potential_score"))
+                ci = sf(r.get("Concentric Impulse"))
+                p1 = sf(r.get("P1 Concentric Impulse"))
+                school = str(r.get("School Type", "—"))
+                if school in ("nan", "None", ""):
+                    school = "—"
+                st.markdown(f"""
+                <div style="background:white;border:1px solid {BORD};border-top:4px solid {RED};
+                    border-radius:10px;padding:14px 16px;margin-bottom:10px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">
+                    <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:{NAV};line-height:1.1;margin-bottom:6px">{name}</div>
+                    <div style="font-size:11px;color:{SLATE};margin-bottom:10px">2026 · {school}</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:{NAV}">
+                        <div><span style="color:{SLATE}">Capacity</span><br><strong>{fmt(cap,0)}</strong></div>
+                        <div><span style="color:{SLATE}">Potential</span><br><strong>{fmt(pot,0)}</strong></div>
+                        <div><span style="color:{SLATE}">CI</span><br><strong>{fmt(ci,1)}</strong></div>
+                        <div><span style="color:{SLATE}">P1 CI</span><br><strong>{fmt(p1,1)}</strong></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                try:
+                    is_pitcher_2026 = str(r.get("pos_group", "")).strip() == "Pitcher"
+                    pdf_bytes, pdf_name = make_scorecard_pdf(r, df, strat_feats, "2026", is_pitcher=is_pitcher_2026)
+                    st.download_button(
+                        label="Download PDF",
+                        data=pdf_bytes,
+                        file_name=f"{pdf_name}_2026_scorecard.pdf",
+                        mime="application/pdf",
+                        key=f"download_2026_scorecard_{i}_{pdf_name}",
+                        use_container_width=True,
+                    )
+                except Exception as pdf_err:
+                    st.warning(f"PDF unavailable: {pdf_err}")
+
+# =============================================================================
+# TAB 3 — ATHLETE SCORECARD
 # =============================================================================
 with tab_card:
     athletes = sorted(df["athleteName"].dropna().unique().tolist())
