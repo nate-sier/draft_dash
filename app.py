@@ -95,7 +95,7 @@ WEIGHT_CLASS_COLORS = {
 # ─── Position groups ──────────────────────────────────────────────────────────
 PITCHERS   = {"SP", "RHP", "LHP", "RP", "TWP"}
 CATCHERS   = {"C"}
-INFIELDERS = {"SS", "3B", "2B", "1B", "INF"}
+INFIELDERS = {"SS", "3B", "2B", "1B", "INF", "IF"}
 OUTFIELDERS= {"CF", "LF", "RF", "OF"}
 
 def pos_group(pos):
@@ -415,7 +415,7 @@ def clean_forcedecks_force_plate(raw_df):
 
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data…")
-def load_data(_v=4):
+def load_data(_v=5):
     import gspread
     from google.oauth2.service_account import Credentials
     scopes = [
@@ -558,7 +558,7 @@ def load_data(_v=4):
                       .str.upper())
     df["Position"] = df["Position"].replace({
         "OF": "OF", "OUTFIELD": "OF", "OUTFIELDER": "OF",
-        "INF": "INF", "INFIELD": "INF", "INFIELDER": "INF",
+        "INF": "INF", "IF": "INF", "INFIELD": "INF", "INFIELDER": "INF",
         "P": "RHP", "PITCHER": "RHP",
         "CATCHER": "C",
         "FIRST BASE": "1B", "SECOND BASE": "2B", "THIRD BASE": "3B", "SHORTSTOP": "SS",
