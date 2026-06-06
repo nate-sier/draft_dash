@@ -2193,24 +2193,42 @@ with tab_2026:
             df_2026[sort_col_2026] = np.nan
         df_2026 = df_2026.sort_values([sort_col_2026, "athleteName"], ascending=[False, True], na_position="last")
 
-        def _sort_percentile(value, values):
-            vals = pd.to_numeric(values, errors="coerce").dropna()
+        def _historical_sort_values(metric_col):
+            """Reference pool for 2026 card color/marker.
+
+            The 2026 cards stay filtered to 2026, but the gradient position is
+            calculated against the full loaded historical dataset so the card
+            colors match the all-time percentile logic used in the scorecards/PDFs.
+            """
+            if metric_col not in df.columns:
+                return pd.Series(dtype="float64")
+            vals = pd.to_numeric(df[metric_col], errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
+            return vals
+
+        def _sort_percentile(value, values, inverse=False):
+            vals = pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan).dropna()
             v = sf(value)
             if pd.isna(v) or vals.empty:
                 return np.nan
-            return float((vals <= v).mean())
+            pct = float((vals <= v).mean())
+            return 1.0 - pct if inverse else pct
 
-        def _green_to_red(value, values):
-            pct = _sort_percentile(value, values)
+        def _green_to_red(value, values, inverse=False):
+            pct = _sort_percentile(value, values, inverse=inverse)
             if pd.isna(pct):
                 return "#9AAAC0"
-            # Low values lean red, high values lean green.
+            # Low historical percentile = red, high historical percentile = green.
             red_rgb = (186, 12, 47)
             green_rgb = (76, 175, 130)
             rgb = tuple(int(red_rgb[k] + (green_rgb[k] - red_rgb[k]) * pct) for k in range(3))
             return "#%02x%02x%02x" % rgb
 
-        sort_values_2026 = pd.to_numeric(df_2026[sort_col_2026], errors="coerce")
+        # Use all historical rows as the reference for the card gradient/marker.
+        # The displayed cards are still only 2026.
+        sort_values_historical = _historical_sort_values(sort_col_2026)
+
+        # If you add sprint splits later, lower time should be better/greener.
+        inverse_sort_metric = sort_col_2026 in {"10yd Split", "20yd Split", "30yd Split"}
 
         summary_cols = [
             "athleteName", "Position", "School Type", "athlete_quality_score", "aq_pos_score",
@@ -2249,7 +2267,7 @@ with tab_2026:
             st.dataframe(summary, use_container_width=True, hide_index=True)
 
         st.markdown("### Scorecard PDFs")
-        st.caption(f"PDF cards are sorted by {sort_metric_label}; the larger color bar runs red-to-green based on that metric within the 2026 group.")
+        st.caption(f"PDF cards are sorted by {sort_metric_label}; the larger color bar runs red-to-green based on that metric's historical percentile across all loaded years.")
 
         card_cols = st.columns(3)
         for i, (_, r) in enumerate(df_2026.iterrows()):
@@ -2262,8 +2280,8 @@ with tab_2026:
                 school = str(r.get("School Type", "—"))
                 if school in ("nan", "None", ""):
                     school = "—"
-                card_color = _green_to_red(r.get(sort_col_2026), sort_values_2026)
-                sort_pct = _sort_percentile(r.get(sort_col_2026), sort_values_2026)
+                card_color = _green_to_red(r.get(sort_col_2026), sort_values_historical, inverse=inverse_sort_metric)
+                sort_pct = _sort_percentile(r.get(sort_col_2026), sort_values_historical, inverse=inverse_sort_metric)
                 marker_left = 50 if pd.isna(sort_pct) else max(0, min(100, sort_pct * 100))
                 sort_display = fmt(sf(r.get(sort_col_2026)), 1)
                 st.markdown(f"""
