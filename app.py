@@ -492,9 +492,76 @@ def clean_forcedecks_force_plate(raw_df):
 
     return out
 
+
+def clean_sprint_2026(raw_df):
+    """Convert the optional Sprint 2026 tab into the app's Sprint tab format.
+
+    Expected source tab: Sprint 2026
+    Required columns: Name, 10, 20, 30
+    Optional columns: playerID/ExternalId, Year, Date
+    """
+    if raw_df is None or raw_df.empty:
+        return pd.DataFrame()
+
+    sp = raw_df.copy()
+    sp.columns = [str(c).strip() for c in sp.columns]
+
+    def first_existing(*names):
+        col_map = {str(c).strip().lower(): c for c in sp.columns}
+        for name in names:
+            if name in sp.columns:
+                return name
+            key = str(name).strip().lower()
+            if key in col_map:
+                return col_map[key]
+        return None
+
+    def text_col(*names):
+        col = first_existing(*names)
+        if col is None:
+            return pd.Series("", index=sp.index, dtype="object")
+        return sp[col].astype(str).replace({"nan": "", "None": ""}).str.strip()
+
+    def num_col(*names):
+        col = first_existing(*names)
+        if col is None:
+            return pd.Series(np.nan, index=sp.index)
+        return pd.to_numeric(sp[col], errors="coerce")
+
+    name = text_col("athleteName", "Name", "Athlete", "Athlete Name")
+    external_id = text_col("playerID", "ExternalId", "External ID")
+    player_id = external_id.where(external_id.ne(""), name)
+
+    date_col = first_existing("Date", "Test Date")
+    if date_col:
+        year = pd.to_datetime(sp[date_col], errors="coerce").dt.year
+    else:
+        year = pd.Series(np.nan, index=sp.index)
+    if "Year" in sp.columns:
+        year = pd.to_numeric(sp["Year"], errors="coerce").fillna(year)
+    year = year.fillna(2026)
+
+    out = pd.DataFrame({
+        "playerID": player_id,
+        "athleteName": name,
+        "Year": year,
+        "10yd Split": num_col("10yd Split", "10", "10yd", "10 yd", "10 Yard", "10 Yard Split"),
+        "20yd Split": num_col("20yd Split", "20", "20yd", "20 yd", "20 Yard", "20 Yard Split"),
+        "30yd Split": num_col("30yd Split", "30", "30yd", "30 yd", "30 Yard", "30 Yard Split"),
+        "Data Source": "Sprint 2026",
+    })
+
+    out = out[out["athleteName"].astype(str).str.strip().ne("")].copy()
+    out["playerID"] = out["playerID"].astype(str).str.strip()
+    out["athleteName"] = out["athleteName"].astype(str).str.strip()
+    out["Year"] = pd.to_numeric(out["Year"], errors="coerce")
+    for c in ["10yd Split", "20yd Split", "30yd Split"]:
+        out[c] = pd.to_numeric(out[c], errors="coerce")
+    return out
+
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data…")
-def load_data(_v=7):
+def load_data(_v=8):
     import gspread
     from google.oauth2.service_account import Credentials
     scopes = [
@@ -528,6 +595,20 @@ def load_data(_v=7):
 
     isak_raw   = worksheet_to_dataframe(sh, "ISAK")
     sprint_raw = worksheet_to_dataframe(sh, "Sprint")
+
+    # Optional simple 2026 sprint tab. Expected columns: Name, 10, 20, 30.
+    # These are converted to the dashboard's standard Sprint fields and appended
+    # before the sprint percentiles / Capacity Score are calculated.
+    try:
+        sprint_2026_raw = worksheet_to_dataframe(sh, "Sprint 2026")
+        sprint_2026_clean = clean_sprint_2026(sprint_2026_raw)
+        if not sprint_2026_clean.empty:
+            sprint_raw = pd.concat([sprint_raw, sprint_2026_clean], ignore_index=True, sort=False)
+            sprint_raw = sprint_raw.drop_duplicates(subset=["playerID", "athleteName", "Year"], keep="last")
+    except Exception:
+        # Keep the app working if the optional tab has not been created yet.
+        pass
+
     pos_raw    = worksheet_to_dataframe(sh, "Positions")
 
     for df in [fp_raw, isak_raw, sprint_raw]:
@@ -582,6 +663,27 @@ def load_data(_v=7):
 
     df = df.merge(sprint_raw.drop(columns=["athleteName"], errors="ignore"),
                   on=["playerID","Year"], how="outer")
+
+    # Extra name-based fallback for Sprint 2026. This protects new players whose
+    # sprint row uses Name as playerID while another tab later receives a formal
+    # ExternalId/playerID. Official playerID/year matches still win first.
+    if "athleteName" in df.columns and not sprint_raw.empty:
+        sp_lookup = sprint_raw.copy()
+        for _c in ["athleteName", "Year", "10yd Split", "20yd Split", "30yd Split"]:
+            if _c not in sp_lookup.columns:
+                sp_lookup[_c] = np.nan if _c != "athleteName" else ""
+        sp_lookup["athleteName"] = sp_lookup["athleteName"].astype(str).str.strip()
+        sp_lookup["Year"] = pd.to_numeric(sp_lookup["Year"], errors="coerce")
+        sp_lookup = sp_lookup.dropna(subset=["athleteName", "Year"], how="any")
+        if not sp_lookup.empty:
+            sp_lookup = sp_lookup.drop_duplicates(["athleteName", "Year"], keep="last")
+            sp_lookup = sp_lookup.set_index(["athleteName", "Year"])[["10yd Split", "20yd Split", "30yd Split"]]
+            idx = pd.MultiIndex.from_arrays([df["athleteName"].astype(str).str.strip(), pd.to_numeric(df["Year"], errors="coerce")])
+            for _split in ["10yd Split", "20yd Split", "30yd Split"]:
+                if _split not in df.columns:
+                    df[_split] = np.nan
+                fallback_vals = pd.Series(idx.map(sp_lookup[_split].to_dict()), index=df.index)
+                df[_split] = pd.to_numeric(df[_split], errors="coerce").fillna(fallback_vals)
 
     # Position can now come from either the regular Positions tab or the raw
     # Force Plate 2026 tab. Prefer the official Positions tab when available,
@@ -2014,7 +2116,7 @@ with tab_2026:
         summary_cols = [
             "athleteName", "Position", "School Type", "athlete_quality_score", "aq_pos_score",
             "potential_score", "Concentric Impulse", "P1 Concentric Impulse", "RSI-modified",
-            "Peak Power / BM", "Mass", "Height", "wingspan_pct_for_scoring"
+            "Peak Power / BM", "Mass", "Height"
         ]
         for c in summary_cols:
             if c not in df_2026.columns:
@@ -2032,10 +2134,9 @@ with tab_2026:
             "RSI-modified": "mRSI",
             "Peak Power / BM": "Rel Peak Power",
             "Mass": "Bodyweight",
-            "Height": "Height",
-            "wingspan_pct_for_scoring": "Wing Pct Used"
+            "Height": "Height"
         })
-        for c in ["Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI", "Rel Peak Power", "Bodyweight", "Height", "Wing Pct Used"]:
+        for c in ["Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI", "Rel Peak Power", "Bodyweight", "Height"]:
             if c in summary.columns:
                 summary[c] = pd.to_numeric(summary[c], errors="coerce").round(1)
         if "mRSI" in summary.columns:
