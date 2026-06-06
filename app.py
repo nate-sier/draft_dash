@@ -1634,19 +1634,19 @@ st.markdown("""
 .st-key-legacy_scorecard_toggle {
     position: fixed !important;
     bottom: 8px !important;
-    right: 10px !important;
+    left: 10px !important;
     z-index: 9999 !important;
-    width: 22px !important;
-    opacity: 0.22;
+    width: 32px !important;
+    opacity: 0.30;
 }
 .st-key-legacy_scorecard_toggle:hover { opacity: 0.9; }
 .st-key-legacy_scorecard_toggle button {
-    min-height: 14px !important;
-    height: 16px !important;
-    width: 16px !important;
+    min-height: 20px !important;
+    height: 22px !important;
+    width: 22px !important;
     padding: 0 !important;
     border-radius: 50% !important;
-    font-size: 7px !important;
+    font-size: 9px !important;
     line-height: 1 !important;
     color: transparent !important;
     background: #9AAAC0 !important;
@@ -1715,7 +1715,7 @@ st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_h
 if "show_athlete_scorecard_tab" not in st.session_state:
     st.session_state.show_athlete_scorecard_tab = False
 
-# Tiny legacy scorecard toggle, visually tucked into the bottom-right corner.
+# Tiny legacy scorecard toggle, visually tucked into the bottom-left corner.
 # It stays before the tab declaration in code because Streamlit needs to know
 # which tabs exist before rendering their contents.
 with st.container(key="legacy_scorecard_toggle"):
