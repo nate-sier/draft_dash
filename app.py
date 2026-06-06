@@ -1629,6 +1629,32 @@ st.set_page_config(
 if not check_password(): st.stop()
 
 st.markdown(CSS, unsafe_allow_html=True)
+st.markdown("""
+<style>
+.st-key-legacy_scorecard_toggle {
+    position: fixed !important;
+    bottom: 8px !important;
+    right: 10px !important;
+    z-index: 9999 !important;
+    width: 22px !important;
+    opacity: 0.22;
+}
+.st-key-legacy_scorecard_toggle:hover { opacity: 0.9; }
+.st-key-legacy_scorecard_toggle button {
+    min-height: 14px !important;
+    height: 16px !important;
+    width: 16px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    font-size: 7px !important;
+    line-height: 1 !important;
+    color: transparent !important;
+    background: #9AAAC0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
 st.markdown('<div class="grad-bar"></div>', unsafe_allow_html=True)
 
 # ─── Fixed weights / refresh ──────────────────────────────────────────────────
@@ -1689,9 +1715,11 @@ st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_h
 if "show_athlete_scorecard_tab" not in st.session_state:
     st.session_state.show_athlete_scorecard_tab = False
 
-_tog_cols = st.columns([1, 7])
-with _tog_cols[0]:
-    if st.button("Scorecard tab", key="toggle_athlete_scorecard_tab", help="Show/hide the full legacy athlete scorecard tab"):
+# Tiny legacy scorecard toggle, visually tucked into the bottom-right corner.
+# It stays before the tab declaration in code because Streamlit needs to know
+# which tabs exist before rendering their contents.
+with st.container(key="legacy_scorecard_toggle"):
+    if st.button("•", key="toggle_athlete_scorecard_tab", help="Show/hide the full legacy athlete scorecard tab"):
         st.session_state.show_athlete_scorecard_tab = not st.session_state.show_athlete_scorecard_tab
 
 if st.session_state.show_athlete_scorecard_tab:
@@ -2165,12 +2193,17 @@ with tab_2026:
             df_2026[sort_col_2026] = np.nan
         df_2026 = df_2026.sort_values([sort_col_2026, "athleteName"], ascending=[False, True], na_position="last")
 
-        def _green_to_red(value, values):
+        def _sort_percentile(value, values):
             vals = pd.to_numeric(values, errors="coerce").dropna()
             v = sf(value)
             if pd.isna(v) or vals.empty:
+                return np.nan
+            return float((vals <= v).mean())
+
+        def _green_to_red(value, values):
+            pct = _sort_percentile(value, values)
+            if pd.isna(pct):
                 return "#9AAAC0"
-            pct = float((vals <= v).mean())
             # Low values lean red, high values lean green.
             red_rgb = (186, 12, 47)
             green_rgb = (76, 175, 130)
@@ -2216,7 +2249,7 @@ with tab_2026:
             st.dataframe(summary, use_container_width=True, hide_index=True)
 
         st.markdown("### Scorecard PDFs")
-        st.caption(f"PDF cards are sorted by {sort_metric_label}; the color bar runs red-to-green based on that metric within the 2026 group.")
+        st.caption(f"PDF cards are sorted by {sort_metric_label}; the larger color bar runs red-to-green based on that metric within the 2026 group.")
 
         card_cols = st.columns(3)
         for i, (_, r) in enumerate(df_2026.iterrows()):
@@ -2230,11 +2263,15 @@ with tab_2026:
                 if school in ("nan", "None", ""):
                     school = "—"
                 card_color = _green_to_red(r.get(sort_col_2026), sort_values_2026)
+                sort_pct = _sort_percentile(r.get(sort_col_2026), sort_values_2026)
+                marker_left = 50 if pd.isna(sort_pct) else max(0, min(100, sort_pct * 100))
                 sort_display = fmt(sf(r.get(sort_col_2026)), 1)
                 st.markdown(f"""
-                <div style="background:white;border:1px solid {BORD};border-top:5px solid {card_color};
+                <div style="background:white;border:1px solid {BORD};border-top:7px solid {card_color};
                     border-radius:10px;padding:14px 16px;margin-bottom:10px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">
-                    <div style="height:5px;background:linear-gradient(90deg,{RED},{GOLD},{GREEN});border-radius:999px;margin:-6px 0 10px 0"></div>
+                    <div style="position:relative;height:18px;background:linear-gradient(90deg,{RED} 0%,{GOLD} 50%,{GREEN} 100%);border-radius:999px;margin:0 0 12px 0;border:1px solid rgba(17,34,90,0.18);box-shadow:inset 0 1px 2px rgba(0,0,0,0.18)">
+                        <div style="position:absolute;left:calc({marker_left:.1f}% - 6px);top:-5px;width:12px;height:28px;background:{card_color};border:2px solid white;border-radius:999px;box-shadow:0 1px 5px rgba(17,34,90,0.35)"></div>
+                    </div>
                     <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:{NAV};line-height:1.1;margin-bottom:6px">{name}</div>
                     <div style="font-size:11px;color:{SLATE};margin-bottom:4px">2026 · {school}</div>
                     <div style="font-size:10px;color:{SLATE};margin-bottom:10px">Sorted by <strong style="color:{card_color}">{sort_metric_label}: {sort_display}</strong></div>
