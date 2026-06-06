@@ -1685,7 +1685,20 @@ with hc2:
         unsafe_allow_html=True)
 st.markdown('<hr style="margin:8px 0 0 0;border-color:#E8ECF0">', unsafe_allow_html=True)
 
-tab_board, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Athlete Scorecard", "2026 Scorecards", "Score Info"])
+# Keep the full athlete scorecard available, but hide it by default so the main workflow stays clean.
+if "show_athlete_scorecard_tab" not in st.session_state:
+    st.session_state.show_athlete_scorecard_tab = False
+
+_tog_cols = st.columns([1, 7])
+with _tog_cols[0]:
+    if st.button("Scorecard tab", key="toggle_athlete_scorecard_tab", help="Show/hide the full legacy athlete scorecard tab"):
+        st.session_state.show_athlete_scorecard_tab = not st.session_state.show_athlete_scorecard_tab
+
+if st.session_state.show_athlete_scorecard_tab:
+    tab_board, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Athlete Scorecard", "2026 Scorecards", "Score Info"])
+else:
+    tab_board, tab_2026, tab_info = st.tabs(["Leaderboard", "2026 Scorecards", "Score Info"])
+    tab_card = None
 
 
 # =============================================================================
@@ -1971,15 +1984,15 @@ with tab_board:
         # -----------------------------------------------------------------
         # Median cards
         # -----------------------------------------------------------------
-        st.markdown(f'<p class="label">Force Plate Medians</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="label">Force Plate 75th Percentiles</p>', unsafe_allow_html=True)
         fp_metrics = [m for m in LEADERBOARD_METRICS if m[4] == "Force Plate"]
         fp_cards = [
             ("Athletes", str(len(dff)))
         ]
         for col, label, digits, suffix, _ in fp_metrics:
             fp_cards.append((
-                f"Median {label}",
-                fmt(pd.to_numeric(dff[col], errors="coerce").median(), digits, suffix),
+                f"75th {label}",
+                fmt(pd.to_numeric(dff[col], errors="coerce").quantile(0.75), digits, suffix),
             ))
         st.markdown(
             '<div class="median-row">' + ''.join(
@@ -1990,15 +2003,15 @@ with tab_board:
             unsafe_allow_html=True,
         )
 
-        st.markdown(f'<p class="label">Physical Attributes Medians</p>', unsafe_allow_html=True)
+        st.markdown(f'<p class="label">Physical Attributes 75th Percentiles</p>', unsafe_allow_html=True)
         anthro_metrics = [
             m for m in LEADERBOARD_METRICS
             if m[4] == "Physical Attributes" and m[0] != "BW_Ht_Pct"
         ]
         anthro_cards = []
         for col, label, digits, suffix, _ in anthro_metrics:
-            med_val = pd.to_numeric(dff[col], errors="coerce").median()
-            anthro_cards.append((f"Median {label}", fmt(med_val, digits, suffix)))
+            med_val = pd.to_numeric(dff[col], errors="coerce").quantile(0.75)
+            anthro_cards.append((f"75th {label}", fmt(med_val, digits, suffix)))
         st.markdown(
             '<div class="median-row">' + ''.join(
                 f'<div class="median-card"><div class="median-card-label">{label}</div>'
@@ -2008,7 +2021,19 @@ with tab_board:
             unsafe_allow_html=True,
         )
 
-        with st.expander("Cohort medians: Pitchers vs Position Players", expanded=False):
+        st.markdown(
+            f'<div class="card card-green" style="padding:14px 18px;margin-top:2px;margin-bottom:16px">'
+            f'<p class="label" style="margin-bottom:6px">Benchmarks</p>'
+            f'<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;color:{NAV}">'
+            f'<span style="font-family:&quot;Playfair Display&quot;,serif;font-size:24px;font-weight:900;color:{GREEN}">285</span>'
+            f'<span style="font-size:13px;color:{SLATE};margin-left:-10px">CI</span>'
+            f'<span style="font-family:&quot;Playfair Display&quot;,serif;font-size:24px;font-weight:900;color:{GREEN}">195</span>'
+            f'<span style="font-size:13px;color:{SLATE};margin-left:-10px">P1 CI</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        with st.expander("Cohort 75th percentiles: Pitchers vs Position Players", expanded=False):
             cohort_base = dff.copy()
             cohort_base["Cohort"] = np.where(cohort_base["pos_group"] == "Pitcher", "Pitcher", "Position Player")
             cohort_rows = []
@@ -2016,14 +2041,14 @@ with tab_board:
                 cohort_rows.append({
                     "Cohort": cohort,
                     "N": int(len(sub)),
-                    "Median Capacity": round(pd.to_numeric(sub["athlete_quality_score"], errors="coerce").median(), 1),
-                    "Median CI": round(pd.to_numeric(sub["Concentric Impulse"], errors="coerce").median(), 1),
-                    "Median P1 CI": round(pd.to_numeric(sub["P1 Concentric Impulse"], errors="coerce").median(), 1),
-                    "Median RSI-mod": round(pd.to_numeric(sub["RSI-modified"], errors="coerce").median(), 3),
-                    "Median Bodyweight": round(pd.to_numeric(sub["Bodyweight_lbs"], errors="coerce").median(), 1),
+                    "75th Capacity": round(pd.to_numeric(sub["athlete_quality_score"], errors="coerce").quantile(0.75), 1),
+                    "75th CI": round(pd.to_numeric(sub["Concentric Impulse"], errors="coerce").quantile(0.75), 1),
+                    "75th P1 CI": round(pd.to_numeric(sub["P1 Concentric Impulse"], errors="coerce").quantile(0.75), 1),
+                    "75th RSI-mod": round(pd.to_numeric(sub["RSI-modified"], errors="coerce").quantile(0.75), 3),
+                    "75th Bodyweight": round(pd.to_numeric(sub["Bodyweight_lbs"], errors="coerce").quantile(0.75), 1),
                 })
             if cohort_rows:
-                st.dataframe(pd.DataFrame(cohort_rows), use_container_width=True, hide_index=True, key="lb_cohort_medians")
+                st.dataframe(pd.DataFrame(cohort_rows), use_container_width=True, hide_index=True, key="lb_cohort_75th")
 
         # -----------------------------------------------------------------
         # Leaderboard table: only text columns are Athlete and Position.
@@ -2110,8 +2135,49 @@ with tab_2026:
     if df_2026.empty:
         st.warning("No 2026 Force Plate rows are currently loaded.")
     else:
-        df_2026 = df_2026.sort_values(["athlete_quality_score", "athleteName"], ascending=[False, True])
         st.caption(f"Loaded {len(df_2026)} 2026 scorecard rows.")
+
+        sort_2026_options = {
+            "Capacity": "athlete_quality_score",
+            "Pos. Capacity": "aq_pos_score",
+            "Potential": "potential_score",
+            "CI": "Concentric Impulse",
+            "P1 CI": "P1 Concentric Impulse",
+            "mRSI": "RSI-modified",
+            "Rel Peak Power": "Peak Power / BM",
+            "Bodyweight": "Mass",
+            "Height": "Height",
+        }
+        if "sort_2026_metric" not in st.session_state:
+            st.session_state.sort_2026_metric = "Capacity"
+
+        st.markdown(f'<p class="label">Tap a metric to sort the table and PDF cards</p>', unsafe_allow_html=True)
+        sort_cols = st.columns(len(sort_2026_options))
+        for j, metric_label in enumerate(sort_2026_options.keys()):
+            active = metric_label == st.session_state.sort_2026_metric
+            btn_label = f"✓ {metric_label}" if active else metric_label
+            if sort_cols[j].button(btn_label, key=f"sort_2026_{metric_label}", use_container_width=True):
+                st.session_state.sort_2026_metric = metric_label
+
+        sort_metric_label = st.session_state.sort_2026_metric
+        sort_col_2026 = sort_2026_options.get(sort_metric_label, "athlete_quality_score")
+        if sort_col_2026 not in df_2026.columns:
+            df_2026[sort_col_2026] = np.nan
+        df_2026 = df_2026.sort_values([sort_col_2026, "athleteName"], ascending=[False, True], na_position="last")
+
+        def _green_to_red(value, values):
+            vals = pd.to_numeric(values, errors="coerce").dropna()
+            v = sf(value)
+            if pd.isna(v) or vals.empty:
+                return "#9AAAC0"
+            pct = float((vals <= v).mean())
+            # Low values lean red, high values lean green.
+            red_rgb = (186, 12, 47)
+            green_rgb = (76, 175, 130)
+            rgb = tuple(int(red_rgb[k] + (green_rgb[k] - red_rgb[k]) * pct) for k in range(3))
+            return "#%02x%02x%02x" % rgb
+
+        sort_values_2026 = pd.to_numeric(df_2026[sort_col_2026], errors="coerce")
 
         summary_cols = [
             "athleteName", "Position", "School Type", "athlete_quality_score", "aq_pos_score",
@@ -2142,10 +2208,15 @@ with tab_2026:
         if "mRSI" in summary.columns:
             summary["mRSI"] = pd.to_numeric(summary["mRSI"], errors="coerce").round(3)
 
-        st.dataframe(summary, use_container_width=True, hide_index=True)
+        numeric_summary_cols = [c for c in ["Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI", "mRSI", "Rel Peak Power", "Bodyweight", "Height"] if c in summary.columns]
+        try:
+            styled_summary = summary.style.background_gradient(subset=numeric_summary_cols, cmap="RdYlGn")
+            st.dataframe(styled_summary, use_container_width=True, hide_index=True)
+        except Exception:
+            st.dataframe(summary, use_container_width=True, hide_index=True)
 
         st.markdown("### Scorecard PDFs")
-        st.caption("Each button exports the same one-page scorecard format as the Athlete Scorecard tab, filtered to the 2026 row.")
+        st.caption(f"PDF cards are sorted by {sort_metric_label}; the color bar runs red-to-green based on that metric within the 2026 group.")
 
         card_cols = st.columns(3)
         for i, (_, r) in enumerate(df_2026.iterrows()):
@@ -2158,11 +2229,15 @@ with tab_2026:
                 school = str(r.get("School Type", "—"))
                 if school in ("nan", "None", ""):
                     school = "—"
+                card_color = _green_to_red(r.get(sort_col_2026), sort_values_2026)
+                sort_display = fmt(sf(r.get(sort_col_2026)), 1)
                 st.markdown(f"""
-                <div style="background:white;border:1px solid {BORD};border-top:4px solid {RED};
+                <div style="background:white;border:1px solid {BORD};border-top:5px solid {card_color};
                     border-radius:10px;padding:14px 16px;margin-bottom:10px;box-shadow:0 2px 8px rgba(17,34,90,0.06)">
+                    <div style="height:5px;background:linear-gradient(90deg,{RED},{GOLD},{GREEN});border-radius:999px;margin:-6px 0 10px 0"></div>
                     <div style="font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:{NAV};line-height:1.1;margin-bottom:6px">{name}</div>
-                    <div style="font-size:11px;color:{SLATE};margin-bottom:10px">2026 · {school}</div>
+                    <div style="font-size:11px;color:{SLATE};margin-bottom:4px">2026 · {school}</div>
+                    <div style="font-size:10px;color:{SLATE};margin-bottom:10px">Sorted by <strong style="color:{card_color}">{sort_metric_label}: {sort_display}</strong></div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:12px;color:{NAV}">
                         <div><span style="color:{SLATE}">Capacity</span><br><strong>{fmt(cap,0)}</strong></div>
                         <div><span style="color:{SLATE}">Potential</span><br><strong>{fmt(pot,0)}</strong></div>
@@ -2188,500 +2263,501 @@ with tab_2026:
 # =============================================================================
 # TAB 3 — ATHLETE SCORECARD
 # =============================================================================
-with tab_card:
-    athletes = sorted(df["athleteName"].dropna().unique().tolist())
+if tab_card is not None:
+    with tab_card:
+        athletes = sorted(df["athleteName"].dropna().unique().tolist())
 
-    sc1, sc2, sc3 = st.columns([1.5, 2, 1])
-    with sc1:
-        search_name = st.text_input("Search athlete", placeholder="Type a name…", key="sc_search")
-    with sc2:
-        filtered_athletes = ([a for a in athletes if search_name.lower() in a.lower()]
-                             if search_name else athletes)
-        if not filtered_athletes: filtered_athletes = athletes
-        default_idx = filtered_athletes.index(default_ath) if default_ath in filtered_athletes else 0
-        sel_ath = st.selectbox("Select athlete", filtered_athletes, index=default_idx, key="sc_ath")
-    with sc3:
-        ath_years = sorted(df[df["athleteName"]==sel_ath]["Year"].dropna().unique().astype(int).tolist(),
-                           reverse=True)
-        # Default to the most recent year instead of an all-years average.
-        # This keeps the dashboard/PDF from showing ranges like "2021–2024" unless intentionally selected.
-        yr_opts2   = [str(y) for y in ath_years] + (["All years"] if len(ath_years) > 1 else [])
-        sel_yr_str = st.selectbox("Year", yr_opts2, key="sc_yr")
-        sel_yr     = None if sel_yr_str == "All years" else int(sel_yr_str)
+        sc1, sc2, sc3 = st.columns([1.5, 2, 1])
+        with sc1:
+            search_name = st.text_input("Search athlete", placeholder="Type a name…", key="sc_search")
+        with sc2:
+            filtered_athletes = ([a for a in athletes if search_name.lower() in a.lower()]
+                                 if search_name else athletes)
+            if not filtered_athletes: filtered_athletes = athletes
+            default_idx = filtered_athletes.index(default_ath) if default_ath in filtered_athletes else 0
+            sel_ath = st.selectbox("Select athlete", filtered_athletes, index=default_idx, key="sc_ath")
+        with sc3:
+            ath_years = sorted(df[df["athleteName"]==sel_ath]["Year"].dropna().unique().astype(int).tolist(),
+                               reverse=True)
+            # Default to the most recent year instead of an all-years average.
+            # This keeps the dashboard/PDF from showing ranges like "2021–2024" unless intentionally selected.
+            yr_opts2   = [str(y) for y in ath_years] + (["All years"] if len(ath_years) > 1 else [])
+            sel_yr_str = st.selectbox("Year", yr_opts2, key="sc_yr")
+            sel_yr     = None if sel_yr_str == "All years" else int(sel_yr_str)
 
-    ath_all = df[df["athleteName"] == sel_ath].sort_values("Year")
-    if sel_yr is None:
-        row_data = ath_all.select_dtypes(include=[np.number]).mean()
-        latest   = ath_all.iloc[-1]
-        for c in ath_all.columns:
-            if c not in row_data.index: row_data[c] = latest[c]
-        row            = row_data
-        sel_yr_display = f"All years ({ath_years[-1]}–{ath_years[0]})" if len(ath_years)>1 else str(ath_years[0])
-    else:
-        sub = ath_all[ath_all["Year"]==sel_yr]
-        if sub.empty: st.warning("No data for this year."); st.stop()
-        row            = sub.iloc[0]
-        sel_yr_display = str(sel_yr)
-
-    # ── Core values ───────────────────────────────────────────────────────────
-    aq_val  = sf(row.get("athlete_quality_score"))
-    pos_val = sf(row.get("aq_pos_score"))
-    pot_val = sf(row.get("potential_score"))
-    ci_val  = sf(row.get("Concentric Impulse"))
-    mass_kg = sf(row.get("Mass"))
-    ht_cm   = sf(row.get("Height"))
-
-    # Wingspan values
-    wing_cm     = sf(row.get("Wingspan"))
-    wing_adv_cm = sf(row.get("wingspan_advantage"))
-    wing_pct    = sf(row.get("wingspan_pct"))
-    wing_pct_str= pct_sfx(int(round(wing_pct))) if pd.notna(wing_pct) else "—"
-    wing_adv_in = fmt_wingspan_adv(wing_adv_cm)
-
-    # Wingspan/reach tier is based on the athlete's wingspan-advantage percentile.
-    # This avoids broad labels like calling a 70th percentile reach "Average".
-    if pd.notna(wing_pct):
-        if wing_pct >= 85:
-            wing_tier_label = "Notable Reach Advantage"
-            wing_tier_color = GREEN
-            wing_adv_css    = "wing-adv-pos"
-        elif wing_pct >= 60:
-            wing_tier_label = "Above-Average Reach"
-            wing_tier_color = GREEN
-            wing_adv_css    = "wing-adv-pos"
-        elif wing_pct >= 40:
-            wing_tier_label = "Average Reach"
-            wing_tier_color = GOLD
-            wing_adv_css    = "wing-adv-neu"
-        elif wing_pct >= 20:
-            wing_tier_label = "Below-Average Reach"
-            wing_tier_color = GOLD
-            wing_adv_css    = "wing-adv-neu"
+        ath_all = df[df["athleteName"] == sel_ath].sort_values("Year")
+        if sel_yr is None:
+            row_data = ath_all.select_dtypes(include=[np.number]).mean()
+            latest   = ath_all.iloc[-1]
+            for c in ath_all.columns:
+                if c not in row_data.index: row_data[c] = latest[c]
+            row            = row_data
+            sel_yr_display = f"All years ({ath_years[-1]}–{ath_years[0]})" if len(ath_years)>1 else str(ath_years[0])
         else:
-            wing_tier_label = "Limited Reach"
-            wing_tier_color = RED
-            wing_adv_css    = "wing-adv-neg"
-    else:
-        wing_tier_label = "No Data"
-        wing_tier_color = "#9AAAC0"
-        wing_adv_css    = ""
+            sub = ath_all[ath_all["Year"]==sel_yr]
+            if sub.empty: st.warning("No data for this year."); st.stop()
+            row            = sub.iloc[0]
+            sel_yr_display = str(sel_yr)
 
-    # CI tier
-    ci_tier_val  = ci_tier_label(ci_val)
-    tier_idx     = ci_tier_index(ci_val)
-    tier_clrs    = ["#BA0C2F","#E2C188","#11225A"]
-    tier_color   = tier_clrs[tier_idx] if tier_idx >= 0 else "#9AAAC0"
-    prog_cat     = str(row.get("programming_category","—"))
-    athlete_group_val = str(row.get("athlete_group", athlete_group_label(prog_cat)))
-    program_focus_val = str(row.get("program_focus", program_focus_label(prog_cat)))
-    prog_color   = PROG_COLORS.get(prog_cat, "#9AAAC0")
-    prog_desc    = PROG_DESC.get(prog_cat, "")
+        # ── Core values ───────────────────────────────────────────────────────────
+        aq_val  = sf(row.get("athlete_quality_score"))
+        pos_val = sf(row.get("aq_pos_score"))
+        pot_val = sf(row.get("potential_score"))
+        ci_val  = sf(row.get("Concentric Impulse"))
+        mass_kg = sf(row.get("Mass"))
+        ht_cm   = sf(row.get("Height"))
 
-    lbs_next   = sf(row.get("lbs_to_next_tier"))
-    next_label = str(row.get("next_tier_label","—"))
-    wc_next    = str(row.get("weight_class_next","—"))
-    wc_col     = WEIGHT_CLASS_COLORS.get(wc_next,"#9AAAC0")
-    lbs_to_315 = sf(row.get("lbs_to_315"))
-    wc_315     = str(row.get("weight_class_315","—"))
-    wc_315_col = WEIGHT_CLASS_COLORS.get(wc_315,"#9AAAC0")
-    lbs_next_str = f"+{lbs_next:.1f} lbs" if (pd.notna(lbs_next) and lbs_next>0) else ("Top tier" if lbs_next==0 else "—")
-    lbs_315_str  = f"+{lbs_to_315:.1f} lbs" if (pd.notna(lbs_to_315) and lbs_to_315>0) else ("✓ Already ≥ 315" if lbs_to_315==0 else "—")
+        # Wingspan values
+        wing_cm     = sf(row.get("Wingspan"))
+        wing_adv_cm = sf(row.get("wingspan_advantage"))
+        wing_pct    = sf(row.get("wingspan_pct"))
+        wing_pct_str= pct_sfx(int(round(wing_pct))) if pd.notna(wing_pct) else "—"
+        wing_adv_in = fmt_wingspan_adv(wing_adv_cm)
 
-    def alltime_pct(val, col):
-        try:
-            pool = df[col].dropna().apply(float)
-            v    = float(val)
-            return pct_sfx(int(round((pool<v).mean()*100)))
-        except: return "—"
-
-    aq_pct_str = alltime_pct(aq_val, "athlete_quality_score")
-
-    def proj_bwht(lbs_gain):
-        if pd.isna(mass_kg) or pd.isna(ht_cm) or pd.isna(lbs_gain) or lbs_gain<=0: return "—"
-        new_kg = mass_kg + lbs_gain/2.20462
-        ratio  = (new_kg*2.20462)/(ht_cm/2.54)
-        pool_r = df["bmi_raw"].dropna()
-        pct    = int(round(float((pool_r<ratio).mean()*100)))
-        return f"{ratio:.2f} ({pct_sfx(pct)})"
-
-    pos_str = str(row.get("Position",""))
-    pos_str = pos_str if pos_str not in ("nan","None","") else "—"
-    sch_str = str(row.get("School Type",""))
-    sch_str = sch_str if sch_str not in ("nan","None","") else "—"
-    rnk_val = int((df["athlete_quality_score"].dropna() > aq_val).sum()+1) if pd.notna(aq_val) else None
-    pool_n  = int(df["athlete_quality_score"].notna().sum())
-
-    # ── Header ────────────────────────────────────────────────────────────────
-    st.markdown(f"""
-    <div style="background:white;border:1px solid {BORD};border-top:4px solid {RED};
-        border-radius:10px;padding:20px 28px;margin-bottom:16px;
-        box-shadow:0 2px 8px rgba(17,34,90,0.06)">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
-            <div>
-                <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:{RED};margin:0 0 4px 0">
-                    WASHINGTON NATIONALS · ATHLETE SCORECARD</p>
-                <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
-                    {sel_ath}</h2>
-                <span style="font-size:12px;color:{SLATE}">{sel_yr_display} · {pos_str} · {sch_str}</span><br>
-                <span style="display:inline-block;margin-top:8px;background:{prog_color};
-                    color:white;font-size:11px;font-weight:700;padding:3px 14px;
-                    border-radius:20px;letter-spacing:0.06em">{athlete_group_val}</span>
-                <span style="font-size:11px;color:{SLATE};margin-left:8px">Program Focus: {program_focus_val}</span>
-            </div>
-            <div style="text-align:right">
-                <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:{SLATE};margin:0">OVERALL RANK</p>
-                <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
-                    color:{RED};margin:0">{"#"+str(rnk_val) if rnk_val else "—"}</p>
-                <p style="font-size:11px;color:#9AAAC0;margin:0">of {pool_n} athletes (all years)</p>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── Hero row: Capacity | Pos. gauge | Athlete Group | Potential to Gain ──
-    h1, h2, h3, h4 = st.columns([1,1,1.25,1.05])
-
-    with h1:
-        bar_w  = min(100, max(0, float(aq_val or 0)))
-        bar_cl = GREEN if pd.notna(aq_val) and aq_val>=75 else GOLD if pd.notna(aq_val) and aq_val>=50 else RED
-        st.markdown(f"""
-        <div style="background:white;border:1px solid {BORD};border-top:6px solid {RED};
-            border-radius:12px;padding:24px 20px;text-align:center;
-            box-shadow:0 4px 16px rgba(186,12,47,0.12)">
-            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
-                text-transform:uppercase;color:{RED};margin-bottom:8px">★ CAPACITY SCORE</div>
-            <div style="font-family:'Playfair Display',serif;font-size:64px;
-                font-weight:900;color:{RED};line-height:1">
-                {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
-            <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">{aq_pct_str}</div>
-            <div style="font-size:11px;color:{SLATE};margin-top:2px">score out of 100 · all-time</div>
-            <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{bar_w:.0f}%;background:{bar_cl};border-radius:6px;height:8px"></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with h2:
-        _pg  = str(row.get("pos_group",""))
-        _pos = str(row.get("Position",""))
-        if _pg and _pg not in ("Unknown","nan",""):
-            pos_lbl = f"Capacity vs {_pg}s"
-        elif _pos and _pos not in ("nan","None",""):
-            pos_lbl = f"Capacity vs {_pos}s"
+        # Wingspan/reach tier is based on the athlete's wingspan-advantage percentile.
+        # This avoids broad labels like calling a 70th percentile reach "Average".
+        if pd.notna(wing_pct):
+            if wing_pct >= 85:
+                wing_tier_label = "Notable Reach Advantage"
+                wing_tier_color = GREEN
+                wing_adv_css    = "wing-adv-pos"
+            elif wing_pct >= 60:
+                wing_tier_label = "Above-Average Reach"
+                wing_tier_color = GREEN
+                wing_adv_css    = "wing-adv-pos"
+            elif wing_pct >= 40:
+                wing_tier_label = "Average Reach"
+                wing_tier_color = GOLD
+                wing_adv_css    = "wing-adv-neu"
+            elif wing_pct >= 20:
+                wing_tier_label = "Below-Average Reach"
+                wing_tier_color = GOLD
+                wing_adv_css    = "wing-adv-neu"
+            else:
+                wing_tier_label = "Limited Reach"
+                wing_tier_color = RED
+                wing_adv_css    = "wing-adv-neg"
         else:
-            pos_lbl = "Position Data Unavailable"
-        st.plotly_chart(
-            make_gauge(pos_val if (pd.notna(pos_val) and pos_val>0) else None, pos_lbl, SLATE),
-            use_container_width=True, key="g_pos")
+            wing_tier_label = "No Data"
+            wing_tier_color = "#9AAAC0"
+            wing_adv_css    = ""
 
-    with h3:
-        st.markdown(f"""
-        <div style="background:white;border:1px solid {BORD};border-top:6px solid {prog_color};
-            border-radius:12px;padding:22px 18px;text-align:left;height:100%;
-            box-shadow:0 4px 16px rgba(17,34,90,0.08)">
-            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
-                text-transform:uppercase;color:{SLATE};margin-bottom:8px">ATHLETE GROUP</div>
-            <div style="font-family:'Playfair Display',serif;font-size:clamp(18px,1.6vw,24px);
-                font-weight:900;color:{NAV};line-height:1.15;margin-bottom:10px;white-space:normal;overflow-wrap:normal">
-                {athlete_group_val}</div>
-            <div style="font-size:11px;color:{SLATE};line-height:1.45">
-                CI: <strong style="color:{NAV}">{fmt(ci_val,1)}</strong><br>
-                P1 CI: <strong style="color:{NAV}">{fmt(sf(row.get('P1 Concentric Impulse')),1)}</strong><br>
-                Focus:<br><strong style="color:{prog_color};font-size:12px;line-height:1.25">{program_focus_val}</strong>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        # CI tier
+        ci_tier_val  = ci_tier_label(ci_val)
+        tier_idx     = ci_tier_index(ci_val)
+        tier_clrs    = ["#BA0C2F","#E2C188","#11225A"]
+        tier_color   = tier_clrs[tier_idx] if tier_idx >= 0 else "#9AAAC0"
+        prog_cat     = str(row.get("programming_category","—"))
+        athlete_group_val = str(row.get("athlete_group", athlete_group_label(prog_cat)))
+        program_focus_val = str(row.get("program_focus", program_focus_label(prog_cat)))
+        prog_color   = PROG_COLORS.get(prog_cat, "#9AAAC0")
+        prog_desc    = PROG_DESC.get(prog_cat, "")
 
-    with h4:
-        pot_w = min(100, max(0, float(pot_val or 0)))
-        pot_cl = GREEN if pd.notna(pot_val) and pot_val>=75 else GOLD if pd.notna(pot_val) and pot_val>=50 else RED
-        st.markdown(f"""
-        <div style="background:white;border:1px solid {BORD};border-top:6px solid {GOLD};
-            border-radius:12px;padding:22px 18px;text-align:center;height:100%;
-            box-shadow:0 4px 16px rgba(226,193,136,0.16)">
-            <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
-                text-transform:uppercase;color:{SLATE};margin-bottom:8px">POTENTIAL TO GAIN</div>
-            <div style="font-family:'Playfair Display',serif;font-size:54px;
-                font-weight:900;color:{GOLD};line-height:1">
-                {str(int(round(pot_val))) if pd.notna(pot_val) else "—"}</div>
-            <div style="font-size:11px;color:{SLATE};margin-top:6px;line-height:1.35">
-                Frame/projectability score<br>higher = more room to add capacity
-            </div>
-            <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
-                <div style="width:{pot_w:.0f}%;background:{pot_cl};border-radius:6px;height:8px"></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        lbs_next   = sf(row.get("lbs_to_next_tier"))
+        next_label = str(row.get("next_tier_label","—"))
+        wc_next    = str(row.get("weight_class_next","—"))
+        wc_col     = WEIGHT_CLASS_COLORS.get(wc_next,"#9AAAC0")
+        lbs_to_315 = sf(row.get("lbs_to_315"))
+        wc_315     = str(row.get("weight_class_315","—"))
+        wc_315_col = WEIGHT_CLASS_COLORS.get(wc_315,"#9AAAC0")
+        lbs_next_str = f"+{lbs_next:.1f} lbs" if (pd.notna(lbs_next) and lbs_next>0) else ("Top tier" if lbs_next==0 else "—")
+        lbs_315_str  = f"+{lbs_to_315:.1f} lbs" if (pd.notna(lbs_to_315) and lbs_to_315>0) else ("✓ Already ≥ 315" if lbs_to_315==0 else "—")
 
-    # ── Score legend ──────────────────────────────────────────────────────────
-    st.markdown(f"""
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px 0">
-        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
-            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="width:10px;height:10px;border-radius:50%;background:{GREEN};display:inline-block"></span>
-            <strong>75–100</strong>&nbsp;High-end present capacity
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
-            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="width:10px;height:10px;border-radius:50%;background:{GOLD};display:inline-block"></span>
-            <strong>50–74</strong>&nbsp;Above-average present capacity
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
-            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="width:10px;height:10px;border-radius:50%;background:#D0D7E6;display:inline-block"></span>
-            <strong>25–49</strong>&nbsp;Below-average present capacity
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
-            border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
-            <span style="width:10px;height:10px;border-radius:50%;background:#9AAAC0;display:inline-block"></span>
-            <strong>0–24</strong>&nbsp;Well below-average present capacity
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.caption("Capacity = present physical capacity relative to the loaded dataset. Potential to Gain = projectability/frame score; 50 is roughly middle-of-pool, not a draft grade.")
+        def alltime_pct(val, col):
+            try:
+                pool = df[col].dropna().apply(float)
+                v    = float(val)
+                return pct_sfx(int(round((pool<v).mean()*100)))
+            except: return "—"
 
-    # ── Pitcher flag ─────────────────────────────────────────────────────────
-    is_pitcher = str(row.get("pos_group","")).strip() == "Pitcher"
+        aq_pct_str = alltime_pct(aq_val, "athlete_quality_score")
 
-    # ── PDF download ──────────────────────────────────────────────────────────
-    try:
-        pdf_bytes, pdf_name = make_scorecard_pdf(row, df, strat_feats, sel_yr_display, is_pitcher=is_pitcher)
-        st.download_button(
-            label="Download one-page PDF scorecard",
-            data=pdf_bytes,
-            file_name=f"{pdf_name}_scorecard.pdf",
-            mime="application/pdf",
-            use_container_width=False,
-            key="download_scorecard_pdf",
-        )
-    except Exception as pdf_err:
-        st.warning(f"PDF export is unavailable for this athlete: {pdf_err}")
-
-    # ── Percentile cards ──────────────────────────────────────────────────────
-    grp_key   = str(row.get("pos_group","")).lower()
-    grp_label = str(row.get("pos_group",""))
-    grp_label = grp_label if grp_label not in ("Unknown","nan","") else "Pos."
-
-    # Show wingspan card only for pitchers
-    base_pct_items = [
-        ("CI",          "ci_pct_alltime",    "ci_pct_yr",    False),
-        ("30yd Sprint", "sprint_pct_alltime", "sprint_pct_yr",True),
-        ("RSI-mod",     "rsi_pct_alltime",   "rsi_pct_yr",   False),
-        ("Pk Pwr/BM",   "pp_pct_alltime",    "pp_pct_yr",    False),
-        ("Height",      "height_pct",        None,           False),
-    ]
-    if is_pitcher:
-        pct_items = base_pct_items + [("Wingspan", "wingspan_pct", None, False)]
-        pc = st.columns(6)
-    else:
-        pct_items = base_pct_items
-        pc = st.columns(5)
-
-    pos_pct_map = {
-        "CI":          f"ci_pct_{grp_key}" if grp_key else None,
-        "30yd Sprint": f"sprint_pct_{grp_key}" if grp_key else None,
-        "RSI-mod":     f"rsi_pct_{grp_key}" if grp_key else None,
-        "Pk Pwr/BM":   f"pp_pct_{grp_key}" if grp_key else None,
-        "Height":      None,
-        "Wingspan":    None,
-    }
-    for i, (col_lbl, pa, py, inv) in enumerate(pct_items):
-        p_all = sf(row.get(pa))
-        p_yr  = sf(row.get(py)) if py else np.nan
-        p_pos = sf(row.get(pos_pct_map.get(col_lbl))) if pos_pct_map.get(col_lbl) else np.nan
-        is_wing_card = col_lbl == "Wingspan"
-        top_col = GOLD if is_wing_card else RED
-        with pc[i]:
-            st.markdown(
-                f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {top_col};'
-                f'border-radius:10px;padding:14px 10px;text-align:center;margin-bottom:16px;'
-                f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
-                f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
-                f'color:{SLATE};margin-bottom:6px">{col_lbl}</div>'
-                f'<div style="font-family:\'Playfair Display\',serif;font-size:28px;font-weight:900;'
-                f'color:{top_col};line-height:1">{fmt(p_all,0) if pd.notna(p_all) else "—"}</div>'
-                f'<div style="font-size:10px;color:#9AAAC0;margin-top:2px">All-time pct</div>'
-                f'<div style="font-size:13px;font-weight:600;color:{NAV};margin-top:4px">'
-                f'{fmt(p_yr,0) if pd.notna(p_yr) else "—"}</div>'
-                f'<div style="font-size:10px;color:#9AAAC0">{sel_yr_display} pct</div>'
-                f'<div style="font-size:13px;font-weight:600;color:{SLATE};margin-top:4px">'
-                f'{fmt(p_pos,0) if pd.notna(p_pos) else "—"}</div>'
-                f'<div style="font-size:10px;color:#9AAAC0">{grp_label} pct</div>'
-                f'</div>',
-                unsafe_allow_html=True)
-
-    # ── Full-width percentile profile ─────────────────────────────────────────
-    st.plotly_chart(make_radar(row, is_pitcher=is_pitcher),
-                    use_container_width=True, key="g_profile_bars_full")
-
-    # ── Development Projection table data ─────────────────────────────────────
-    proj_df = pd.DataFrame()
-    if pd.notna(ci_val) and pd.notna(mass_kg) and ci_val > 0 and mass_kg > 0:
-        ci_per_kg     = ci_val / mass_kg
-        ci_per_kg_new = ci_per_kg * 0.97
-
-        def sc_bwht(kg, cm):
-            if pd.isna(kg) or pd.isna(cm) or cm==0: return np.nan
-            return (kg*2.20462)/(cm/2.54)
-
-        def sc_bwht_pct(val):
+        def proj_bwht(lbs_gain):
+            if pd.isna(mass_kg) or pd.isna(ht_cm) or pd.isna(lbs_gain) or lbs_gain<=0: return "—"
+            new_kg = mass_kg + lbs_gain/2.20462
+            ratio  = (new_kg*2.20462)/(ht_cm/2.54)
             pool_r = df["bmi_raw"].dropna()
-            if pd.isna(val) or len(pool_r)==0: return np.nan
-            return float((pool_r < val).mean()*100)
+            pct    = int(round(float((pool_r<ratio).mean()*100)))
+            return f"{ratio:.2f} ({pct_sfx(pct)})"
 
-        def sc_ci_pct(val):
-            pool_c = df["Concentric Impulse"].dropna()
-            if pd.isna(val) or len(pool_c)==0: return np.nan
-            return float((pool_c < val).mean()*100)
+        pos_str = str(row.get("Position",""))
+        pos_str = pos_str if pos_str not in ("nan","None","") else "—"
+        sch_str = str(row.get("School Type",""))
+        sch_str = sch_str if sch_str not in ("nan","None","") else "—"
+        rnk_val = int((df["athlete_quality_score"].dropna() > aq_val).sum()+1) if pd.notna(aq_val) else None
+        pool_n  = int(df["athlete_quality_score"].notna().sum())
 
-        rows_proj = []
-        for label, gain_lbs in [("Current",0),("+10 lbs",10),("+15 lbs",15)]:
-            new_kg   = mass_kg + gain_lbs/2.20462
-            ci_p     = ci_per_kg_new * new_kg if gain_lbs > 0 else ci_val
-            bwht_v   = sc_bwht(new_kg, ht_cm)
-            bwht_p   = sc_bwht_pct(bwht_v)
-            ci_p_pct = sc_ci_pct(ci_p)
-            delta    = ci_p - ci_val
-            rows_proj.append({
-                "Scenario":  label,
-                "CI":  f"{ci_p:.1f}" + (f" ({'+' if delta>=0 else ''}{delta:.1f})" if gain_lbs>0 else ""),
-                "CI Pct":    pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
-                "Bodyweight": f"{new_kg*2.20462:.1f}",
-                "BW/Ht":     f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
-                "BW/Ht Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
-            })
-        proj_df = pd.DataFrame(rows_proj)
+        # ── Header ────────────────────────────────────────────────────────────────
+        st.markdown(f"""
+        <div style="background:white;border:1px solid {BORD};border-top:4px solid {RED};
+            border-radius:10px;padding:20px 28px;margin-bottom:16px;
+            box-shadow:0 2px 8px rgba(17,34,90,0.06)">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+                <div>
+                    <p style="font-size:9px;font-weight:700;letter-spacing:0.2em;color:{RED};margin:0 0 4px 0">
+                        WASHINGTON NATIONALS · ATHLETE SCORECARD</p>
+                    <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:{NAV};margin:0 0 8px 0">
+                        {sel_ath}</h2>
+                    <span style="font-size:12px;color:{SLATE}">{sel_yr_display} · {pos_str} · {sch_str}</span><br>
+                    <span style="display:inline-block;margin-top:8px;background:{prog_color};
+                        color:white;font-size:11px;font-weight:700;padding:3px 14px;
+                        border-radius:20px;letter-spacing:0.06em">{athlete_group_val}</span>
+                    <span style="font-size:11px;color:{SLATE};margin-left:8px">Program Focus: {program_focus_val}</span>
+                </div>
+                <div style="text-align:right">
+                    <p style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:{SLATE};margin:0">OVERALL RANK</p>
+                    <p style="font-family:'Playfair Display',serif;font-size:36px;font-weight:900;
+                        color:{RED};margin:0">{"#"+str(rnk_val) if rnk_val else "—"}</p>
+                    <p style="font-size:11px;color:#9AAAC0;margin:0">of {pool_n} athletes (all years)</p>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # ── Main body: metrics | wingspan + development projection ───────────────
-    m1, m2 = st.columns([1.05, 1.95])
+        # ── Hero row: Capacity | Pos. gauge | Athlete Group | Potential to Gain ──
+        h1, h2, h3, h4 = st.columns([1,1,1.25,1.05])
 
-    with m1:
-        # Wingspan row in physical attributes — always show raw numbers, but
-        # only add the advantage flag line for pitchers
-        wing_adv_row = ""
-        if is_pitcher:
-            adv_color = (GREEN if wing_tier_color == GREEN
-                         else RED if wing_tier_color == RED else GOLD)
-            wing_adv_row = (
-                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan Adv.</span>'
-                f'<span style="font-weight:600;color:{adv_color}">{wing_adv_in}</span>'
-                f'</div>'
+        with h1:
+            bar_w  = min(100, max(0, float(aq_val or 0)))
+            bar_cl = GREEN if pd.notna(aq_val) and aq_val>=75 else GOLD if pd.notna(aq_val) and aq_val>=50 else RED
+            st.markdown(f"""
+            <div style="background:white;border:1px solid {BORD};border-top:6px solid {RED};
+                border-radius:12px;padding:24px 20px;text-align:center;
+                box-shadow:0 4px 16px rgba(186,12,47,0.12)">
+                <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
+                    text-transform:uppercase;color:{RED};margin-bottom:8px">★ CAPACITY SCORE</div>
+                <div style="font-family:'Playfair Display',serif;font-size:64px;
+                    font-weight:900;color:{RED};line-height:1">
+                    {str(int(round(aq_val))) if pd.notna(aq_val) else "—"}</div>
+                <div style="font-size:13px;font-weight:700;color:{RED};margin-top:4px">{aq_pct_str}</div>
+                <div style="font-size:11px;color:{SLATE};margin-top:2px">score out of 100 · all-time</div>
+                <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
+                    <div style="width:{bar_w:.0f}%;background:{bar_cl};border-radius:6px;height:8px"></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with h2:
+            _pg  = str(row.get("pos_group",""))
+            _pos = str(row.get("Position",""))
+            if _pg and _pg not in ("Unknown","nan",""):
+                pos_lbl = f"Capacity vs {_pg}s"
+            elif _pos and _pos not in ("nan","None",""):
+                pos_lbl = f"Capacity vs {_pos}s"
+            else:
+                pos_lbl = "Position Data Unavailable"
+            st.plotly_chart(
+                make_gauge(pos_val if (pd.notna(pos_val) and pos_val>0) else None, pos_lbl, SLATE),
+                use_container_width=True, key="g_pos")
+
+        with h3:
+            st.markdown(f"""
+            <div style="background:white;border:1px solid {BORD};border-top:6px solid {prog_color};
+                border-radius:12px;padding:22px 18px;text-align:left;height:100%;
+                box-shadow:0 4px 16px rgba(17,34,90,0.08)">
+                <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
+                    text-transform:uppercase;color:{SLATE};margin-bottom:8px">ATHLETE GROUP</div>
+                <div style="font-family:'Playfair Display',serif;font-size:clamp(18px,1.6vw,24px);
+                    font-weight:900;color:{NAV};line-height:1.15;margin-bottom:10px;white-space:normal;overflow-wrap:normal">
+                    {athlete_group_val}</div>
+                <div style="font-size:11px;color:{SLATE};line-height:1.45">
+                    CI: <strong style="color:{NAV}">{fmt(ci_val,1)}</strong><br>
+                    P1 CI: <strong style="color:{NAV}">{fmt(sf(row.get('P1 Concentric Impulse')),1)}</strong><br>
+                    Focus:<br><strong style="color:{prog_color};font-size:12px;line-height:1.25">{program_focus_val}</strong>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with h4:
+            pot_w = min(100, max(0, float(pot_val or 0)))
+            pot_cl = GREEN if pd.notna(pot_val) and pot_val>=75 else GOLD if pd.notna(pot_val) and pot_val>=50 else RED
+            st.markdown(f"""
+            <div style="background:white;border:1px solid {BORD};border-top:6px solid {GOLD};
+                border-radius:12px;padding:22px 18px;text-align:center;height:100%;
+                box-shadow:0 4px 16px rgba(226,193,136,0.16)">
+                <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;
+                    text-transform:uppercase;color:{SLATE};margin-bottom:8px">POTENTIAL TO GAIN</div>
+                <div style="font-family:'Playfair Display',serif;font-size:54px;
+                    font-weight:900;color:{GOLD};line-height:1">
+                    {str(int(round(pot_val))) if pd.notna(pot_val) else "—"}</div>
+                <div style="font-size:11px;color:{SLATE};margin-top:6px;line-height:1.35">
+                    Frame/projectability score<br>higher = more room to add capacity
+                </div>
+                <div style="margin-top:12px;background:#F0F3F8;border-radius:6px;height:8px">
+                    <div style="width:{pot_w:.0f}%;background:{pot_cl};border-radius:6px;height:8px"></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ── Score legend ──────────────────────────────────────────────────────────
+        st.markdown(f"""
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 16px 0">
+            <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+                border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+                <span style="width:10px;height:10px;border-radius:50%;background:{GREEN};display:inline-block"></span>
+                <strong>75–100</strong>&nbsp;High-end present capacity
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+                border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+                <span style="width:10px;height:10px;border-radius:50%;background:{GOLD};display:inline-block"></span>
+                <strong>50–74</strong>&nbsp;Above-average present capacity
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+                border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+                <span style="width:10px;height:10px;border-radius:50%;background:#D0D7E6;display:inline-block"></span>
+                <strong>25–49</strong>&nbsp;Below-average present capacity
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;background:white;border:1px solid {BORD};
+                border-radius:20px;padding:5px 14px;font-size:11px;color:{NAV}">
+                <span style="width:10px;height:10px;border-radius:50%;background:#9AAAC0;display:inline-block"></span>
+                <strong>0–24</strong>&nbsp;Well below-average present capacity
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption("Capacity = present physical capacity relative to the loaded dataset. Potential to Gain = projectability/frame score; 50 is roughly middle-of-pool, not a draft grade.")
+
+        # ── Pitcher flag ─────────────────────────────────────────────────────────
+        is_pitcher = str(row.get("pos_group","")).strip() == "Pitcher"
+
+        # ── PDF download ──────────────────────────────────────────────────────────
+        try:
+            pdf_bytes, pdf_name = make_scorecard_pdf(row, df, strat_feats, sel_yr_display, is_pitcher=is_pitcher)
+            st.download_button(
+                label="Download one-page PDF scorecard",
+                data=pdf_bytes,
+                file_name=f"{pdf_name}_scorecard.pdf",
+                mime="application/pdf",
+                use_container_width=False,
+                key="download_scorecard_pdf",
             )
+        except Exception as pdf_err:
+            st.warning(f"PDF export is unavailable for this athlete: {pdf_err}")
 
-        st.markdown(
-            f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
-            f'border-radius:10px;padding:18px 22px;box-shadow:0 2px 8px rgba(17,34,90,0.06);margin-bottom:16px">'
-            f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
-            f'color:{SLATE};margin-bottom:6px">Force Plate</div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Concentric Impulse</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse")),1)}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">P1 Conc. Impulse</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("P1 Concentric Impulse")),1)}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">CI-100ms</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse-100ms")),1)}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">RSI-modified</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("RSI-modified")),3)}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Peak Power / BM</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Peak Power / BM")),1)}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Jump Height</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Jump Height (Flight Time) in Inches")),2," in")}</span></div>'
-            f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
-            f'color:{SLATE};margin:12px 0 6px 0">Sprint</div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">30yd</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("30yd Split")),3,"s")}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">10yd</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("10yd Split")),3,"s")}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">20yd</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("20yd Split")),3,"s")}</span></div>'
-            f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
-            f'color:{SLATE};margin:12px 0 6px 0">Anthropometrics</div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Height</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt_height(sf(row.get("Height")))}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Bodyweight</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt_mass(sf(row.get("Mass")))}</span></div>'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt_wingspan(wing_cm)}</span></div>'
-            f'{wing_adv_row}'
-            f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
-            f'<span style="color:{SLATE};min-width:160px;font-size:12px">BW/Ht Ratio</span>'
-            f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("bmi_raw")),2)}</span></div>'
-            f'</div>',
-            unsafe_allow_html=True)
+        # ── Percentile cards ──────────────────────────────────────────────────────
+        grp_key   = str(row.get("pos_group","")).lower()
+        grp_label = str(row.get("pos_group",""))
+        grp_label = grp_label if grp_label not in ("Unknown","nan","") else "Pos."
 
-    with m2:
+        # Show wingspan card only for pitchers
+        base_pct_items = [
+            ("CI",          "ci_pct_alltime",    "ci_pct_yr",    False),
+            ("30yd Sprint", "sprint_pct_alltime", "sprint_pct_yr",True),
+            ("RSI-mod",     "rsi_pct_alltime",   "rsi_pct_yr",   False),
+            ("Pk Pwr/BM",   "pp_pct_alltime",    "pp_pct_yr",    False),
+            ("Height",      "height_pct",        None,           False),
+        ]
         if is_pitcher:
-            # ── Wingspan Feature Panel (pitchers only) ─────────────────────────
-            wing_pct_bar = min(100, max(0, float(wing_pct or 0)))
-            wing_icon = "✓" if wing_tier_color == GREEN else ("⚠" if wing_tier_color == RED else "~")
+            pct_items = base_pct_items + [("Wingspan", "wingspan_pct", None, False)]
+            pc = st.columns(6)
+        else:
+            pct_items = base_pct_items
+            pc = st.columns(5)
+
+        pos_pct_map = {
+            "CI":          f"ci_pct_{grp_key}" if grp_key else None,
+            "30yd Sprint": f"sprint_pct_{grp_key}" if grp_key else None,
+            "RSI-mod":     f"rsi_pct_{grp_key}" if grp_key else None,
+            "Pk Pwr/BM":   f"pp_pct_{grp_key}" if grp_key else None,
+            "Height":      None,
+            "Wingspan":    None,
+        }
+        for i, (col_lbl, pa, py, inv) in enumerate(pct_items):
+            p_all = sf(row.get(pa))
+            p_yr  = sf(row.get(py)) if py else np.nan
+            p_pos = sf(row.get(pos_pct_map.get(col_lbl))) if pos_pct_map.get(col_lbl) else np.nan
+            is_wing_card = col_lbl == "Wingspan"
+            top_col = GOLD if is_wing_card else RED
+            with pc[i]:
+                st.markdown(
+                    f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {top_col};'
+                    f'border-radius:10px;padding:14px 10px;text-align:center;margin-bottom:16px;'
+                    f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
+                    f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+                    f'color:{SLATE};margin-bottom:6px">{col_lbl}</div>'
+                    f'<div style="font-family:\'Playfair Display\',serif;font-size:28px;font-weight:900;'
+                    f'color:{top_col};line-height:1">{fmt(p_all,0) if pd.notna(p_all) else "—"}</div>'
+                    f'<div style="font-size:10px;color:#9AAAC0;margin-top:2px">All-time pct</div>'
+                    f'<div style="font-size:13px;font-weight:600;color:{NAV};margin-top:4px">'
+                    f'{fmt(p_yr,0) if pd.notna(p_yr) else "—"}</div>'
+                    f'<div style="font-size:10px;color:#9AAAC0">{sel_yr_display} pct</div>'
+                    f'<div style="font-size:13px;font-weight:600;color:{SLATE};margin-top:4px">'
+                    f'{fmt(p_pos,0) if pd.notna(p_pos) else "—"}</div>'
+                    f'<div style="font-size:10px;color:#9AAAC0">{grp_label} pct</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+
+        # ── Full-width percentile profile ─────────────────────────────────────────
+        st.plotly_chart(make_radar(row, is_pitcher=is_pitcher),
+                        use_container_width=True, key="g_profile_bars_full")
+
+        # ── Development Projection table data ─────────────────────────────────────
+        proj_df = pd.DataFrame()
+        if pd.notna(ci_val) and pd.notna(mass_kg) and ci_val > 0 and mass_kg > 0:
+            ci_per_kg     = ci_val / mass_kg
+            ci_per_kg_new = ci_per_kg * 0.97
+
+            def sc_bwht(kg, cm):
+                if pd.isna(kg) or pd.isna(cm) or cm==0: return np.nan
+                return (kg*2.20462)/(cm/2.54)
+
+            def sc_bwht_pct(val):
+                pool_r = df["bmi_raw"].dropna()
+                if pd.isna(val) or len(pool_r)==0: return np.nan
+                return float((pool_r < val).mean()*100)
+
+            def sc_ci_pct(val):
+                pool_c = df["Concentric Impulse"].dropna()
+                if pd.isna(val) or len(pool_c)==0: return np.nan
+                return float((pool_c < val).mean()*100)
+
+            rows_proj = []
+            for label, gain_lbs in [("Current",0),("+10 lbs",10),("+15 lbs",15)]:
+                new_kg   = mass_kg + gain_lbs/2.20462
+                ci_p     = ci_per_kg_new * new_kg if gain_lbs > 0 else ci_val
+                bwht_v   = sc_bwht(new_kg, ht_cm)
+                bwht_p   = sc_bwht_pct(bwht_v)
+                ci_p_pct = sc_ci_pct(ci_p)
+                delta    = ci_p - ci_val
+                rows_proj.append({
+                    "Scenario":  label,
+                    "CI":  f"{ci_p:.1f}" + (f" ({'+' if delta>=0 else ''}{delta:.1f})" if gain_lbs>0 else ""),
+                    "CI Pct":    pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
+                    "Bodyweight": f"{new_kg*2.20462:.1f}",
+                    "BW/Ht":     f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
+                    "BW/Ht Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
+                })
+            proj_df = pd.DataFrame(rows_proj)
+
+        # ── Main body: metrics | wingspan + development projection ───────────────
+        m1, m2 = st.columns([1.05, 1.95])
+
+        with m1:
+            # Wingspan row in physical attributes — always show raw numbers, but
+            # only add the advantage flag line for pitchers
+            wing_adv_row = ""
+            if is_pitcher:
+                adv_color = (GREEN if wing_tier_color == GREEN
+                             else RED if wing_tier_color == RED else GOLD)
+                wing_adv_row = (
+                    f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                    f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan Adv.</span>'
+                    f'<span style="font-weight:600;color:{adv_color}">{wing_adv_in}</span>'
+                    f'</div>'
+                )
 
             st.markdown(
-                f'<div style="background:linear-gradient(135deg,{NAV} 0%,#1a3275 100%);'
-                f'border-radius:12px;padding:22px 24px;color:white;margin-bottom:16px;'
-                f'box-shadow:0 6px 24px rgba(17,34,90,0.20)">'
-                f'<p style="font-size:10px;font-weight:700;letter-spacing:0.18em;'
-                f'text-transform:uppercase;color:rgba(255,255,255,0.55);margin:0 0 14px 0">'
-                f'✦ WINGSPAN ANALYSIS</p>'
-                f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
-                f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
-                f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
-                f'color:white;line-height:1.1">{fmt_wingspan(wing_cm)}</div>'
-                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
-                f'color:rgba(255,255,255,0.55);margin-top:3px">Wingspan</div>'
-                f'</div>'
-                f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
-                f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
-                f'color:white;line-height:1.1">{fmt_height(sf(row.get("Height")))}</div>'
-                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
-                f'color:rgba(255,255,255,0.55);margin-top:3px">Height</div>'
-                f'</div>'
-                f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
-                f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
-                f'color:{wing_tier_color};line-height:1.1">{wing_adv_in}</div>'
-                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
-                f'color:rgba(255,255,255,0.55);margin-top:3px">Advantage</div>'
-                f'</div>'
-                f'</div>'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
-                f'<span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.75)">Wingspan Percentile</span>'
-                f'<span style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:900;'
-                f'color:white">{wing_pct_str}</span>'
-                f'</div>'
-                f'<div style="background:rgba(255,255,255,0.15);border-radius:6px;height:10px;margin-bottom:14px">'
-                f'<div style="width:{wing_pct_bar:.0f}%;background:{wing_tier_color};'
-                f'border-radius:6px;height:10px"></div>'
-                f'</div>'
-                f'<span style="display:inline-block;background:{wing_tier_color};color:white;'
-                f'font-size:11px;font-weight:700;padding:4px 14px;border-radius:20px;'
-                f'letter-spacing:0.06em">{wing_icon} {wing_tier_label}</span>'
+                f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {NAV};'
+                f'border-radius:10px;padding:18px 22px;box-shadow:0 2px 8px rgba(17,34,90,0.06);margin-bottom:16px">'
+                f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+                f'color:{SLATE};margin-bottom:6px">Force Plate</div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Concentric Impulse</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse")),1)}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">P1 Conc. Impulse</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("P1 Concentric Impulse")),1)}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">CI-100ms</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse-100ms")),1)}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">RSI-modified</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("RSI-modified")),3)}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Peak Power / BM</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Peak Power / BM")),1)}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Jump Height</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Jump Height (Flight Time) in Inches")),2," in")}</span></div>'
+                f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+                f'color:{SLATE};margin:12px 0 6px 0">Sprint</div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">30yd</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("30yd Split")),3,"s")}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">10yd</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("10yd Split")),3,"s")}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">20yd</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("20yd Split")),3,"s")}</span></div>'
+                f'<div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;'
+                f'color:{SLATE};margin:12px 0 6px 0">Anthropometrics</div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Height</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt_height(sf(row.get("Height")))}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Bodyweight</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt_mass(sf(row.get("Mass")))}</span></div>'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt_wingspan(wing_cm)}</span></div>'
+                f'{wing_adv_row}'
+                f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
+                f'<span style="color:{SLATE};min-width:160px;font-size:12px">BW/Ht Ratio</span>'
+                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("bmi_raw")),2)}</span></div>'
                 f'</div>',
                 unsafe_allow_html=True)
 
-        if not proj_df.empty:
-            st.markdown(
-                f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {GREEN};'
-                f'border-radius:10px;padding:14px 16px;margin-top:12px;'
-                f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
-                f'<div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
-                f'color:{GREEN};margin-bottom:4px">Development Projection</div>'
-                f'<div style="font-size:11px;color:{SLATE};margin-bottom:8px">'
-                f'Added-bodyweight scenarios with 3% CI/kg penalty.</div>'
-                f'</div>',
-                unsafe_allow_html=True)
-            st.dataframe(proj_df, use_container_width=True, hide_index=True, key="sc_proj_tbl_side")
+        with m2:
+            if is_pitcher:
+                # ── Wingspan Feature Panel (pitchers only) ─────────────────────────
+                wing_pct_bar = min(100, max(0, float(wing_pct or 0)))
+                wing_icon = "✓" if wing_tier_color == GREEN else ("⚠" if wing_tier_color == RED else "~")
 
-        # Year-over-year trends and jump strategy profile removed to reduce clutter.
+                st.markdown(
+                    f'<div style="background:linear-gradient(135deg,{NAV} 0%,#1a3275 100%);'
+                    f'border-radius:12px;padding:22px 24px;color:white;margin-bottom:16px;'
+                    f'box-shadow:0 6px 24px rgba(17,34,90,0.20)">'
+                    f'<p style="font-size:10px;font-weight:700;letter-spacing:0.18em;'
+                    f'text-transform:uppercase;color:rgba(255,255,255,0.55);margin:0 0 14px 0">'
+                    f'✦ WINGSPAN ANALYSIS</p>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
+                    f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
+                    f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
+                    f'color:white;line-height:1.1">{fmt_wingspan(wing_cm)}</div>'
+                    f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                    f'color:rgba(255,255,255,0.55);margin-top:3px">Wingspan</div>'
+                    f'</div>'
+                    f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
+                    f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
+                    f'color:white;line-height:1.1">{fmt_height(sf(row.get("Height")))}</div>'
+                    f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                    f'color:rgba(255,255,255,0.55);margin-top:3px">Height</div>'
+                    f'</div>'
+                    f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
+                    f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
+                    f'color:{wing_tier_color};line-height:1.1">{wing_adv_in}</div>'
+                    f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                    f'color:rgba(255,255,255,0.55);margin-top:3px">Advantage</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+                    f'<span style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.75)">Wingspan Percentile</span>'
+                    f'<span style="font-family:\'Playfair Display\',serif;font-size:20px;font-weight:900;'
+                    f'color:white">{wing_pct_str}</span>'
+                    f'</div>'
+                    f'<div style="background:rgba(255,255,255,0.15);border-radius:6px;height:10px;margin-bottom:14px">'
+                    f'<div style="width:{wing_pct_bar:.0f}%;background:{wing_tier_color};'
+                    f'border-radius:6px;height:10px"></div>'
+                    f'</div>'
+                    f'<span style="display:inline-block;background:{wing_tier_color};color:white;'
+                    f'font-size:11px;font-weight:700;padding:4px 14px;border-radius:20px;'
+                    f'letter-spacing:0.06em">{wing_icon} {wing_tier_label}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
 
-    # Development Projection lives in the right-hand scorecard column to reduce white space.
+            if not proj_df.empty:
+                st.markdown(
+                    f'<div style="background:white;border:1px solid {BORD};border-top:4px solid {GREEN};'
+                    f'border-radius:10px;padding:14px 16px;margin-top:12px;'
+                    f'box-shadow:0 2px 8px rgba(17,34,90,0.06)">'
+                    f'<div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
+                    f'color:{GREEN};margin-bottom:4px">Development Projection</div>'
+                    f'<div style="font-size:11px;color:{SLATE};margin-bottom:8px">'
+                    f'Added-bodyweight scenarios with 3% CI/kg penalty.</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+                st.dataframe(proj_df, use_container_width=True, hide_index=True, key="sc_proj_tbl_side")
+
+            # Year-over-year trends and jump strategy profile removed to reduce clutter.
+
+        # Development Projection lives in the right-hand scorecard column to reduce white space.
