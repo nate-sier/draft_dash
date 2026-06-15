@@ -1348,6 +1348,79 @@ def make_trend(player_df, col, label, invert=False):
 
 
 
+def make_force_plate_metric_scatter(plot_df, x_col, x_label, y_col, y_label, percentile_basis="All loaded data"):
+    """Interactive force-plate scatter with independent X/Y metric selection."""
+    data = plot_df.copy()
+
+    # Percentiles shown in hover. By default this uses the all-time/dashboard
+    # percentiles created in build_scores; optionally the tab can overwrite these
+    # with percentiles based only on the currently filtered chart cohort.
+    if percentile_basis == "Filtered chart cohort":
+        data["ci_hover_pct"] = pct_rank(pd.to_numeric(data["Concentric Impulse"], errors="coerce"))
+        data["p1_hover_pct"] = pct_rank(pd.to_numeric(data["P1 Concentric Impulse"], errors="coerce"))
+        data["ci100_hover_pct"] = pct_rank(pd.to_numeric(data["Concentric Impulse-100ms"], errors="coerce"))
+        data["rsi_hover_pct"] = pct_rank(pd.to_numeric(data["RSI-modified"], errors="coerce"))
+    else:
+        data["ci_hover_pct"] = pd.to_numeric(data.get("ci_pct_alltime"), errors="coerce")
+        data["p1_hover_pct"] = pd.to_numeric(data.get("p1_ci_pct_alltime"), errors="coerce")
+        data["ci100_hover_pct"] = pd.to_numeric(data.get("ci100_pct_alltime"), errors="coerce")
+        data["rsi_hover_pct"] = pd.to_numeric(data.get("rsi_pct_alltime"), errors="coerce")
+
+    data["Year_Display"] = pd.to_numeric(data["Year"], errors="coerce").astype("Int64").astype(str)
+    data["Position_Display"] = data["Position"].astype(str).replace({"nan": "—", "": "—"})
+    data["pos_group"] = data["pos_group"].astype(str).replace({"nan": "Unknown", "": "Unknown"})
+
+    custom_cols = [
+        "athleteName", "Position_Display", "Year_Display",
+        "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms", "RSI-modified",
+        "ci_hover_pct", "p1_hover_pct", "ci100_hover_pct", "rsi_hover_pct",
+    ]
+
+    fig = px.scatter(
+        data,
+        x=x_col,
+        y=y_col,
+        color="pos_group",
+        custom_data=custom_cols,
+        labels={x_col: x_label, y_col: y_label, "pos_group": "Position group"},
+    )
+    fig.update_traces(
+        marker=dict(size=10, opacity=0.78, line=dict(width=1, color="white")),
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>"
+            "Position: %{customdata[1]} | Year: %{customdata[2]}<br><br>"
+            "CI: %{customdata[3]:.1f} (%{customdata[7]:.0f}th)<br>"
+            "P1 CI: %{customdata[4]:.1f} (%{customdata[8]:.0f}th)<br>"
+            "CI-100ms: %{customdata[5]:.1f} (%{customdata[9]:.0f}th)<br>"
+            "mRSI: %{customdata[6]:.3f} (%{customdata[10]:.0f}th)"
+            "<extra></extra>"
+        ),
+    )
+
+    # Add benchmark lines on whichever axis currently contains a benchmarked metric.
+    benchmarks = {
+        "Concentric Impulse": (285, "285 CI"),
+        "P1 Concentric Impulse": (195, "195 P1 CI"),
+    }
+    if x_col in benchmarks:
+        bench_value, bench_label = benchmarks[x_col]
+        fig.add_vline(x=bench_value, line_width=1.5, line_dash="dash", line_color=RED,
+                      annotation_text=bench_label, annotation_position="top right")
+    if y_col in benchmarks:
+        bench_value, bench_label = benchmarks[y_col]
+        fig.add_hline(y=bench_value, line_width=1.5, line_dash="dash", line_color=RED,
+                      annotation_text=bench_label, annotation_position="top right")
+
+    fig.update_layout(**_layout(
+        title=dict(text=f"{y_label} vs {x_label}", font=dict(size=18, color=NAV), x=0),
+        height=650,
+        margin=dict(l=35, r=25, t=60, b=45),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    ))
+    fig.update_xaxes(title=x_label, zeroline=False)
+    fig.update_yaxes(title=y_label, zeroline=False)
+    return fig
+
 def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=False):
     """Render the PDF export using the exact Scorecard Option 1 skin."""
     if hasattr(row, "to_dict"):
@@ -1723,9 +1796,9 @@ with st.container(key="legacy_scorecard_toggle"):
         st.session_state.show_athlete_scorecard_tab = not st.session_state.show_athlete_scorecard_tab
 
 if st.session_state.show_athlete_scorecard_tab:
-    tab_board, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Athlete Scorecard", "2026 Scorecards", "Score Info"])
+    tab_board, tab_scatter, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Force Plate Scatter", "Athlete Scorecard", "2026 Scorecards", "Score Info"])
 else:
-    tab_board, tab_2026, tab_info = st.tabs(["Leaderboard", "2026 Scorecards", "Score Info"])
+    tab_board, tab_scatter, tab_2026, tab_info = st.tabs(["Leaderboard", "Force Plate Scatter", "2026 Scorecards", "Score Info"])
     tab_card = None
 
 
@@ -1822,8 +1895,159 @@ with tab_info:
     </div>
     """, unsafe_allow_html=True)
 
+
 # =============================================================================
-# TAB 1 — LEADERBOARD
+# TAB 1 — FORCE PLATE SCATTER
+# =============================================================================
+with tab_scatter:
+    st.markdown(f"""
+    <div class="card card-red">
+        <p class="label">Force Plate Relationship</p>
+        <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Force Plate Metric Scatter</h2>
+        <p style="font-size:14px;line-height:1.55;color:{NAV};margin-bottom:0;">
+            Pick any force plate metric for either axis. Hover over any dot to see the athlete, raw metrics, and percentile ranks.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    scatter_df = df.copy()
+    scatter_df["Year"] = pd.to_numeric(scatter_df["Year"], errors="coerce")
+    scatter_df["Position"] = scatter_df["Position"].astype(str).replace({"nan": "", "None": ""}).str.strip().str.upper()
+    scatter_df["pos_group"] = scatter_df["pos_group"].astype(str).replace({"nan": "Unknown", "": "Unknown"})
+
+    metric_options = {
+        "P1 CI": "P1 Concentric Impulse",
+        "CI": "Concentric Impulse",
+        "CI-100ms": "Concentric Impulse-100ms",
+        "mRSI": "RSI-modified",
+    }
+    metric_percentile_cols = {
+        "P1 CI": "p1_ci_pct_alltime",
+        "CI": "ci_pct_alltime",
+        "CI-100ms": "ci100_pct_alltime",
+        "mRSI": "rsi_pct_alltime",
+    }
+    metric_digits = {
+        "P1 CI": 1,
+        "CI": 1,
+        "CI-100ms": 1,
+        "mRSI": 3,
+    }
+
+    years_available = sorted(scatter_df["Year"].dropna().astype(int).unique().tolist(), reverse=True)
+    default_years = [2026] if 2026 in years_available else years_available
+    pos_groups_available = [g for g in ["Pitcher", "Catcher", "Infielder", "Outfielder", "Unknown"] if g in scatter_df["pos_group"].unique()]
+    positions_available = sorted([p for p in scatter_df["Position"].dropna().unique().tolist() if str(p).strip() != ""])
+
+    c1, c2, c3 = st.columns([1.1, 1.15, 1.35])
+    with c1:
+        selected_years = st.multiselect("Years", years_available, default=default_years, key="scatter_years")
+    with c2:
+        selected_pos_groups = st.multiselect(
+            "Position groups",
+            pos_groups_available,
+            default=pos_groups_available,
+            key="scatter_pos_groups",
+        )
+    with c3:
+        selected_positions = st.multiselect(
+            "Exact positions",
+            positions_available,
+            default=positions_available,
+            key="scatter_positions",
+        )
+
+    c4, c5, c6 = st.columns([1.0, 1.0, 2.0])
+    with c4:
+        x_label = st.selectbox("X-axis metric", list(metric_options.keys()), index=0, key="scatter_x_metric")
+    with c5:
+        y_label = st.selectbox("Y-axis metric", list(metric_options.keys()), index=3, key="scatter_y_metric")
+    with c6:
+        percentile_basis = st.radio(
+            "Hover percentiles based on",
+            ["All loaded data", "Filtered chart cohort"],
+            horizontal=True,
+            key="scatter_percentile_basis",
+        )
+
+    if selected_years:
+        scatter_df = scatter_df[scatter_df["Year"].isin(selected_years)]
+    else:
+        scatter_df = scatter_df.iloc[0:0]
+
+    if selected_pos_groups:
+        scatter_df = scatter_df[scatter_df["pos_group"].isin(selected_pos_groups)]
+    else:
+        scatter_df = scatter_df.iloc[0:0]
+
+    if selected_positions:
+        scatter_df = scatter_df[scatter_df["Position"].isin(selected_positions)]
+    else:
+        scatter_df = scatter_df.iloc[0:0]
+
+    x_col = metric_options[x_label]
+    y_col = metric_options[y_label]
+    required_cols = [
+        "athleteName", "Year", "Position", "pos_group",
+        "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms", "RSI-modified",
+        "ci_pct_alltime", "p1_ci_pct_alltime", "ci100_pct_alltime", "rsi_pct_alltime",
+    ]
+    for col in required_cols:
+        if col not in scatter_df.columns:
+            scatter_df[col] = np.nan
+
+    chart_df = scatter_df.dropna(subset=list(dict.fromkeys([x_col, y_col]))).copy()
+
+    if x_col == y_col:
+        st.info("You selected the same metric for both axes. The chart will still render, but the dots will fall along a 1:1 relationship.")
+
+    if chart_df.empty:
+        st.warning("No athletes have both selected metrics for the active filters.")
+    else:
+        fig = make_force_plate_metric_scatter(chart_df, x_col, x_label, y_col, y_label, percentile_basis)
+        st.plotly_chart(fig, use_container_width=True)
+
+        x_pct_col = metric_percentile_cols[x_label]
+        y_pct_col = metric_percentile_cols[y_label]
+        x_digits = metric_digits[x_label]
+        y_digits = metric_digits[y_label]
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Athletes", f"{len(chart_df):,}")
+        m2.metric(f"Median {x_label}", fmt(pd.to_numeric(chart_df[x_col], errors="coerce").median(), x_digits))
+        m3.metric(f"Median {y_label}", fmt(pd.to_numeric(chart_df[y_col], errors="coerce").median(), y_digits))
+        m4.metric(f"Median {y_label} Pct", pct_sfx(pd.to_numeric(chart_df[y_pct_col], errors="coerce").median()))
+
+        export_cols = [
+            "athleteName", "Position", "pos_group", "Year",
+            "Concentric Impulse", "ci_pct_alltime",
+            "P1 Concentric Impulse", "p1_ci_pct_alltime",
+            "Concentric Impulse-100ms", "ci100_pct_alltime",
+            "RSI-modified", "rsi_pct_alltime",
+        ]
+        export_df = chart_df[export_cols].rename(columns={
+            "athleteName": "Athlete",
+            "pos_group": "Position Group",
+            "Concentric Impulse": "CI",
+            "ci_pct_alltime": "CI Percentile",
+            "P1 Concentric Impulse": "P1 CI",
+            "p1_ci_pct_alltime": "P1 CI Percentile",
+            "Concentric Impulse-100ms": "CI-100ms",
+            "ci100_pct_alltime": "CI-100ms Percentile",
+            "RSI-modified": "mRSI",
+            "rsi_pct_alltime": "mRSI Percentile",
+        }).copy()
+        st.download_button(
+            "Download filtered scatter data",
+            data=export_df.to_csv(index=False).encode("utf-8"),
+            file_name="force_plate_scatter_filtered.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+
+# =============================================================================
+# TAB 2 — LEADERBOARD
 # =============================================================================
 with tab_board:
 
@@ -2141,7 +2365,7 @@ with tab_board:
 
 
 # =============================================================================
-# TAB 2 — 2026 SCORECARDS
+# TAB 3 — 2026 SCORECARDS
 # =============================================================================
 with tab_2026:
     df_2026 = df[(pd.to_numeric(df["Year"], errors="coerce") == 2026)].copy()
