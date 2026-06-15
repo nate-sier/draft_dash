@@ -1401,6 +1401,7 @@ def make_force_plate_metric_scatter(plot_df, x_col, x_label, y_col, y_label, per
     benchmarks = {
         "Concentric Impulse": (285, "285 CI"),
         "P1 Concentric Impulse": (195, "195 P1 CI"),
+        "RSI-modified": (0.8, "0.8 mRSI"),
     }
     if x_col in benchmarks:
         bench_value, bench_label = benchmarks[x_col]
