@@ -1405,10 +1405,10 @@ def make_force_plate_metric_scatter(
             "<b>%{customdata[0]}</b><br>"
             "Position: %{customdata[1]} | Year: %{customdata[2]}<br>"
             "Quadrant: %{customdata[11]}<br><br>"
-            "CI: %{customdata[3]:.1f} (%{customdata[7]:.0f}th)<br>"
-            "P1 CI: %{customdata[4]:.1f} (%{customdata[8]:.0f}th)<br>"
+            "CI (Total Output): %{customdata[3]:.1f} (%{customdata[7]:.0f}th)<br>"
+            "P1 CI (Strength): %{customdata[4]:.1f} (%{customdata[8]:.0f}th)<br>"
             "CI-100ms: %{customdata[5]:.1f} (%{customdata[9]:.0f}th)<br>"
-            "mRSI: %{customdata[6]:.3f} (%{customdata[10]:.0f}th)"
+            "mRSI (Twitch): %{customdata[6]:.3f} (%{customdata[10]:.0f}th)"
             "<extra></extra>"
         ),
     )
@@ -1994,22 +1994,22 @@ with tab_scatter:
     scatter_df["pos_group"] = scatter_df["pos_group"].astype(str).replace({"nan": "Unknown", "": "Unknown"})
 
     metric_options = {
-        "P1 CI": "P1 Concentric Impulse",
-        "CI": "Concentric Impulse",
+        "P1 CI (Strength)": "P1 Concentric Impulse",
+        "CI (Total Output)": "Concentric Impulse",
         "CI-100ms": "Concentric Impulse-100ms",
-        "mRSI": "RSI-modified",
+        "mRSI (Twitch)": "RSI-modified",
     }
     metric_percentile_cols = {
-        "P1 CI": "p1_ci_pct_alltime",
-        "CI": "ci_pct_alltime",
+        "P1 CI (Strength)": "p1_ci_pct_alltime",
+        "CI (Total Output)": "ci_pct_alltime",
         "CI-100ms": "ci100_pct_alltime",
-        "mRSI": "rsi_pct_alltime",
+        "mRSI (Twitch)": "rsi_pct_alltime",
     }
     metric_digits = {
-        "P1 CI": 1,
-        "CI": 1,
+        "P1 CI (Strength)": 1,
+        "CI (Total Output)": 1,
         "CI-100ms": 1,
-        "mRSI": 3,
+        "mRSI (Twitch)": 3,
     }
 
     years_available = sorted(scatter_df["Year"].dropna().astype(int).unique().tolist(), reverse=True)
@@ -2064,10 +2064,10 @@ with tab_scatter:
 
     # ── Adjustable benchmark and quadrant controls ───────────────────────────
     default_benchmarks = {
-        "CI": 285.0,
-        "P1 CI": 195.0,
+        "CI (Total Output)": 285.0,
+        "P1 CI (Strength)": 195.0,
         "CI-100ms": 100.0,
-        "mRSI": 0.8,
+        "mRSI (Twitch)": 0.8,
     }
 
     def _default_benchmark_value(metric_label, metric_col, base_df):
@@ -2119,8 +2119,8 @@ with tab_scatter:
                 st.number_input(
                     "X hard value",
                     value=_default_benchmark_value(x_label, x_col, chart_df),
-                    step=0.01 if x_label == "mRSI" else 1.0,
-                    format="%.3f" if x_label == "mRSI" else "%.1f",
+                    step=0.01 if x_col == "RSI-modified" else 1.0,
+                    format="%.3f" if x_col == "RSI-modified" else "%.1f",
                     key=f"scatter_x_bench_value_{x_label}",
                 )
             elif st.session_state.get("scatter_x_bench_mode") == "Percentile":
@@ -2138,8 +2138,8 @@ with tab_scatter:
                 st.number_input(
                     "Y hard value",
                     value=_default_benchmark_value(y_label, y_col, chart_df),
-                    step=0.01 if y_label == "mRSI" else 1.0,
-                    format="%.3f" if y_label == "mRSI" else "%.1f",
+                    step=0.01 if y_col == "RSI-modified" else 1.0,
+                    format="%.3f" if y_col == "RSI-modified" else "%.1f",
                     key=f"scatter_y_bench_value_{y_label}",
                 )
             elif st.session_state.get("scatter_y_bench_mode") == "Percentile":
