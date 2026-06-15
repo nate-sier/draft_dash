@@ -2015,9 +2015,7 @@ with tab_scatter:
     years_available = sorted(scatter_df["Year"].dropna().astype(int).unique().tolist(), reverse=True)
     default_years = [2026] if 2026 in years_available else years_available
     pos_groups_available = [g for g in ["Pitcher", "Catcher", "Infielder", "Outfielder", "Unknown"] if g in scatter_df["pos_group"].unique()]
-    positions_available = sorted([p for p in scatter_df["Position"].dropna().unique().tolist() if str(p).strip() != ""])
-
-    c1, c2, c3 = st.columns([1.1, 1.15, 1.35])
+    c1, c2 = st.columns([1.0, 1.0])
     with c1:
         selected_years = st.multiselect("Years", years_available, default=default_years, key="scatter_years")
     with c2:
@@ -2026,13 +2024,6 @@ with tab_scatter:
             pos_groups_available,
             default=pos_groups_available,
             key="scatter_pos_groups",
-        )
-    with c3:
-        selected_positions = st.multiselect(
-            "Exact positions",
-            positions_available,
-            default=positions_available,
-            key="scatter_positions",
         )
 
     c4, c5, c6 = st.columns([1.0, 1.0, 2.0])
@@ -2055,11 +2046,6 @@ with tab_scatter:
 
     if selected_pos_groups:
         scatter_df = scatter_df[scatter_df["pos_group"].isin(selected_pos_groups)]
-    else:
-        scatter_df = scatter_df.iloc[0:0]
-
-    if selected_positions:
-        scatter_df = scatter_df[scatter_df["Position"].isin(selected_positions)]
     else:
         scatter_df = scatter_df.iloc[0:0]
 
