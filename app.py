@@ -1348,8 +1348,20 @@ def make_trend(player_df, col, label, invert=False):
 
 
 
-def make_force_plate_metric_scatter(plot_df, x_col, x_label, y_col, y_label, percentile_basis="All loaded data"):
-    """Interactive force-plate scatter with independent X/Y metric selection."""
+def make_force_plate_metric_scatter(
+    plot_df,
+    x_col,
+    x_label,
+    y_col,
+    y_label,
+    percentile_basis="All loaded data",
+    x_benchmark_value=None,
+    x_benchmark_label=None,
+    y_benchmark_value=None,
+    y_benchmark_label=None,
+    show_quadrants=True,
+):
+    """Interactive force-plate scatter with independent X/Y metric selection and adjustable benchmarks."""
     data = plot_df.copy()
 
     # Percentiles shown in hover. By default this uses the all-time/dashboard
@@ -1369,11 +1381,14 @@ def make_force_plate_metric_scatter(plot_df, x_col, x_label, y_col, y_label, per
     data["Year_Display"] = pd.to_numeric(data["Year"], errors="coerce").astype("Int64").astype(str)
     data["Position_Display"] = data["Position"].astype(str).replace({"nan": "—", "": "—"})
     data["pos_group"] = data["pos_group"].astype(str).replace({"nan": "Unknown", "": "Unknown"})
+    if "Quadrant" not in data.columns:
+        data["Quadrant"] = "—"
+    data["Quadrant_Display"] = data["Quadrant"].astype(str).replace({"nan": "—", "": "—"})
 
     custom_cols = [
         "athleteName", "Position_Display", "Year_Display",
         "Concentric Impulse", "P1 Concentric Impulse", "Concentric Impulse-100ms", "RSI-modified",
-        "ci_hover_pct", "p1_hover_pct", "ci100_hover_pct", "rsi_hover_pct",
+        "ci_hover_pct", "p1_hover_pct", "ci100_hover_pct", "rsi_hover_pct", "Quadrant_Display",
     ]
 
     fig = px.scatter(
@@ -1388,7 +1403,8 @@ def make_force_plate_metric_scatter(plot_df, x_col, x_label, y_col, y_label, per
         marker=dict(size=10, opacity=0.78, line=dict(width=1, color="white")),
         hovertemplate=(
             "<b>%{customdata[0]}</b><br>"
-            "Position: %{customdata[1]} | Year: %{customdata[2]}<br><br>"
+            "Position: %{customdata[1]} | Year: %{customdata[2]}<br>"
+            "Quadrant: %{customdata[11]}<br><br>"
             "CI: %{customdata[3]:.1f} (%{customdata[7]:.0f}th)<br>"
             "P1 CI: %{customdata[4]:.1f} (%{customdata[8]:.0f}th)<br>"
             "CI-100ms: %{customdata[5]:.1f} (%{customdata[9]:.0f}th)<br>"
@@ -1397,20 +1413,80 @@ def make_force_plate_metric_scatter(plot_df, x_col, x_label, y_col, y_label, per
         ),
     )
 
-    # Add benchmark lines on whichever axis currently contains a benchmarked metric.
-    benchmarks = {
-        "Concentric Impulse": (285, "285 CI"),
-        "P1 Concentric Impulse": (195, "195 P1 CI"),
-        "RSI-modified": (0.8, "0.8 mRSI"),
-    }
-    if x_col in benchmarks:
-        bench_value, bench_label = benchmarks[x_col]
-        fig.add_vline(x=bench_value, line_width=1.5, line_dash="dash", line_color=RED,
-                      annotation_text=bench_label, annotation_position="top right")
-    if y_col in benchmarks:
-        bench_value, bench_label = benchmarks[y_col]
-        fig.add_hline(y=bench_value, line_width=1.5, line_dash="dash", line_color=RED,
-                      annotation_text=bench_label, annotation_position="top right")
+    x_benchmark_value = None if x_benchmark_value is None or pd.isna(x_benchmark_value) else float(x_benchmark_value)
+    y_benchmark_value = None if y_benchmark_value is None or pd.isna(y_benchmark_value) else float(y_benchmark_value)
+
+    # Compute stable chart ranges that include the benchmark lines when present.
+    x_values = pd.to_numeric(data[x_col], errors="coerce").dropna().tolist()
+    y_values = pd.to_numeric(data[y_col], errors="coerce").dropna().tolist()
+    if x_benchmark_value is not None:
+        x_values.append(x_benchmark_value)
+    if y_benchmark_value is not None:
+        y_values.append(y_benchmark_value)
+
+    if x_values and y_values:
+        x_min, x_max = min(x_values), max(x_values)
+        y_min, y_max = min(y_values), max(y_values)
+        x_pad = (x_max - x_min) * 0.08 if not np.isclose(x_max, x_min) else max(abs(x_max) * 0.08, 1.0)
+        y_pad = (y_max - y_min) * 0.08 if not np.isclose(y_max, y_min) else max(abs(y_max) * 0.08, 0.05)
+        x_range = [x_min - x_pad, x_max + x_pad]
+        y_range = [y_min - y_pad, y_max + y_pad]
+    else:
+        x_range = None
+        y_range = None
+
+    # Optional quadrant background and labels. Assumes higher is better for all current options.
+    if show_quadrants and x_benchmark_value is not None and y_benchmark_value is not None and x_range and y_range:
+        x0, x1 = x_range
+        y0, y1 = y_range
+        quadrant_shapes = [
+            (x0, x_benchmark_value, y0, y_benchmark_value, "rgba(186,12,47,0.055)"),
+            (x_benchmark_value, x1, y0, y_benchmark_value, "rgba(226,193,136,0.070)"),
+            (x0, x_benchmark_value, y_benchmark_value, y1, "rgba(107,127,163,0.065)"),
+            (x_benchmark_value, x1, y_benchmark_value, y1, "rgba(76,175,130,0.070)"),
+        ]
+        for xa, xb, ya, yb, fill in quadrant_shapes:
+            fig.add_shape(
+                type="rect", xref="x", yref="y",
+                x0=xa, x1=xb, y0=ya, y1=yb,
+                fillcolor=fill, line=dict(width=0), layer="below",
+            )
+
+        def mid(a, b):
+            return (float(a) + float(b)) / 2.0
+
+        quadrant_annotations = [
+            (mid(x0, x_benchmark_value), mid(y0, y_benchmark_value), f"Low {x_label}<br>Low {y_label}"),
+            (mid(x_benchmark_value, x1), mid(y0, y_benchmark_value), f"High {x_label}<br>Low {y_label}"),
+            (mid(x0, x_benchmark_value), mid(y_benchmark_value, y1), f"Low {x_label}<br>High {y_label}"),
+            (mid(x_benchmark_value, x1), mid(y_benchmark_value, y1), f"High {x_label}<br>High {y_label}"),
+        ]
+        for xa, ya, txt in quadrant_annotations:
+            fig.add_annotation(
+                x=xa, y=ya, text=txt, showarrow=False,
+                font=dict(size=11, color="rgba(17,34,90,0.48)"),
+                align="center", bgcolor="rgba(255,255,255,0.45)", borderpad=3,
+            )
+
+    # Add benchmark lines on whichever axes have active benchmark settings.
+    if x_benchmark_value is not None:
+        fig.add_vline(
+            x=x_benchmark_value,
+            line_width=1.7,
+            line_dash="dash",
+            line_color=RED,
+            annotation_text=x_benchmark_label or f"{x_benchmark_value:g} {x_label}",
+            annotation_position="top right",
+        )
+    if y_benchmark_value is not None:
+        fig.add_hline(
+            y=y_benchmark_value,
+            line_width=1.7,
+            line_dash="dash",
+            line_color=RED,
+            annotation_text=y_benchmark_label or f"{y_benchmark_value:g} {y_label}",
+            annotation_position="top right",
+        )
 
     fig.update_layout(**_layout(
         title=dict(text=f"{y_label} vs {x_label}", font=dict(size=18, color=NAV), x=0),
@@ -1418,9 +1494,10 @@ def make_force_plate_metric_scatter(plot_df, x_col, x_label, y_col, y_label, per
         margin=dict(l=35, r=25, t=60, b=45),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     ))
-    fig.update_xaxes(title=x_label, zeroline=False)
-    fig.update_yaxes(title=y_label, zeroline=False)
+    fig.update_xaxes(title=x_label, zeroline=False, range=x_range)
+    fig.update_yaxes(title=y_label, zeroline=False, range=y_range)
     return fig
+
 
 def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=False):
     """Render the PDF export using the exact Scorecard Option 1 skin."""
@@ -1999,13 +2076,146 @@ with tab_scatter:
 
     chart_df = scatter_df.dropna(subset=list(dict.fromkeys([x_col, y_col]))).copy()
 
+    # ── Adjustable benchmark and quadrant controls ───────────────────────────
+    default_benchmarks = {
+        "CI": 285.0,
+        "P1 CI": 195.0,
+        "CI-100ms": 100.0,
+        "mRSI": 0.8,
+    }
+
+    def _default_benchmark_value(metric_label, metric_col, base_df):
+        if metric_label in default_benchmarks:
+            return float(default_benchmarks[metric_label])
+        s = pd.to_numeric(base_df.get(metric_col), errors="coerce").dropna()
+        if len(s):
+            return float(s.median())
+        return 0.0
+
+    def _percentile_threshold(base_df, metric_col, pct):
+        s = pd.to_numeric(base_df.get(metric_col), errors="coerce").dropna()
+        if len(s) == 0:
+            return np.nan
+        return float(np.nanpercentile(s, float(pct)))
+
+    def _resolve_benchmark(axis_name, metric_label, metric_col, source_df):
+        mode = st.session_state.get(f"scatter_{axis_name}_bench_mode", "Hard value")
+        digits = metric_digits.get(metric_label, 1)
+        if mode == "Off":
+            return None, None
+        if mode == "Hard value":
+            val = st.session_state.get(
+                f"scatter_{axis_name}_bench_value_{metric_label}",
+                _default_benchmark_value(metric_label, metric_col, source_df),
+            )
+            try:
+                val = float(val)
+            except Exception:
+                return None, None
+            return val, f"{fmt(val, digits)} {metric_label}"
+        pct = st.session_state.get(f"scatter_{axis_name}_bench_pct", 75)
+        val = _percentile_threshold(source_df, metric_col, pct)
+        if pd.isna(val):
+            return None, None
+        return val, f"{int(round(float(pct)))}th pct {metric_label}: {fmt(val, digits)}"
+
+    with st.expander("Benchmark lines and quadrants", expanded=True):
+        b1, b2, b3 = st.columns([1.15, 1.15, 1.25])
+        with b1:
+            st.markdown(f"**X-axis benchmark: {x_label}**")
+            st.selectbox(
+                "X benchmark type",
+                ["Hard value", "Percentile", "Off"],
+                index=0,
+                key="scatter_x_bench_mode",
+            )
+            if st.session_state.get("scatter_x_bench_mode", "Hard value") == "Hard value":
+                st.number_input(
+                    "X hard value",
+                    value=_default_benchmark_value(x_label, x_col, chart_df),
+                    step=0.01 if x_label == "mRSI" else 1.0,
+                    format="%.3f" if x_label == "mRSI" else "%.1f",
+                    key=f"scatter_x_bench_value_{x_label}",
+                )
+            elif st.session_state.get("scatter_x_bench_mode") == "Percentile":
+                st.slider("X percentile", 0, 100, 75, 1, key="scatter_x_bench_pct")
+
+        with b2:
+            st.markdown(f"**Y-axis benchmark: {y_label}**")
+            st.selectbox(
+                "Y benchmark type",
+                ["Hard value", "Percentile", "Off"],
+                index=0,
+                key="scatter_y_bench_mode",
+            )
+            if st.session_state.get("scatter_y_bench_mode", "Hard value") == "Hard value":
+                st.number_input(
+                    "Y hard value",
+                    value=_default_benchmark_value(y_label, y_col, chart_df),
+                    step=0.01 if y_label == "mRSI" else 1.0,
+                    format="%.3f" if y_label == "mRSI" else "%.1f",
+                    key=f"scatter_y_bench_value_{y_label}",
+                )
+            elif st.session_state.get("scatter_y_bench_mode") == "Percentile":
+                st.slider("Y percentile", 0, 100, 75, 1, key="scatter_y_bench_pct")
+
+        with b3:
+            benchmark_percentile_basis = st.radio(
+                "Benchmark percentiles based on",
+                ["Filtered chart cohort", "All loaded data"],
+                horizontal=False,
+                key="scatter_benchmark_percentile_basis",
+            )
+            show_quadrants = st.toggle(
+                "Show quadrant shading and labels",
+                value=True,
+                key="scatter_show_quadrants",
+            )
+
+    benchmark_source_df = chart_df if benchmark_percentile_basis == "Filtered chart cohort" else df.copy()
+    for col in required_cols:
+        if col not in benchmark_source_df.columns:
+            benchmark_source_df[col] = np.nan
+
+    x_benchmark_value, x_benchmark_label = _resolve_benchmark("x", x_label, x_col, benchmark_source_df)
+    y_benchmark_value, y_benchmark_label = _resolve_benchmark("y", y_label, y_col, benchmark_source_df)
+
+    has_quadrant_benchmarks = x_benchmark_value is not None and y_benchmark_value is not None
+    if has_quadrant_benchmarks and not chart_df.empty:
+        x_high = pd.to_numeric(chart_df[x_col], errors="coerce") >= float(x_benchmark_value)
+        y_high = pd.to_numeric(chart_df[y_col], errors="coerce") >= float(y_benchmark_value)
+        chart_df["Quadrant"] = np.select(
+            [x_high & y_high, x_high & ~y_high, ~x_high & y_high, ~x_high & ~y_high],
+            [
+                f"High {x_label} / High {y_label}",
+                f"High {x_label} / Low {y_label}",
+                f"Low {x_label} / High {y_label}",
+                f"Low {x_label} / Low {y_label}",
+            ],
+            default="Unclassified",
+        )
+    else:
+        chart_df["Quadrant"] = "—"
+
     if x_col == y_col:
         st.info("You selected the same metric for both axes. The chart will still render, but the dots will fall along a 1:1 relationship.")
 
     if chart_df.empty:
         st.warning("No athletes have both selected metrics for the active filters.")
     else:
-        fig = make_force_plate_metric_scatter(chart_df, x_col, x_label, y_col, y_label, percentile_basis)
+        fig = make_force_plate_metric_scatter(
+            chart_df,
+            x_col,
+            x_label,
+            y_col,
+            y_label,
+            percentile_basis,
+            x_benchmark_value=x_benchmark_value,
+            x_benchmark_label=x_benchmark_label,
+            y_benchmark_value=y_benchmark_value,
+            y_benchmark_label=y_benchmark_label,
+            show_quadrants=show_quadrants,
+        )
         st.plotly_chart(fig, use_container_width=True)
 
         x_pct_col = metric_percentile_cols[x_label]
@@ -2019,8 +2229,28 @@ with tab_scatter:
         m3.metric(f"Median {y_label}", fmt(pd.to_numeric(chart_df[y_col], errors="coerce").median(), y_digits))
         m4.metric(f"Median {y_label} Pct", pct_sfx(pd.to_numeric(chart_df[y_pct_col], errors="coerce").median()))
 
+        if show_quadrants and has_quadrant_benchmarks:
+            quad_order = [
+                f"High {x_label} / High {y_label}",
+                f"High {x_label} / Low {y_label}",
+                f"Low {x_label} / High {y_label}",
+                f"Low {x_label} / Low {y_label}",
+            ]
+            quad_summary = (
+                chart_df["Quadrant"]
+                .value_counts()
+                .reindex(quad_order, fill_value=0)
+                .rename_axis("Quadrant")
+                .reset_index(name="Athletes")
+            )
+            quad_summary["Share"] = (quad_summary["Athletes"] / max(len(chart_df), 1) * 100).round(1).astype(str) + "%"
+            st.markdown("**Quadrant summary**")
+            st.dataframe(quad_summary, use_container_width=True, hide_index=True)
+        elif show_quadrants and not has_quadrant_benchmarks:
+            st.info("Turn on both X and Y benchmark lines to split the chart into quadrants.")
+
         export_cols = [
-            "athleteName", "Position", "pos_group", "Year",
+            "athleteName", "Position", "pos_group", "Year", "Quadrant",
             "Concentric Impulse", "ci_pct_alltime",
             "P1 Concentric Impulse", "p1_ci_pct_alltime",
             "Concentric Impulse-100ms", "ci100_pct_alltime",
