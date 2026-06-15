@@ -1874,9 +1874,9 @@ with st.container(key="legacy_scorecard_toggle"):
         st.session_state.show_athlete_scorecard_tab = not st.session_state.show_athlete_scorecard_tab
 
 if st.session_state.show_athlete_scorecard_tab:
-    tab_board, tab_scatter, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Force Plate Scatter", "Athlete Scorecard", "2026 Scorecards", "Score Info"])
+    tab_board, tab_scatter, tab_card, tab_2026, tab_info = st.tabs(["Leaderboard", "Scatter Plot", "Athlete Scorecard", "2026 Scorecards", "Score Info"])
 else:
-    tab_board, tab_scatter, tab_2026, tab_info = st.tabs(["Leaderboard", "Force Plate Scatter", "2026 Scorecards", "Score Info"])
+    tab_board, tab_scatter, tab_2026, tab_info = st.tabs(["Leaderboard", "Scatter Plot", "2026 Scorecards", "Score Info"])
     tab_card = None
 
 
@@ -1981,7 +1981,7 @@ with tab_scatter:
     st.markdown(f"""
     <div class="card card-red">
         <p class="label">Force Plate Relationship</p>
-        <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Force Plate Metric Scatter</h2>
+        <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Scatter Plot</h2>
         <p style="font-size:14px;line-height:1.55;color:{NAV};margin-bottom:0;">
             Pick any force plate metric for either axis. Hover over any dot to see the athlete, raw metrics, and percentile ranks.
         </p>
