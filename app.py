@@ -1,4 +1,4 @@
-# VERSION: scorecard_projection_60th_bwht_ci_capacity_upside_only_v60 -- 60th BW/Ht projection shows only CI/Capacity outcomes that do not decrease either metric
+# VERSION: scorecard_60th_capacity_card_v61 -- PDF adds 60th Percentile Capacity range card below Potential to Gain
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
 # VERSION: force_plate_2026_scorecards_v56 -- handle X/missing wingspan in Force Plate 2026
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
@@ -1599,6 +1599,93 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     def score_text(v):
         return '-' if pd.isna(v) else f"{int(round(float(v)))}"
 
+    def sixty_bwht_capacity_card():
+        """Return the upside-only Capacity Score range at the 60th BW/Ht target.
+
+        The PDF card intentionally shows just a score range (for example, 86–89),
+        not the individual relative-CI scenarios. It returns ``No Change`` when the
+        athlete already meets the 60th-percentile BW/Ht target or when none of the
+        modeled outcomes improve both CI and Capacity Score.
+        """
+        no_change = {"value": "No Change", "percentile": None}
+
+        ci = get_val("Concentric Impulse")
+        mass_kg = get_val("Mass")
+        height_cm = get_val("Height")
+        current_capacity = get_val("athlete_quality_score")
+        if not all(pd.notna(v) and v > 0 for v in [ci, mass_kg, height_cm, current_capacity]):
+            return no_change
+
+        bwht_pool = pd.to_numeric(df_all.get("bmi_raw"), errors="coerce").dropna()
+        ci_pool = pd.to_numeric(df_all.get("Concentric Impulse"), errors="coerce").dropna()
+        if len(bwht_pool) == 0 or len(ci_pool) == 0:
+            return no_change
+
+        target_bwht = float(np.nanpercentile(bwht_pool, 60))
+        current_bwht = (mass_kg * 2.20462) / (height_cm / 2.54)
+        # Do not imply that an athlete should lose mass to return to the target.
+        if pd.notna(current_bwht) and current_bwht >= target_bwht:
+            return no_change
+
+        target_lbs = target_bwht * (height_cm / 2.54)
+        target_kg = target_lbs / 2.20462
+        if pd.isna(target_kg) or target_kg <= 0:
+            return no_change
+
+        sprint_pct = get_val("sprint_pct_alltime")
+        rsi_pct = get_val("rsi_pct_alltime")
+        pp_pct = get_val("pp_pct_alltime")
+
+        def projected_capacity(projected_ci):
+            projected_ci_pct = float((ci_pool < projected_ci).mean() * 100.0)
+            if pd.notna(sprint_pct):
+                components = [
+                    (projected_ci_pct, w_ci),
+                    (sprint_pct, w_sprint),
+                    (rsi_pct, w_rsi),
+                    (pp_pct, w_pp),
+                ]
+            else:
+                components = [
+                    (projected_ci_pct, w_ci_ns),
+                    (rsi_pct, w_rsi_ns),
+                    (pp_pct, w_pp_ns),
+                ]
+
+            valid_components = [(value, weight) for value, weight in components if pd.notna(value)]
+            if not valid_components:
+                return np.nan
+            total_weight = sum(weight for _, weight in valid_components)
+            return sum(value * weight for value, weight in valid_components) / total_weight
+
+        ci_per_kg = ci / mass_kg
+        # +1% CI/kg improvement through a 4% CI/kg penalty.
+        ci_rel_changes = [0.01, 0.00, -0.01, -0.02, -0.03, -0.04]
+        upside_capacity_scores = []
+        for rel_change in ci_rel_changes:
+            projected_ci = ci_per_kg * (1 + rel_change) * target_kg
+            projected_capacity_score = projected_capacity(projected_ci)
+            if (
+                pd.notna(projected_ci)
+                and pd.notna(projected_capacity_score)
+                and projected_ci > ci
+                and projected_capacity_score >= current_capacity
+            ):
+                upside_capacity_scores.append(projected_capacity_score)
+
+        if not upside_capacity_scores:
+            return no_change
+
+        low = int(round(min(upside_capacity_scores)))
+        high = int(round(max(upside_capacity_scores)))
+        card_value = str(low) if low == high else f"{low}-{high}"
+        # Use the midpoint for the card fill so the color reflects the range rather
+        # than only its best-case endpoint.
+        card_percentile = int(round((low + high) / 2))
+        return {"value": card_value, "percentile": card_percentile}
+
+    capacity_60th_card = sixty_bwht_capacity_card()
+
     force_rows = [
         {'label': 'CI', 'percentile': pct_from_col('ci_pct_alltime'), 'value': raw_num('Concentric Impulse', 1)},
         {'label': 'P1 CI', 'percentile': pct_from_col('p1_ci_pct_alltime'), 'value': raw_num('P1 Concentric Impulse', 1)},
@@ -1640,6 +1727,11 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
             {'label': 'Potential to Gain', 'value': score_text(pot), 'percentile': safe_pdf_percentile(pot)},
             {'label': 'Athlete Group', 'value': athlete_group},
             {'label': 'Program Focus', 'value': program_focus},
+            {
+                'label': '60th Percentile Capacity',
+                'value': capacity_60th_card['value'],
+                'percentile': capacity_60th_card['percentile'],
+            },
         ],
         'sections': [
             {'title': 'Force Plate', 'rows': force_rows},
