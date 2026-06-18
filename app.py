@@ -1,4 +1,4 @@
-# VERSION: future_capacity_label_fix_v63 -- summary card label explicitly Future Capacity
+# VERSION: ci100_missing_display_v64 -- CI-100ms missing values remain missing in scorecard charts/PDF
 # VERSION: scorecard_future_capacity_card_v62 -- PDF adds Future Capacity range card below Potential to Gain
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
 # VERSION: force_plate_2026_scorecards_v56 -- handle X/missing wingspan in Force Plate 2026
@@ -805,16 +805,19 @@ def build_scores(_df,
         df["Concentric Impulse-100ms"], df["Concentric Impulse"])
     strategy_features = BASE_STRATEGY_FEATURES + ["CI100ms_to_TotalCI_Ratio"]
 
+    # Keep the source metrics untouched for scorecard/scatter display. The strategy
+    # model can use median-imputed values internally, but a missing CI-100ms value
+    # must remain missing everywhere the athlete's measured force-plate data are shown.
+    strategy_input = df[strategy_features].copy()
     for c in strategy_features:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-            df[c] = df[c].fillna(df[c].median())
+        strategy_input[c] = pd.to_numeric(strategy_input[c], errors="coerce")
+        strategy_input[c] = strategy_input[c].fillna(strategy_input[c].median())
 
     for c in strategy_features:
-        df[f"rz_{c}"] = robust_z(df[c])
+        df[f"rz_{c}"] = robust_z(strategy_input[c])
     all_rz_cols = [f"rz_{f}" for f in strategy_features]
 
-    X_s      = df[strategy_features].fillna(0).values.astype(float)
+    X_s      = strategy_input.fillna(0).values.astype(float)
     scaler_s = StandardScaler()
     X_sc     = scaler_s.fit_transform(X_s)
     ncomp    = min(len(strategy_features), max(3, min(6, len(df) - 1)))
@@ -1189,15 +1192,16 @@ def make_radar(row, label="Athlete", is_pitcher=False):
             return default
         return max(0.0, min(100.0, v))
 
-    def raw_fmt(key, digits=1, suffix=""):
+    def raw_fmt(key, digits=1, suffix="", missing_label="—"):
         v = val(key)
-        return "—" if pd.isna(v) else f"{v:.{digits}f}{suffix}"
+        return missing_label if pd.isna(v) else f"{v:.{digits}f}{suffix}"
 
     sections = []
     sections.append(("Force Plate", [
         ("CI", pct("ci_pct_alltime"), raw_fmt("Concentric Impulse", 1)),
         ("P1 Conc. Impulse", pct("p1_ci_pct_alltime"), raw_fmt("P1 Concentric Impulse", 1)),
-        ("CI-100ms", pct("ci100_pct_alltime"), raw_fmt("Concentric Impulse-100ms", 1)),
+        # Do not assign a neutral/50th-percentile value when CI-100ms was not measured.
+        ("CI-100ms", pct("ci100_pct_alltime"), raw_fmt("Concentric Impulse-100ms", 1, missing_label="Missing")),
         ("RSI-modified", pct("rsi_pct_alltime"), raw_fmt("RSI-modified", 3)),
         ("Peak Power / BM", pct("pp_pct_alltime"), raw_fmt("Peak Power / BM", 1)),
         ("Jump Height", pct("jump_height_pct_alltime"), raw_fmt("Jump Height (Flight Time) in Inches", 2, " in")),
@@ -1233,7 +1237,9 @@ def make_radar(row, label="Athlete", is_pitcher=False):
         cur_y -= 0.75
         for lab, pc, rv in rows:
             labels.append(lab)
-            vals.append(0 if pd.isna(pc) else pc)
+            # Preserve missing percentiles as NaN so Plotly does not draw a
+            # zero/neutral proxy bar or marker for an unmeasured metric.
+            vals.append(np.nan if pd.isna(pc) else pc)
             raw_vals.append(rv)
             section_for_row.append(section)
             y.append(cur_y)
@@ -1526,19 +1532,19 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     def safe_file_name(name):
         return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name)).strip("_") or "athlete"
 
-    def raw_num(key, digits=1, suffix=""):
+    def raw_num(key, digits=1, suffix="", missing_label="-"):
         v = get_val(key)
-        return "-" if pd.isna(v) else f"{v:.{digits}f}{suffix}"
+        return missing_label if pd.isna(v) else f"{v:.{digits}f}{suffix}"
 
     def safe_pdf_percentile(v, fallback=50):
-        """Return a finite 0-100 integer so the PDF skin never receives NaN."""
+        """Return a finite 0-100 integer, or None when a row should stay missing."""
         try:
             f = float(v)
             if not np.isfinite(f):
-                return int(fallback)
+                return None if fallback is None else int(fallback)
             return max(0, min(100, int(round(f))))
         except Exception:
-            return int(fallback)
+            return None if fallback is None else int(fallback)
 
     def pct_from_col(pct_key, fallback=50):
         v = get_val(pct_key)
@@ -1690,7 +1696,7 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     force_rows = [
         {'label': 'CI', 'percentile': pct_from_col('ci_pct_alltime'), 'value': raw_num('Concentric Impulse', 1)},
         {'label': 'P1 CI', 'percentile': pct_from_col('p1_ci_pct_alltime'), 'value': raw_num('P1 Concentric Impulse', 1)},
-        {'label': 'CI-100ms', 'percentile': pct_from_col('ci100_pct_alltime'), 'value': raw_num('Concentric Impulse-100ms', 1)},
+        {'label': 'CI-100ms', 'percentile': pct_from_col('ci100_pct_alltime', fallback=None), 'value': raw_num('Concentric Impulse-100ms', 1, missing_label='Missing')},
         {'label': 'RSI-mod', 'percentile': pct_from_col('rsi_pct_alltime'), 'value': raw_num('RSI-modified', 3)},
         {'label': 'Pk Pwr/BM', 'percentile': pct_from_col('pp_pct_alltime'), 'value': raw_num('Peak Power / BM', 1)},
         {'label': 'Jump Ht', 'percentile': pct_from_col('jump_height_pct_alltime'), 'value': raw_num('Jump Height (Flight Time) in Inches', 2, ' in')},
