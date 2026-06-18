@@ -1,4 +1,4 @@
-# VERSION: ci100_missing_display_v64 -- CI-100ms missing values remain missing in scorecard charts/PDF
+# VERSION: not_collected_display_v65 -- CI-100ms, Wingspan, and Wing Adv. show Not Collected with empty scorecard bars when missing
 # VERSION: scorecard_future_capacity_card_v62 -- PDF adds Future Capacity range card below Potential to Gain
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
 # VERSION: force_plate_2026_scorecards_v56 -- handle X/missing wingspan in Force Plate 2026
@@ -1200,8 +1200,8 @@ def make_radar(row, label="Athlete", is_pitcher=False):
     sections.append(("Force Plate", [
         ("CI", pct("ci_pct_alltime"), raw_fmt("Concentric Impulse", 1)),
         ("P1 Conc. Impulse", pct("p1_ci_pct_alltime"), raw_fmt("P1 Concentric Impulse", 1)),
-        # Do not assign a neutral/50th-percentile value when CI-100ms was not measured.
-        ("CI-100ms", pct("ci100_pct_alltime"), raw_fmt("Concentric Impulse-100ms", 1, missing_label="Missing")),
+        # Do not assign a neutral/50th-percentile value when CI-100ms was not collected.
+        ("CI-100ms", pct("ci100_pct_alltime"), raw_fmt("Concentric Impulse-100ms", 1, missing_label="Not Collected")),
         ("RSI-modified", pct("rsi_pct_alltime"), raw_fmt("RSI-modified", 3)),
         ("Peak Power / BM", pct("pp_pct_alltime"), raw_fmt("Peak Power / BM", 1)),
         ("Jump Height", pct("jump_height_pct_alltime"), raw_fmt("Jump Height (Flight Time) in Inches", 2, " in")),
@@ -1221,11 +1221,11 @@ def make_radar(row, label="Athlete", is_pitcher=False):
     anthro_rows = [
         ("Height", pct("height_pct"), fmt_height(val("Height"))),
         ("Bodyweight", pct("mass_pct_alltime", pct("bmi_pct", 50)), fmt_mass(val("Mass"))),
-        ("Wingspan", pct("wingspan_pct"), fmt_wingspan(val("Wingspan"))),
+        ("Wingspan", pct("wingspan_pct"), "Not Collected" if pd.isna(val("Wingspan")) else fmt_wingspan(val("Wingspan"))),
         ("BW/Ht", pct("bmi_pct"), pct_sfx(pct("bmi_pct")) if pd.notna(pct("bmi_pct")) else "—"),
     ]
     if is_pitcher:
-        anthro_rows.insert(3, ("Wing Adv.", pct("wingspan_pct"), fmt_wingspan_adv(val("wingspan_advantage"))))
+        anthro_rows.insert(3, ("Wing Adv.", pct("wingspan_pct"), "Not Collected" if pd.isna(val("wingspan_advantage")) else fmt_wingspan_adv(val("wingspan_advantage"))))
     sections.append(("Physical Attributes", anthro_rows))
 
     labels, vals, raw_vals, section_for_row = [], [], [], []
@@ -1551,12 +1551,13 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
         return safe_pdf_percentile(v, fallback=fallback)
 
     def pool_pct(value_key, inverse=False, fallback=50):
+        """Return a pool percentile, or None when this is intentionally uncollected."""
         v = get_val(value_key)
         if pd.isna(v) or value_key not in df_all.columns:
-            return int(fallback)
+            return None if fallback is None else int(fallback)
         pool = pd.to_numeric(df_all[value_key], errors="coerce").dropna()
         if len(pool) == 0:
-            return int(fallback)
+            return None if fallback is None else int(fallback)
         pct = (pool < v).mean() * 100.0
         pct = 100.0 - pct if inverse else pct
         return safe_pdf_percentile(pct, fallback=fallback)
@@ -1696,7 +1697,8 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     force_rows = [
         {'label': 'CI', 'percentile': pct_from_col('ci_pct_alltime'), 'value': raw_num('Concentric Impulse', 1)},
         {'label': 'P1 CI', 'percentile': pct_from_col('p1_ci_pct_alltime'), 'value': raw_num('P1 Concentric Impulse', 1)},
-        {'label': 'CI-100ms', 'percentile': pct_from_col('ci100_pct_alltime', fallback=None), 'value': raw_num('Concentric Impulse-100ms', 1, missing_label='Missing')},
+        # Missing CI-100ms is explicitly uncollected: no bar, no marker, no fake percentile.
+        {'label': 'CI-100ms', 'percentile': pct_from_col('ci100_pct_alltime', fallback=None), 'value': raw_num('Concentric Impulse-100ms', 1, missing_label='Not Collected')},
         {'label': 'RSI-mod', 'percentile': pct_from_col('rsi_pct_alltime'), 'value': raw_num('RSI-modified', 3)},
         {'label': 'Pk Pwr/BM', 'percentile': pct_from_col('pp_pct_alltime'), 'value': raw_num('Peak Power / BM', 1)},
         {'label': 'Jump Ht', 'percentile': pct_from_col('jump_height_pct_alltime'), 'value': raw_num('Jump Height (Flight Time) in Inches', 2, ' in')},
@@ -1704,8 +1706,9 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     anthro_rows = [
         {'label': 'Height', 'percentile': pct_from_col('height_pct'), 'value': fmt_height(get_val('Height'))},
         {'label': 'Bodyweight', 'percentile': pool_pct('Mass'), 'value': fmt_mass(get_val('Mass'))},
-        {'label': 'Wingspan', 'percentile': pool_pct('Wingspan'), 'value': fmt_wingspan(get_val('Wingspan'))},
-        {'label': 'Wing Adv.', 'percentile': pct_from_col('wingspan_pct'), 'value': fmt_wingspan_adv(get_val('wingspan_advantage'))},
+        # Missing wingspan/advantage are explicitly uncollected: leave the score bar blank.
+        {'label': 'Wingspan', 'percentile': pool_pct('Wingspan', fallback=None), 'value': 'Not Collected' if pd.isna(get_val('Wingspan')) else fmt_wingspan(get_val('Wingspan'))},
+        {'label': 'Wing Adv.', 'percentile': pct_from_col('wingspan_pct', fallback=None), 'value': 'Not Collected' if pd.isna(get_val('wingspan_advantage')) else fmt_wingspan_adv(get_val('wingspan_advantage'))},
         {'label': 'BW/Ht Pct', 'percentile': pct_from_col('bmi_pct'), 'value': pct_sfx_local(pct_from_col('bmi_pct'))},
     ]
     sprint_rows = []
@@ -2907,8 +2910,10 @@ if tab_card is not None:
         wing_cm     = sf(row.get("Wingspan"))
         wing_adv_cm = sf(row.get("wingspan_advantage"))
         wing_pct    = sf(row.get("wingspan_pct"))
-        wing_pct_str= pct_sfx(int(round(wing_pct))) if pd.notna(wing_pct) else "—"
-        wing_adv_in = fmt_wingspan_adv(wing_adv_cm)
+        wing_pct_str= pct_sfx(int(round(wing_pct))) if pd.notna(wing_pct) else "Not Collected"
+        wing_adv_in = "Not Collected" if pd.isna(wing_adv_cm) else fmt_wingspan_adv(wing_adv_cm)
+        wing_display = "Not Collected" if pd.isna(wing_cm) else fmt_wingspan(wing_cm)
+        ci100_display = "Not Collected" if pd.isna(sf(row.get("Concentric Impulse-100ms"))) else fmt(sf(row.get("Concentric Impulse-100ms")), 1)
 
         # Wingspan/reach tier is based on the athlete's wingspan-advantage percentile.
         # This avoids broad labels like calling a 70th percentile reach "Average".
@@ -3393,7 +3398,7 @@ if tab_card is not None:
                 f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("P1 Concentric Impulse")),1)}</span></div>'
                 f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
                 f'<span style="color:{SLATE};min-width:160px;font-size:12px">CI-100ms</span>'
-                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse-100ms")),1)}</span></div>'
+                f'<span style="font-weight:600;color:{NAV}">{ci100_display}</span></div>'
                 f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
                 f'<span style="color:{SLATE};min-width:160px;font-size:12px">RSI-modified</span>'
                 f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("RSI-modified")),3)}</span></div>'
@@ -3424,7 +3429,7 @@ if tab_card is not None:
                 f'<span style="font-weight:600;color:{NAV}">{fmt_mass(sf(row.get("Mass")))}</span></div>'
                 f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
                 f'<span style="color:{SLATE};min-width:160px;font-size:12px">Wingspan</span>'
-                f'<span style="font-weight:600;color:{NAV}">{fmt_wingspan(wing_cm)}</span></div>'
+                f'<span style="font-weight:600;color:{NAV}">{wing_display}</span></div>'
                 f'{wing_adv_row}'
                 f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
                 f'<span style="color:{SLATE};min-width:160px;font-size:12px">BW/Ht Ratio</span>'
@@ -3435,8 +3440,15 @@ if tab_card is not None:
         with m2:
             if is_pitcher:
                 # ── Wingspan Feature Panel (pitchers only) ─────────────────────────
-                wing_pct_bar = min(100, max(0, float(wing_pct or 0)))
+                wing_pct_bar = min(100, max(0, float(wing_pct))) if pd.notna(wing_pct) else None
                 wing_icon = "✓" if wing_tier_color == GREEN else ("⚠" if wing_tier_color == RED else "~")
+                wing_bar_html = (
+                    f'<div style="width:{wing_pct_bar:.0f}%;background:{wing_tier_color};border-radius:6px;height:10px"></div>'
+                    if wing_pct_bar is not None else ''
+                )
+                wing_badge = (
+                    f'{wing_icon} {wing_tier_label}' if wing_pct_bar is not None else 'Not Collected'
+                )
 
                 st.markdown(
                     f'<div style="background:linear-gradient(135deg,{NAV} 0%,#1a3275 100%);'
@@ -3448,7 +3460,7 @@ if tab_card is not None:
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
                     f'<div style="background:rgba(255,255,255,0.10);border-radius:8px;padding:12px 16px;text-align:center">'
                     f'<div style="font-family:\'Playfair Display\',serif;font-size:26px;font-weight:900;'
-                    f'color:white;line-height:1.1">{fmt_wingspan(wing_cm)}</div>'
+                    f'color:white;line-height:1.1">{wing_display}</div>'
                     f'<div style="font-size:9px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
                     f'color:rgba(255,255,255,0.55);margin-top:3px">Wingspan</div>'
                     f'</div>'
@@ -3471,12 +3483,11 @@ if tab_card is not None:
                     f'color:white">{wing_pct_str}</span>'
                     f'</div>'
                     f'<div style="background:rgba(255,255,255,0.15);border-radius:6px;height:10px;margin-bottom:14px">'
-                    f'<div style="width:{wing_pct_bar:.0f}%;background:{wing_tier_color};'
-                    f'border-radius:6px;height:10px"></div>'
+                    f'{wing_bar_html}'
                     f'</div>'
                     f'<span style="display:inline-block;background:{wing_tier_color};color:white;'
                     f'font-size:11px;font-weight:700;padding:4px 14px;border-radius:20px;'
-                    f'letter-spacing:0.06em">{wing_icon} {wing_tier_label}</span>'
+                    f'letter-spacing:0.06em">{wing_badge}</span>'
                     f'</div>',
                     unsafe_allow_html=True)
 
