@@ -1,4 +1,4 @@
-# VERSION: scorecard_projection_60th_bwht_ci_capacity_range_v59 -- simplified 60th BW/Ht projection to CI and Capacity Score ranges across +1% CI/kg improvement through 4% penalty
+# VERSION: scorecard_projection_60th_bwht_ci_capacity_upside_only_v60 -- 60th BW/Ht projection shows only CI/Capacity outcomes that do not decrease either metric
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
 # VERSION: force_plate_2026_scorecards_v56 -- handle X/missing wingspan in Force Plate 2026
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
@@ -3204,31 +3204,63 @@ if tab_card is not None:
                     for projected_ci in projected_ci_values
                 ]
 
-                ci_low, ci_high = min(projected_ci_values), max(projected_ci_values)
-                valid_capacities = [v for v in projected_capacity_values if pd.notna(v)]
-                if valid_capacities:
-                    capacity_low, capacity_high = min(valid_capacities), max(valid_capacities)
-                    if pd.notna(current_capacity):
-                        capacity_range = (
-                            f"{capacity_low:.1f}–{capacity_high:.1f} "
-                            f"({capacity_low - current_capacity:+.1f} to "
-                            f"{capacity_high - current_capacity:+.1f})"
+                # Only communicate upside. Some relative-CI penalty assumptions can
+                # produce an absolute CI or Capacity Score below the athlete's current
+                # level even after reaching the target BW/Ht. Those outcomes are not
+                # useful as a development projection, so exclude them from the range.
+                upside_pairs = []
+                for projected_ci, projected_capacity in zip(
+                    projected_ci_values, projected_capacity_values
+                ):
+                    ci_improves = pd.notna(projected_ci) and projected_ci > ci_val
+                    capacity_not_worse = (
+                        pd.isna(current_capacity)
+                        or (
+                            pd.notna(projected_capacity)
+                            and projected_capacity >= current_capacity
                         )
-                    else:
-                        capacity_range = f"{capacity_low:.1f}–{capacity_high:.1f}"
-                else:
-                    capacity_range = "—"
+                    )
+                    if ci_improves and capacity_not_worse:
+                        upside_pairs.append((projected_ci, projected_capacity))
 
-                rows_proj.append({
-                    "Scenario": f"{target_label} ({target_kg * 2.20462:.1f} lb)",
-                    "CI": f"{ci_low:.1f}–{ci_high:.1f}",
-                    "Capacity Score": capacity_range,
-                })
-                projection_note = (
-                    f"CI range assumes +1% CI/kg improvement through a 4% CI/kg penalty "
-                    f"at the all-pool {BWHT_TARGET_PCT}th-percentile BW/Ht target. "
-                    "Capacity Score change is shown in parentheses."
-                )
+                if upside_pairs:
+                    upside_ci_values = [ci for ci, _ in upside_pairs]
+                    upside_capacity_values = [cap for _, cap in upside_pairs if pd.notna(cap)]
+                    ci_low, ci_high = min(upside_ci_values), max(upside_ci_values)
+
+                    if upside_capacity_values:
+                        capacity_low = min(upside_capacity_values)
+                        capacity_high = max(upside_capacity_values)
+                        if pd.notna(current_capacity):
+                            capacity_range = (
+                                f"{capacity_low:.1f}–{capacity_high:.1f} "
+                                f"({capacity_low - current_capacity:+.1f} to "
+                                f"{capacity_high - current_capacity:+.1f})"
+                            )
+                        else:
+                            capacity_range = f"{capacity_low:.1f}–{capacity_high:.1f}"
+                    else:
+                        capacity_range = "—"
+
+                    rows_proj.append({
+                        "Scenario": f"{target_label} upside ({target_kg * 2.20462:.1f} lb)",
+                        "CI": f"{ci_low:.1f}–{ci_high:.1f}",
+                        "Capacity Score": capacity_range,
+                    })
+                    projection_note = (
+                        f"Upside-only range at the all-pool {BWHT_TARGET_PCT}th-percentile BW/Ht target. "
+                        "It includes only modeled outcomes that raise CI without reducing Capacity Score."
+                    )
+                else:
+                    rows_proj.append({
+                        "Scenario": f"{target_label} upside ({target_kg * 2.20462:.1f} lb)",
+                        "CI": "No modeled improvement",
+                        "Capacity Score": "No modeled improvement",
+                    })
+                    projection_note = (
+                        f"None of the modeled CI/kg assumptions produced both a higher CI and a non-decreasing "
+                        f"Capacity Score at the all-pool {BWHT_TARGET_PCT}th-percentile BW/Ht target."
+                    )
 
             proj_df = pd.DataFrame(rows_proj)
 
