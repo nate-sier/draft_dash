@@ -1,4 +1,4 @@
-# VERSION: option1_original_card_grid_v49
+# VERSION: option1_original_card_grid_60th_capacity_v61
 """Portable Nationals/defensive scorecard skins.
 
 Use this module inside another app by passing the existing scorecard data into
@@ -277,9 +277,11 @@ def _draw_option_1_metric_card(
     label_clean = str(label).strip()
     value_clean = str(value).strip()
     is_long_bottom_card = label_clean.lower() in {"athlete group", "program focus"}
+    is_60th_capacity_card = label_clean.lower() == "60th percentile capacity"
 
     # Keep the original feel while giving long-value cards a little more room.
-    label_w = w * (0.44 if is_long_bottom_card else 0.54)
+    # The 60th-percentile card is a two-line label with a compact score range.
+    label_w = w * (0.60 if is_60th_capacity_card else (0.44 if is_long_bottom_card else 0.54))
 
     c.setStrokeColor(colors.black)
     c.setLineWidth(0.8)
@@ -290,17 +292,23 @@ def _draw_option_1_metric_card(
     c.setFillColor(_pctl_fill(percentile))
     c.rect(x + label_w, y, w - label_w, h, stroke=1, fill=1)
 
-    _fit_text(
-        c,
-        label_clean,
-        x + label_w / 2,
-        y + h / 2 - 3,
-        label_w - 6,
-        align="center",
-        max_size=8.0 if is_long_bottom_card else 9,
-        min_size=4.7,
-        fill=NATS_WHITE,
-    )
+    if is_60th_capacity_card:
+        c.setFillColor(NATS_WHITE)
+        _set_font(c, "bold", 5.8)
+        c.drawCentredString(x + label_w / 2, y + h / 2 + 2.0, "60th Percentile")
+        c.drawCentredString(x + label_w / 2, y + h / 2 - 5.0, "Capacity")
+    else:
+        _fit_text(
+            c,
+            label_clean,
+            x + label_w / 2,
+            y + h / 2 - 3,
+            label_w - 6,
+            align="center",
+            max_size=8.0 if is_long_bottom_card else 9,
+            min_size=4.7,
+            fill=NATS_WHITE,
+        )
 
     value_x = x + label_w
     value_w = w - label_w
@@ -349,17 +357,20 @@ def _draw_option_1_metric_card(
         y + h / 2 - 3,
         value_w - 8,
         align="center",
-        max_size=11,
-        min_size=6,
+        max_size=10 if is_60th_capacity_card else 11,
+        min_size=5.3 if is_60th_capacity_card else 6,
     )
 
 
 def _draw_option_1_summary_cards(c: canvas.Canvas, y_top: float, cards: list[dict[str, Any]]) -> float:
     """Draw Option 1 score summary using the original Skin 1 card grid.
 
-    This restores the original organization:
+    This preserves the original three-column scorecard grid:
     - 3 equal-width cards on the first row
-    - 2 equal-width cards on the second row, aligned left/middle
+    - up to 3 equal-width cards on the second row
+
+    The sixth card is used for the 60th Percentile Capacity projection and
+    naturally sits directly beneath Potential to Gain.
     """
     x = 46
     total_w = PAGE_W - 92
