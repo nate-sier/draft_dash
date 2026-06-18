@@ -1,4 +1,4 @@
-# VERSION: scorecard_projection_60th_bwht_v57 -- Development Projection now targets 60th percentile BW/Ht instead of fixed +10/+15 lb scenarios
+# VERSION: scorecard_projection_60th_bwht_ci_rel_range_v58 -- 60th BW/Ht Development Projection now shows +1% CI/kg improvement through 4% CI/kg penalty scenarios
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
 # VERSION: force_plate_2026_scorecards_v56 -- handle X/missing wingspan in Force Plate 2026
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
@@ -3088,16 +3088,15 @@ if tab_card is not None:
                         use_container_width=True, key="g_profile_bars_full")
 
         # ── Development Projection table data ─────────────────────────────────────
-        # Rather than using arbitrary +10 lb / +15 lb scenarios, the projection
-        # now estimates the CI outcome at the 60th percentile BW/Ht ratio from the
-        # full loaded cohort. Height is held constant. Athletes already at or above
-        # the 60th percentile are not projected to lose weight; their target row
-        # remains at their current bodyweight and CI.
+        # Project CI at the 60th-percentile BW/Ht target from the full loaded
+        # cohort. Height is held constant. Rather than assuming one fixed CI/kg
+        # response to added bodyweight, the table shows a practical range from a
+        # 1% CI/kg improvement through 1–4% CI/kg penalties. Athletes already at
+        # or above the 60th percentile are not projected to lose weight.
         proj_df = pd.DataFrame()
         if (pd.notna(ci_val) and pd.notna(mass_kg) and pd.notna(ht_cm)
                 and ci_val > 0 and mass_kg > 0 and ht_cm > 0):
             ci_per_kg = ci_val / mass_kg
-            ci_per_kg_new = ci_per_kg * 0.97
             BWHT_TARGET_PCT = 60
 
             def sc_bwht(kg, cm):
@@ -3141,31 +3140,61 @@ if tab_card is not None:
                 if at_or_above_target
                 else f"{BWHT_TARGET_PCT}th BW/Ht Target"
             )
-            target_ci = ci_val if at_or_above_target else ci_per_kg_new * target_kg
 
-            scenarios = [
-                ("Current", mass_kg, ci_val, False),
-                (target_label, target_kg, target_ci, True),
+            # A positive value means the athlete preserves or improves CI/kg as
+            # bodyweight rises; a negative value is a CI/kg penalty. This lets the
+            # scorecard show the uncertainty range without overstating precision.
+            ci_rel_scenarios = [
+                ("+1% improvement",  0.01),
+                ("No change",         0.00),
+                ("1% penalty",       -0.01),
+                ("2% penalty",       -0.02),
+                ("3% penalty",       -0.03),
+                ("4% penalty",       -0.04),
             ]
 
             rows_proj = []
-            for label, new_kg, ci_p, is_target_row in scenarios:
-                bwht_v = sc_bwht(new_kg, ht_cm)
-                bwht_p = sc_bwht_pct(bwht_v)
-                ci_p_pct = sc_ci_pct(ci_p)
-                delta = ci_p - ci_val
-                show_delta = is_target_row and not at_or_above_target
+            current_ci_pct = sc_ci_pct(ci_val)
+            current_bwht_pct = sc_bwht_pct(current_bwht)
+            rows_proj.append({
+                "Scenario": "Current",
+                "CI/kg Assumption": "—",
+                "CI": f"{ci_val:.1f}",
+                "CI Pct": pct_sfx(int(round(current_ci_pct))) if pd.notna(current_ci_pct) else "—",
+                "Bodyweight": f"{mass_kg * 2.20462:.1f}",
+                "BW/Ht": f"{current_bwht:.2f}" if pd.notna(current_bwht) else "—",
+                "BW/Ht Pct": pct_sfx(int(round(current_bwht_pct))) if pd.notna(current_bwht_pct) else "—",
+            })
+
+            if at_or_above_target:
+                # Do not imply a bodyweight cut or an artificial CI change for a
+                # player whose current BW/Ht already exceeds the developmental target.
                 rows_proj.append({
-                    "Scenario": label,
-                    "CI": (
-                        f"{ci_p:.1f}"
-                        + (f" ({'+' if delta >= 0 else ''}{delta:.1f})" if show_delta else "")
-                    ),
-                    "CI Pct": pct_sfx(int(round(ci_p_pct))) if pd.notna(ci_p_pct) else "—",
-                    "Bodyweight": f"{new_kg * 2.20462:.1f}",
-                    "BW/Ht": f"{bwht_v:.2f}" if pd.notna(bwht_v) else "—",
-                    "BW/Ht Pct": pct_sfx(int(round(bwht_p))) if pd.notna(bwht_p) else "—",
+                    "Scenario": target_label,
+                    "CI/kg Assumption": "No additional BW needed",
+                    "CI": f"{ci_val:.1f}",
+                    "CI Pct": pct_sfx(int(round(current_ci_pct))) if pd.notna(current_ci_pct) else "—",
+                    "Bodyweight": f"{mass_kg * 2.20462:.1f}",
+                    "BW/Ht": f"{current_bwht:.2f}" if pd.notna(current_bwht) else "—",
+                    "BW/Ht Pct": pct_sfx(int(round(current_bwht_pct))) if pd.notna(current_bwht_pct) else "—",
                 })
+            else:
+                target_bwht_v = sc_bwht(target_kg, ht_cm)
+                target_bwht_p = sc_bwht_pct(target_bwht_v)
+                for assumption_label, relative_ci_change in ci_rel_scenarios:
+                    projected_ci = ci_per_kg * (1 + relative_ci_change) * target_kg
+                    projected_ci_pct = sc_ci_pct(projected_ci)
+                    delta = projected_ci - ci_val
+                    rows_proj.append({
+                        "Scenario": target_label,
+                        "CI/kg Assumption": assumption_label,
+                        "CI": f"{projected_ci:.1f} ({'+' if delta >= 0 else ''}{delta:.1f})",
+                        "CI Pct": pct_sfx(int(round(projected_ci_pct))) if pd.notna(projected_ci_pct) else "—",
+                        "Bodyweight": f"{target_kg * 2.20462:.1f}",
+                        "BW/Ht": f"{target_bwht_v:.2f}" if pd.notna(target_bwht_v) else "—",
+                        "BW/Ht Pct": pct_sfx(int(round(target_bwht_p))) if pd.notna(target_bwht_p) else "—",
+                    })
+
             proj_df = pd.DataFrame(rows_proj)
 
         # ── Main body: metrics | wingspan + development projection ───────────────
@@ -3293,7 +3322,7 @@ if tab_card is not None:
                     f'<div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;'
                     f'color:{GREEN};margin-bottom:4px">Development Projection</div>'
                     f'<div style="font-size:11px;color:{SLATE};margin-bottom:8px">'
-                    f'Projected CI at the all-pool 60th-percentile BW/Ht target with a 3% CI/kg penalty. 'f'Players already at or above the target remain at current bodyweight.</div>'
+                    f'Projected CI at the all-pool 60th-percentile BW/Ht target across a CI/kg response range: 'f'1% improvement, no change, and 1–4% penalties. Players already at or above the target remain at current bodyweight.</div>'
                     f'</div>',
                     unsafe_allow_html=True)
                 st.dataframe(proj_df, use_container_width=True, hide_index=True, key="sc_proj_tbl_side")
