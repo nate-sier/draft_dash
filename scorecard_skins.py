@@ -1,4 +1,4 @@
-# VERSION: option1_original_card_grid_60th_capacity_v61
+# VERSION: option1_not_collected_rows_v65 -- uncollected CI-100ms / Wingspan / Wing Adv. rows render empty score bars
 """Portable Nationals/defensive scorecard skins.
 
 Use this module inside another app by passing the existing scorecard data into
@@ -420,8 +420,8 @@ def _draw_option_1_metric_row(
     value: str,
     percentile: int | float | None,
 ) -> None:
-    # A missing percentile must remain visibly unscored. In particular, CI-100ms
-    # is optional in some exports and should not be rendered as a fake 50th-percentile value.
+    # A missing percentile must remain visibly unscored. CI-100ms, Wingspan, and
+    # Wing Adv. can be Not Collected and must not render as a fake 50th-percentile value.
     try:
         p = int(max(0, min(100, round(float(percentile)))))
         has_percentile = True
