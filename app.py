@@ -1,4 +1,5 @@
-# VERSION: scorecard_60th_capacity_card_v61 -- PDF adds 60th Percentile Capacity range card below Potential to Gain
+# VERSION: future_capacity_label_fix_v63 -- summary card label explicitly Future Capacity
+# VERSION: scorecard_future_capacity_card_v62 -- PDF adds Future Capacity range card below Potential to Gain
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
 # VERSION: force_plate_2026_scorecards_v56 -- handle X/missing wingspan in Force Plate 2026
 # VERSION: option1_capacity_raw_physical_attributes_v50 -- Capacity raw weighted percentile; Anthropometrics renamed Physical Attributes
@@ -1728,7 +1729,7 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
             {'label': 'Athlete Group', 'value': athlete_group},
             {'label': 'Program Focus', 'value': program_focus},
             {
-                'label': '60th Percentile Capacity',
+                'label': 'Future Capacity',
                 'value': capacity_60th_card['value'],
                 'percentile': capacity_60th_card['percentile'],
             },
