@@ -1,3 +1,4 @@
+# VERSION: p1_not_collected_conditional_program_focus_v67 -- P1 shows Not Collected/empty bars; original Program Focus remains when P1 exists, with CI-only fallback only when P1 is missing
 # VERSION: not_collected_display_v65 -- CI-100ms, Wingspan, and Wing Adv. show Not Collected with empty scorecard bars when missing
 # VERSION: scorecard_future_capacity_card_v62 -- PDF adds Future Capacity range card below Potential to Gain
 # VERSION: option1_methodology_tab_v51 -- added Methods / Definitions tab with exact stakeholder language
@@ -108,10 +109,13 @@ def pos_group(pos):
     return "Unknown"
 
 def programming_category(ci, p1_ci):
+    """Assign Athlete Group only when both CI and P1 CI were collected."""
     try:
-        ci    = float(ci)
+        ci = float(ci)
         p1_ci = float(p1_ci)
     except (TypeError, ValueError):
+        return "Unclassified"
+    if not np.isfinite(ci) or not np.isfinite(p1_ci):
         return "Unclassified"
     if ci >= 285:
         return "High-High" if p1_ci >= 195 else "High-Low"
@@ -119,7 +123,7 @@ def programming_category(ci, p1_ci):
 
 
 def athlete_group_label(category):
-    """User-facing athlete group based on CI/P1 CI buckets."""
+    """User-facing Athlete Group based on the CI/P1 CI buckets."""
     return {
         "High-High": "High CI - High P1",
         "High-Low": "High CI - Low P1",
@@ -128,14 +132,36 @@ def athlete_group_label(category):
     }.get(str(category), "Unclassified")
 
 
-def program_focus_label(category):
-    """User-facing training/development focus tied to athlete group."""
-    return {
-        "High-High": "Advanced",
-        "High-Low": "P1 Development",
-        "Low": "Foundational Strength/Capacity",
-        "Unclassified": "Unclassified",
-    }.get(str(category), "Unclassified")
+def program_focus_label(category, ci, p1_ci):
+    """Return the original P1-based Program Focus when P1 exists.
+
+    When P1 CI was not collected, use total CI only as a temporary fallback:
+    Foundation below 285 CI; Need More Info at 285 CI or higher.
+    """
+    def finite_num(value):
+        try:
+            value = float(value)
+            return value if np.isfinite(value) else np.nan
+        except (TypeError, ValueError):
+            return np.nan
+
+    ci_val = finite_num(ci)
+    p1_val = finite_num(p1_ci)
+
+    # Preserve the original Program Focus logic whenever a P1 result exists.
+    if pd.notna(p1_val):
+        return {
+            "High-High": "Advanced",
+            "High-Low": "P1 Development",
+            "Low": "Foundational Strength/Capacity",
+            "Unclassified": "Unclassified",
+        }.get(str(category), "Unclassified")
+
+    # P1 was not collected: use CI only as the requested fallback.
+    if pd.isna(ci_val):
+        return "Not Collected"
+    return "Foundation" if ci_val < 285 else "Need More Info"
+
 
 PROG_COLORS = {
     "High-High":    "#4CAF82",
@@ -143,11 +169,16 @@ PROG_COLORS = {
     "Low":          "#BA0C2F",
     "Unclassified": "#9AAAC0",
 }
-PROG_DESC = {
-    "High-High": "High CI and high P1 — advanced focus",
-    "High-Low":  "High CI with lower P1 — prioritize P1 development",
-    "Low":       "Lower CI — foundational strength/capacity focus",
-    "Unclassified": "Insufficient CI/P1 data",
+PROGRAM_FOCUS_COLORS = {
+    # Original P1-based labels
+    "Advanced":                       "#4CAF82",
+    "P1 Development":                 "#E2C188",
+    "Foundational Strength/Capacity": "#BA0C2F",
+    # Fallback labels used only when P1 was not collected
+    "Foundation":                     "#BA0C2F",
+    "Need More Info":                 "#E2C188",
+    "Unclassified":                   "#9AAAC0",
+    "Not Collected":                  "#9AAAC0",
 }
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
@@ -976,7 +1007,17 @@ def build_scores(_df,
             r.get("Concentric Impulse", np.nan),
             r.get("P1 Concentric Impulse", np.nan)), axis=1)
     df["athlete_group"] = df["programming_category"].apply(athlete_group_label)
-    df["program_focus"] = df["programming_category"].apply(program_focus_label)
+    # Keep the original CI/P1-based Program Focus when P1 was collected. When P1
+    # is missing, use total CI only as the requested fallback (Foundation <285;
+    # Need More Info >=285).
+    df["program_focus"] = df.apply(
+        lambda r: program_focus_label(
+            r.get("programming_category", "Unclassified"),
+            r.get("Concentric Impulse", np.nan),
+            r.get("P1 Concentric Impulse", np.nan),
+        ),
+        axis=1,
+    )
 
     df["overall_rank"] = np.nan
     for yr, idx in df.groupby("Year").groups.items():
@@ -1199,8 +1240,9 @@ def make_radar(row, label="Athlete", is_pitcher=False):
     sections = []
     sections.append(("Force Plate", [
         ("CI", pct("ci_pct_alltime"), raw_fmt("Concentric Impulse", 1)),
-        ("P1 Conc. Impulse", pct("p1_ci_pct_alltime"), raw_fmt("P1 Concentric Impulse", 1)),
-        # Do not assign a neutral/50th-percentile value when CI-100ms was not collected.
+        # Missing P1 is explicitly uncollected: no bar, no marker, and no fake percentile.
+        ("P1 Conc. Impulse", pct("p1_ci_pct_alltime"), raw_fmt("P1 Concentric Impulse", 1, missing_label="Not Collected")),
+        # Missing CI-100ms is explicitly uncollected: no bar, no marker, and no fake percentile.
         ("CI-100ms", pct("ci100_pct_alltime"), raw_fmt("Concentric Impulse-100ms", 1, missing_label="Not Collected")),
         ("RSI-modified", pct("rsi_pct_alltime"), raw_fmt("RSI-modified", 3)),
         ("Peak Power / BM", pct("pp_pct_alltime"), raw_fmt("Peak Power / BM", 1)),
@@ -1594,7 +1636,14 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     pos = clean_text(row.get('Position', '-'))
     school = clean_text(row.get('School Type', '-'))
     athlete_group = clean_text(row.get('athlete_group', athlete_group_label(row.get('programming_category', '-'))))
-    program_focus = clean_text(row.get('program_focus', program_focus_label(row.get('programming_category', '-'))))
+    program_focus = clean_text(row.get(
+        'program_focus',
+        program_focus_label(
+            row.get('programming_category', 'Unclassified'),
+            get_val('Concentric Impulse'),
+            get_val('P1 Concentric Impulse'),
+        ),
+    ))
     prog_short = clean_text(row.get('programming_category', '-'))
     if prog_short == 'Unclassified':
         prog_short = '-'
@@ -1696,8 +1745,9 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
 
     force_rows = [
         {'label': 'CI', 'percentile': pct_from_col('ci_pct_alltime'), 'value': raw_num('Concentric Impulse', 1)},
-        {'label': 'P1 CI', 'percentile': pct_from_col('p1_ci_pct_alltime'), 'value': raw_num('P1 Concentric Impulse', 1)},
-        # Missing CI-100ms is explicitly uncollected: no bar, no marker, no fake percentile.
+        # Missing P1 is explicitly uncollected: no bar, no marker, and no fake percentile.
+        {'label': 'P1 CI', 'percentile': pct_from_col('p1_ci_pct_alltime', fallback=None), 'value': raw_num('P1 Concentric Impulse', 1, missing_label='Not Collected')},
+        # Missing CI-100ms is explicitly uncollected: no bar, no marker, and no fake percentile.
         {'label': 'CI-100ms', 'percentile': pct_from_col('ci100_pct_alltime', fallback=None), 'value': raw_num('Concentric Impulse-100ms', 1, missing_label='Not Collected')},
         {'label': 'RSI-mod', 'percentile': pct_from_col('rsi_pct_alltime'), 'value': raw_num('RSI-modified', 3)},
         {'label': 'Pk Pwr/BM', 'percentile': pct_from_col('pp_pct_alltime'), 'value': raw_num('Peak Power / BM', 1)},
@@ -1822,7 +1872,10 @@ def make_score_info_pdf():
     story.append(Paragraph("Where the athlete's score falls relative to their position group: Pitchers, Outfielders, Infielders, or Catchers. Players without a designated position may not have a position-group score.", body))
 
     story.append(Paragraph("Athlete Group", section))
-    story.append(Paragraph("Shows the initial CI/P1 bucket we would place them in and how we would approach their training in Player Development.", body))
+    story.append(Paragraph("Shows the initial CI/P1 bucket. It is only assigned when both CI and P1 CI were collected; otherwise it is listed as Unclassified.", body))
+
+    story.append(Paragraph("Program Focus", section))
+    story.append(Paragraph("When P1 CI is collected, Program Focus uses the original CI/P1 framework: High CI + High P1 = Advanced; High CI + Low P1 = P1 Development; and Low CI = Foundational Strength/Capacity. When P1 CI is not collected, total CI is used only as a fallback: below 285 = Foundation; 285 or higher = Need More Info.", body))
 
     story.append(Paragraph("Potential to Gain", section))
     story.append(Paragraph("A composite score (out of 100) that represents ability to gain CI moving forward. Athletes with the most potential to gain are typically tall, skinny and/or springy, meaning there may be more room to increase CI by increasing body weight or filling out their frame.", body))
@@ -2049,7 +2102,16 @@ with tab_info:
     <div class="card card-gold">
         <h3 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Athlete Group:</h3>
         <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
-            Shows the initial CI/P1 bucket we would place them in and how we would approach their training in Player Development.
+            Shows the initial CI/P1 bucket. It is only assigned when both CI and P1 CI were collected; otherwise it is listed as Unclassified.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="card card-navy">
+        <h3 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">Program Focus:</h3>
+        <p style="font-size:14px;line-height:1.6;color:{NAV};margin-bottom:0;">
+            When P1 CI is collected, the original CI/P1 framework is retained: <b>Advanced</b> for high CI/high P1, <b>P1 Development</b> for high CI/low P1, and <b>Foundational Strength/Capacity</b> for low CI. When P1 CI is not collected, CI is used only as a fallback: below 285 is <b>Foundation</b>; 285 or higher is <b>Need More Info</b>.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -2821,6 +2883,7 @@ with tab_2026:
                 pot = sf(r.get("potential_score"))
                 ci = sf(r.get("Concentric Impulse"))
                 p1 = sf(r.get("P1 Concentric Impulse"))
+                p1_display = "Not Collected" if pd.isna(p1) else fmt(p1, 1)
                 school = str(r.get("School Type", "—"))
                 if school in ("nan", "None", ""):
                     school = "—"
@@ -2841,7 +2904,7 @@ with tab_2026:
                         <div><span style="color:{SLATE}">Capacity</span><br><strong>{fmt(cap,0)}</strong></div>
                         <div><span style="color:{SLATE}">Potential</span><br><strong>{fmt(pot,0)}</strong></div>
                         <div><span style="color:{SLATE}">CI</span><br><strong>{fmt(ci,1)}</strong></div>
-                        <div><span style="color:{SLATE}">P1 CI</span><br><strong>{fmt(p1,1)}</strong></div>
+                        <div><span style="color:{SLATE}">P1 CI</span><br><strong>{p1_display}</strong></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -2913,6 +2976,8 @@ if tab_card is not None:
         wing_pct_str= pct_sfx(int(round(wing_pct))) if pd.notna(wing_pct) else "Not Collected"
         wing_adv_in = "Not Collected" if pd.isna(wing_adv_cm) else fmt_wingspan_adv(wing_adv_cm)
         wing_display = "Not Collected" if pd.isna(wing_cm) else fmt_wingspan(wing_cm)
+        p1_val = sf(row.get("P1 Concentric Impulse"))
+        p1_display = "Not Collected" if pd.isna(p1_val) else fmt(p1_val, 1)
         ci100_display = "Not Collected" if pd.isna(sf(row.get("Concentric Impulse-100ms"))) else fmt(sf(row.get("Concentric Impulse-100ms")), 1)
 
         # Wingspan/reach tier is based on the athlete's wingspan-advantage percentile.
@@ -2950,9 +3015,12 @@ if tab_card is not None:
         tier_color   = tier_clrs[tier_idx] if tier_idx >= 0 else "#9AAAC0"
         prog_cat     = str(row.get("programming_category","—"))
         athlete_group_val = str(row.get("athlete_group", athlete_group_label(prog_cat)))
-        program_focus_val = str(row.get("program_focus", program_focus_label(prog_cat)))
+        program_focus_val = str(row.get(
+            "program_focus",
+            program_focus_label(prog_cat, ci_val, p1_val),
+        ))
         prog_color   = PROG_COLORS.get(prog_cat, "#9AAAC0")
-        prog_desc    = PROG_DESC.get(prog_cat, "")
+        program_focus_color = PROGRAM_FOCUS_COLORS.get(program_focus_val, "#9AAAC0")
 
         lbs_next   = sf(row.get("lbs_to_next_tier"))
         next_label = str(row.get("next_tier_label","—"))
@@ -3063,8 +3131,8 @@ if tab_card is not None:
                     {athlete_group_val}</div>
                 <div style="font-size:11px;color:{SLATE};line-height:1.45">
                     CI: <strong style="color:{NAV}">{fmt(ci_val,1)}</strong><br>
-                    P1 CI: <strong style="color:{NAV}">{fmt(sf(row.get('P1 Concentric Impulse')),1)}</strong><br>
-                    Focus:<br><strong style="color:{prog_color};font-size:12px;line-height:1.25">{program_focus_val}</strong>
+                    P1 CI: <strong style="color:{NAV}">{p1_display}</strong><br>
+                    Focus:<br><strong style="color:{program_focus_color};font-size:12px;line-height:1.25">{program_focus_val}</strong>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -3395,7 +3463,7 @@ if tab_card is not None:
                 f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("Concentric Impulse")),1)}</span></div>'
                 f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
                 f'<span style="color:{SLATE};min-width:160px;font-size:12px">P1 Conc. Impulse</span>'
-                f'<span style="font-weight:600;color:{NAV}">{fmt(sf(row.get("P1 Concentric Impulse")),1)}</span></div>'
+                f'<span style="font-weight:600;color:{NAV}">{p1_display}</span></div>'
                 f'<div style="display:flex;align-items:baseline;margin-bottom:7px;font-size:13px">'
                 f'<span style="color:{SLATE};min-width:160px;font-size:12px">CI-100ms</span>'
                 f'<span style="font-weight:600;color:{NAV}">{ci100_display}</span></div>'
