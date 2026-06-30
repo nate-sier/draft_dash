@@ -1,3 +1,4 @@
+# VERSION: force_plate_main_priority_v68 -- main Force Plate data overrides Force Plate 2026 for overlapping athletes
 # VERSION: p1_not_collected_conditional_program_focus_v67 -- P1 shows Not Collected/empty bars; original Program Focus remains when P1 exists, with CI-only fallback only when P1 is missing
 # VERSION: not_collected_display_v65 -- CI-100ms, Wingspan, and Wing Adv. show Not Collected with empty scorecard bars when missing
 # VERSION: scorecard_future_capacity_card_v62 -- PDF adds Future Capacity range card below Potential to Gain
@@ -29,6 +30,7 @@ import traceback
 from io import BytesIO
 from pathlib import Path
 import re
+import unicodedata
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -594,7 +596,7 @@ def clean_sprint_2026(raw_df):
 
 # ─── Google Sheets loader ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner="Loading data…")
-def load_data(_v=8):
+def load_data(_v=9):
     import gspread
     from google.oauth2.service_account import Credentials
     scopes = [
@@ -609,19 +611,64 @@ def load_data(_v=8):
     gc = gspread.authorize(creds)
     sh = gc.open_by_key(os.environ.get("GOOGLE_SHEET_ID", SHEET_ID))
 
-    fp_raw     = worksheet_to_dataframe(sh, "Force Plate")
-    if "Data Source" not in fp_raw.columns:
-        fp_raw["Data Source"] = "Force Plate"
+    # The main Force Plate tab is the primary scorecard source. The optional
+    # Force Plate 2026 import is only used for athletes who are absent from the
+    # primary tab. This prevents a raw ForceDecks import from overwriting the
+    # curated/main Force Plate result for the same athlete.
+    fp_raw = worksheet_to_dataframe(sh, "Force Plate")
+    fp_raw["Data Source"] = "Force Plate"
 
-    # Optional raw ForceDecks 2026 tab. This tab can be pasted directly from the
-    # ForceDecks CSV export; the app converts names/units and appends it to the
-    # historical Force Plate dataset before scoring.
+    def _normalized_force_plate_key(values):
+        """Create a tolerant matching key for IDs/names across the two tabs."""
+        def _one(value):
+            if pd.isna(value):
+                return ""
+            value = str(value).strip().lower()
+            if value in {"", "nan", "none", "null"}:
+                return ""
+            # Treat José Ramírez and Jose Ramirez as the same athlete, while
+            # still removing spaces, punctuation, apostrophes, and hyphens.
+            value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+            return re.sub(r"[^a-z0-9]", "", value)
+
+        return values.map(_one)
+
+    def _force_plate_keys(frame, column):
+        if column not in frame.columns:
+            return set()
+        keys = _normalized_force_plate_key(frame[column])
+        return set(keys[keys.ne("")].tolist())
+
+    # Optional raw ForceDecks 2026 tab. It fills gaps only. Match by playerID
+    # when available and also by normalized athlete name, because the raw export
+    # may use the athlete name as its fallback playerID.
     try:
         fp_2026_raw = worksheet_to_dataframe(sh, "Force Plate 2026")
         fp_2026_clean = clean_forcedecks_force_plate(fp_2026_raw)
         if not fp_2026_clean.empty:
-            fp_raw = pd.concat([fp_raw, fp_2026_clean], ignore_index=True, sort=False)
-            fp_raw = fp_raw.drop_duplicates(subset=["playerID", "athleteName", "Year"], keep="last")
+            main_id_keys = _force_plate_keys(fp_raw, "playerID")
+            main_name_keys = _force_plate_keys(fp_raw, "athleteName")
+
+            import_id_keys = _normalized_force_plate_key(
+                fp_2026_clean.get("playerID", pd.Series("", index=fp_2026_clean.index))
+            )
+            import_name_keys = _normalized_force_plate_key(
+                fp_2026_clean.get("athleteName", pd.Series("", index=fp_2026_clean.index))
+            )
+
+            already_in_main = (
+                (import_id_keys.ne("") & import_id_keys.isin(main_id_keys)) |
+                (import_name_keys.ne("") & import_name_keys.isin(main_name_keys))
+            )
+            fp_2026_fallback = fp_2026_clean.loc[~already_in_main].copy()
+
+            # Keep a single latest record within the fallback import only.
+            # Main Force Plate rows remain untouched and always retain priority.
+            if not fp_2026_fallback.empty:
+                fp_2026_fallback = fp_2026_fallback.drop_duplicates(
+                    subset=["playerID", "athleteName", "Year"], keep="last"
+                )
+                fp_raw = pd.concat([fp_raw, fp_2026_fallback], ignore_index=True, sort=False)
     except Exception:
         # Keep the app working if the optional tab has not been created yet.
         pass
@@ -2750,18 +2797,17 @@ with tab_board:
 # TAB 3 — 2026 SCORECARDS
 # =============================================================================
 with tab_2026:
+    # Source priority is resolved in load_data(): main Force Plate is used for
+    # any athlete who exists in both tabs, while Force Plate 2026 fills athletes
+    # missing from the main tab. Do not re-filter to imported rows here.
     df_2026 = df[(pd.to_numeric(df["Year"], errors="coerce") == 2026)].copy()
-    if "Data Source" in df_2026.columns:
-        fp2026_only = df_2026[df_2026["Data Source"].astype(str).eq("Force Plate 2026")].copy()
-        if not fp2026_only.empty:
-            df_2026 = fp2026_only
 
     st.markdown(f"""
     <div class="card card-red">
-        <p class="label">Force Plate 2026</p>
+        <p class="label">2026 Force Plate Scorecards</p>
         <h2 style="margin-top:0;color:{NAV};font-family:'Playfair Display',serif;">2026 Player Scorecards</h2>
         <p style="font-size:14px;line-height:1.55;color:{NAV};margin-bottom:0;">
-            These cards are built from the <strong>Force Plate 2026</strong> tab. Height, School Type, and Position can come from that tab; missing wingspan, including cells marked X, is treated as a neutral 50th percentile input for Potential to Gain scoring only.
+            The main <strong>Force Plate</strong> tab is used whenever an athlete exists in both sources. <strong>Force Plate 2026</strong> fills scorecards only for athletes who are not already in the main tab. Height, School Type, and Position can still come from the available source; missing wingspan, including cells marked X, is treated as a neutral 50th percentile input for Potential to Gain scoring only.
         </p>
     </div>
     """, unsafe_allow_html=True)
