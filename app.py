@@ -1,4 +1,5 @@
 # VERSION: force_plate_main_priority_v68 -- main Force Plate data overrides Force Plate 2026 for overlapping athletes
+# VERSION: position_latest_scorecard_v69 -- latest Positions-tab row/date wins for scorecard position and Position Capacity
 # VERSION: p1_not_collected_conditional_program_focus_v67 -- P1 shows Not Collected/empty bars; original Program Focus remains when P1 exists, with CI-only fallback only when P1 is missing
 # VERSION: not_collected_display_v65 -- CI-100ms, Wingspan, and Wing Adv. show Not Collected with empty scorecard bars when missing
 # VERSION: scorecard_future_capacity_card_v62 -- PDF adds Future Capacity range card below Potential to Gain
@@ -773,16 +774,55 @@ def load_data(_v=9):
     df["Position"] = df["Position"].astype(str).replace({"nan": "", "None": ""}).str.strip()
 
     if "playerID" in pos_raw.columns and "Position" in pos_raw.columns:
-        pos_raw["playerID"] = pos_raw["playerID"].astype(str).str.strip()
-        pos_lookup = (pos_raw[["playerID", "Position"]]
-                      .dropna()
-                      .drop_duplicates("playerID")
-                      .set_index("playerID")["Position"]
-                      .astype(str)
-                      .str.strip()
-                      .to_dict())
-        official_pos = df["playerID"].map(pos_lookup).fillna("")
-        df["Position"] = official_pos.where(official_pos.ne(""), df["Position"])
+        # A player may have more than one row in the Positions tab. Use the most
+        # recent official entry for every scorecard: first by a date/effective-date
+        # field when one exists, then by the last sheet row for players without a
+        # usable date. This keeps the displayed Position and Position Capacity group
+        # aligned with the athlete's current designation instead of the first entry.
+        pos_work = pos_raw.copy()
+        pos_work["playerID"] = pos_work["playerID"].astype(str).str.strip()
+        pos_work["Position"] = (pos_work["Position"].astype(str)
+                                .replace({"nan": "", "None": ""})
+                                .str.strip())
+        pos_work["_position_row_order"] = np.arange(len(pos_work))
+        pos_work = pos_work[(pos_work["playerID"] != "") & (pos_work["Position"] != "")].copy()
+
+        if not pos_work.empty:
+            # Accept common date labels without requiring a specific Positions-tab layout.
+            _normalized_headers = {
+                re.sub(r"[^a-z0-9]", "", str(c).strip().lower()): c
+                for c in pos_work.columns
+            }
+            _position_date_col = None
+            for _candidate in [
+                "date", "effectivedate", "positiondate", "updatedat", "updated",
+                "lastupdated", "lastmodified", "timestamp", "asof", "year",
+            ]:
+                if _candidate in _normalized_headers:
+                    _position_date_col = _normalized_headers[_candidate]
+                    break
+
+            if _position_date_col is not None:
+                pos_work["_position_date"] = pd.to_datetime(
+                    pos_work[_position_date_col], errors="coerce"
+                )
+            else:
+                pos_work["_position_date"] = pd.NaT
+
+            # Use the latest valid date per player. If a player has no usable dates,
+            # use their final row in the Positions sheet as the recency fallback.
+            _dated_latest = (pos_work[pos_work["_position_date"].notna()]
+                             .sort_values(["playerID", "_position_date", "_position_row_order"])
+                             .drop_duplicates("playerID", keep="last"))
+            _dated_ids = set(_dated_latest["playerID"])
+            _undated_latest = (pos_work[~pos_work["playerID"].isin(_dated_ids)]
+                               .sort_values(["playerID", "_position_row_order"])
+                               .drop_duplicates("playerID", keep="last"))
+            _latest_positions = pd.concat([_dated_latest, _undated_latest], ignore_index=True)
+            pos_lookup = (_latest_positions.set_index("playerID")["Position"]
+                           .astype(str).str.strip().to_dict())
+            official_pos = df["playerID"].map(pos_lookup).fillna("")
+            df["Position"] = official_pos.where(official_pos.ne(""), df["Position"])
 
     # Extra fallback for new Force Plate 2026 players: if the official Positions
     # tab does not contain the player yet, use the Position column that was added
