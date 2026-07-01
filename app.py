@@ -1,3 +1,4 @@
+# VERSION: future_capacity_table_export_v71 -- 2026 scorecard table and CSV export include Potential and Future Capacity
 # VERSION: force_plate_main_priority_v68 -- main Force Plate data overrides Force Plate 2026 for overlapping athletes
 # VERSION: position_bottom_row_v70 -- lowest nonblank Positions-tab row wins for scorecard position and Position Capacity
 # VERSION: p1_not_collected_conditional_program_focus_v67 -- P1 shows Not Collected/empty bars; original Program Focus remains when P1 exists, with CI-only fallback only when P1 is missing
@@ -1605,6 +1606,118 @@ def make_force_plate_metric_scatter(
     return fig
 
 
+
+def future_capacity_card(row, df_all):
+    """Return the upside-only Future Capacity range shown on scorecard PDFs.
+
+    The calculation projects Capacity Score at the 60th-percentile BW/Ht target,
+    while holding height constant. It evaluates a practical CI/kg response range
+    from +1% through a 4% penalty. Only scenarios that improve both total CI and
+    Capacity Score are retained. Athletes already at or above the target, or with
+    no qualifying upside scenario, return ``No Change``.
+
+    Returns a dictionary so scorecards can use ``value`` for display and
+    ``percentile`` for the PDF card fill.
+    """
+    if hasattr(row, "to_dict"):
+        row = row.to_dict()
+
+    def value_from_row(key):
+        try:
+            value = float(row.get(key, np.nan))
+            return value if np.isfinite(value) else np.nan
+        except (TypeError, ValueError):
+            return np.nan
+
+    no_change = {"value": "No Change", "percentile": None}
+
+    if df_all is None or df_all.empty:
+        return no_change
+
+    ci = value_from_row("Concentric Impulse")
+    mass_kg = value_from_row("Mass")
+    height_cm = value_from_row("Height")
+    current_capacity = value_from_row("athlete_quality_score")
+    if not all(pd.notna(value) and value > 0 for value in [ci, mass_kg, height_cm, current_capacity]):
+        return no_change
+
+    if "bmi_raw" not in df_all.columns or "Concentric Impulse" not in df_all.columns:
+        return no_change
+
+    bwht_pool = pd.to_numeric(df_all["bmi_raw"], errors="coerce").dropna()
+    ci_pool = pd.to_numeric(df_all["Concentric Impulse"], errors="coerce").dropna()
+    if bwht_pool.empty or ci_pool.empty:
+        return no_change
+
+    target_bwht = float(np.nanpercentile(bwht_pool, 60))
+    current_bwht = (mass_kg * 2.20462) / (height_cm / 2.54)
+
+    # Never frame the target as a request for the athlete to lose bodyweight.
+    if pd.notna(current_bwht) and current_bwht >= target_bwht:
+        return no_change
+
+    target_lbs = target_bwht * (height_cm / 2.54)
+    target_kg = target_lbs / 2.20462
+    if pd.isna(target_kg) or target_kg <= 0:
+        return no_change
+
+    sprint_pct = value_from_row("sprint_pct_alltime")
+    rsi_pct = value_from_row("rsi_pct_alltime")
+    pp_pct = value_from_row("pp_pct_alltime")
+
+    def projected_capacity(projected_ci):
+        projected_ci_pct = float((ci_pool < projected_ci).mean() * 100.0)
+
+        if pd.notna(sprint_pct):
+            components = [
+                (projected_ci_pct, w_ci),
+                (sprint_pct, w_sprint),
+                (rsi_pct, w_rsi),
+                (pp_pct, w_pp),
+            ]
+        else:
+            components = [
+                (projected_ci_pct, w_ci_ns),
+                (rsi_pct, w_rsi_ns),
+                (pp_pct, w_pp_ns),
+            ]
+
+        valid_components = [
+            (value, weight) for value, weight in components if pd.notna(value)
+        ]
+        if not valid_components:
+            return np.nan
+
+        total_weight = sum(weight for _, weight in valid_components)
+        return sum(value * weight for value, weight in valid_components) / total_weight
+
+    ci_per_kg = ci / mass_kg
+    ci_rel_changes = [0.01, 0.00, -0.01, -0.02, -0.03, -0.04]
+    upside_capacity_scores = []
+
+    for relative_change in ci_rel_changes:
+        projected_ci = ci_per_kg * (1 + relative_change) * target_kg
+        projected_score = projected_capacity(projected_ci)
+        if (
+            pd.notna(projected_ci)
+            and pd.notna(projected_score)
+            and projected_ci > ci
+            and projected_score >= current_capacity
+        ):
+            upside_capacity_scores.append(projected_score)
+
+    if not upside_capacity_scores:
+        return no_change
+
+    low = int(round(min(upside_capacity_scores)))
+    high = int(round(max(upside_capacity_scores)))
+    return {
+        "value": str(low) if low == high else f"{low}-{high}",
+        # The midpoint colors the scorecard card based on the full range rather
+        # than only the best-case endpoint.
+        "percentile": int(round((low + high) / 2)),
+    }
+
 def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=False):
     """Render the PDF export using the exact Scorecard Option 1 skin."""
     if hasattr(row, "to_dict"):
@@ -1712,92 +1825,7 @@ def make_scorecard_pdf(row, df_all, strat_feats, sel_yr_display, is_pitcher=Fals
     def score_text(v):
         return '-' if pd.isna(v) else f"{int(round(float(v)))}"
 
-    def sixty_bwht_capacity_card():
-        """Return the upside-only Capacity Score range at the 60th BW/Ht target.
-
-        The PDF card intentionally shows just a score range (for example, 86–89),
-        not the individual relative-CI scenarios. It returns ``No Change`` when the
-        athlete already meets the 60th-percentile BW/Ht target or when none of the
-        modeled outcomes improve both CI and Capacity Score.
-        """
-        no_change = {"value": "No Change", "percentile": None}
-
-        ci = get_val("Concentric Impulse")
-        mass_kg = get_val("Mass")
-        height_cm = get_val("Height")
-        current_capacity = get_val("athlete_quality_score")
-        if not all(pd.notna(v) and v > 0 for v in [ci, mass_kg, height_cm, current_capacity]):
-            return no_change
-
-        bwht_pool = pd.to_numeric(df_all.get("bmi_raw"), errors="coerce").dropna()
-        ci_pool = pd.to_numeric(df_all.get("Concentric Impulse"), errors="coerce").dropna()
-        if len(bwht_pool) == 0 or len(ci_pool) == 0:
-            return no_change
-
-        target_bwht = float(np.nanpercentile(bwht_pool, 60))
-        current_bwht = (mass_kg * 2.20462) / (height_cm / 2.54)
-        # Do not imply that an athlete should lose mass to return to the target.
-        if pd.notna(current_bwht) and current_bwht >= target_bwht:
-            return no_change
-
-        target_lbs = target_bwht * (height_cm / 2.54)
-        target_kg = target_lbs / 2.20462
-        if pd.isna(target_kg) or target_kg <= 0:
-            return no_change
-
-        sprint_pct = get_val("sprint_pct_alltime")
-        rsi_pct = get_val("rsi_pct_alltime")
-        pp_pct = get_val("pp_pct_alltime")
-
-        def projected_capacity(projected_ci):
-            projected_ci_pct = float((ci_pool < projected_ci).mean() * 100.0)
-            if pd.notna(sprint_pct):
-                components = [
-                    (projected_ci_pct, w_ci),
-                    (sprint_pct, w_sprint),
-                    (rsi_pct, w_rsi),
-                    (pp_pct, w_pp),
-                ]
-            else:
-                components = [
-                    (projected_ci_pct, w_ci_ns),
-                    (rsi_pct, w_rsi_ns),
-                    (pp_pct, w_pp_ns),
-                ]
-
-            valid_components = [(value, weight) for value, weight in components if pd.notna(value)]
-            if not valid_components:
-                return np.nan
-            total_weight = sum(weight for _, weight in valid_components)
-            return sum(value * weight for value, weight in valid_components) / total_weight
-
-        ci_per_kg = ci / mass_kg
-        # +1% CI/kg improvement through a 4% CI/kg penalty.
-        ci_rel_changes = [0.01, 0.00, -0.01, -0.02, -0.03, -0.04]
-        upside_capacity_scores = []
-        for rel_change in ci_rel_changes:
-            projected_ci = ci_per_kg * (1 + rel_change) * target_kg
-            projected_capacity_score = projected_capacity(projected_ci)
-            if (
-                pd.notna(projected_ci)
-                and pd.notna(projected_capacity_score)
-                and projected_ci > ci
-                and projected_capacity_score >= current_capacity
-            ):
-                upside_capacity_scores.append(projected_capacity_score)
-
-        if not upside_capacity_scores:
-            return no_change
-
-        low = int(round(min(upside_capacity_scores)))
-        high = int(round(max(upside_capacity_scores)))
-        card_value = str(low) if low == high else f"{low}-{high}"
-        # Use the midpoint for the card fill so the color reflects the range rather
-        # than only its best-case endpoint.
-        card_percentile = int(round((low + high) / 2))
-        return {"value": card_value, "percentile": card_percentile}
-
-    capacity_60th_card = sixty_bwht_capacity_card()
+    capacity_60th_card = future_capacity_card(row, df_all)
 
     force_rows = [
         {'label': 'CI', 'percentile': pct_from_col('ci_pct_alltime'), 'value': raw_num('Concentric Impulse', 1)},
@@ -2891,14 +2919,32 @@ with tab_2026:
         # If you add sprint splits later, lower time should be better/greener.
         inverse_sort_metric = sort_col_2026 in {"10yd Split", "20yd Split", "30yd Split"}
 
+        # Use the same reusable Future Capacity logic as the PDF cards. This
+        # prevents the displayed/exported table from drifting away from the card.
+        df_2026["future_capacity"] = df_2026.apply(
+            lambda athlete_row: future_capacity_card(athlete_row, df)["value"],
+            axis=1,
+        )
+
         summary_cols = [
-            "athleteName", "Position", "School Type", "athlete_quality_score", "aq_pos_score",
-            "potential_score", "Concentric Impulse", "P1 Concentric Impulse", "RSI-modified",
-            "Peak Power / BM", "Mass", "Height"
+            "athleteName",
+            "Position",
+            "School Type",
+            "athlete_quality_score",
+            "aq_pos_score",
+            "potential_score",
+            "future_capacity",
+            "Concentric Impulse",
+            "P1 Concentric Impulse",
+            "RSI-modified",
+            "Peak Power / BM",
+            "Mass",
+            "Height",
         ]
         for c in summary_cols:
             if c not in df_2026.columns:
                 df_2026[c] = np.nan
+
         summary = df_2026[summary_cols].copy()
         summary["Height"] = pd.to_numeric(summary["Height"], errors="coerce") / 2.54
         summary["Mass"] = pd.to_numeric(summary["Mass"], errors="coerce") * 2.20462
@@ -2907,25 +2953,49 @@ with tab_2026:
             "athlete_quality_score": "Capacity",
             "aq_pos_score": "Pos. Capacity",
             "potential_score": "Potential",
+            "future_capacity": "Future Capacity",
             "Concentric Impulse": "CI",
             "P1 Concentric Impulse": "P1 CI",
             "RSI-modified": "mRSI",
             "Peak Power / BM": "Rel Peak Power",
             "Mass": "Bodyweight",
-            "Height": "Height"
+            "Height": "Height",
         })
-        for c in ["Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI", "Rel Peak Power", "Bodyweight", "Height"]:
+
+        for c in [
+            "Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI",
+            "Rel Peak Power", "Bodyweight", "Height",
+        ]:
             if c in summary.columns:
                 summary[c] = pd.to_numeric(summary[c], errors="coerce").round(1)
         if "mRSI" in summary.columns:
             summary["mRSI"] = pd.to_numeric(summary["mRSI"], errors="coerce").round(3)
 
-        numeric_summary_cols = [c for c in ["Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI", "mRSI", "Rel Peak Power", "Bodyweight", "Height"] if c in summary.columns]
+        # Future Capacity is intentionally left as text because its valid output
+        # is a range (for example, 86-89) or "No Change".
+        numeric_summary_cols = [
+            c for c in [
+                "Capacity", "Pos. Capacity", "Potential", "CI", "P1 CI",
+                "mRSI", "Rel Peak Power", "Bodyweight", "Height",
+            ] if c in summary.columns
+        ]
         try:
-            styled_summary = summary.style.background_gradient(subset=numeric_summary_cols, cmap="RdYlGn")
+            styled_summary = summary.style.background_gradient(
+                subset=numeric_summary_cols,
+                cmap="RdYlGn",
+            )
             st.dataframe(styled_summary, use_container_width=True, hide_index=True)
         except Exception:
             st.dataframe(summary, use_container_width=True, hide_index=True)
+
+        st.download_button(
+            "Download 2026 Scorecard Table (CSV)",
+            data=summary.to_csv(index=False).encode("utf-8"),
+            file_name="2026_player_scorecards.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="download_2026_scorecard_table_csv",
+        )
 
         st.markdown("### Scorecard PDFs")
         st.caption(f"PDF cards are sorted by {sort_metric_label}; the larger color bar runs red-to-green based on that metric's historical percentile across all loaded years.")
